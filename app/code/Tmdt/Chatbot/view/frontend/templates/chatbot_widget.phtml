@@ -1,0 +1,484 @@
+<?php
+/**
+ * Tmdt AI Chatbot Widget — Tích hợp vào Magento Luma Theme
+ * Template: Magento_Theme::chatbot_widget.phtml
+ */
+?>
+<style>
+/* ============================================================
+   TMDT CHATBOT WIDGET — Isolated CSS (prefix: tmdt-cb-)
+   ============================================================ */
+
+/* Nút bong bóng chat góc dưới phải */
+#tmdt-cb-trigger {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(102, 126, 234, 0.5);
+    z-index: 99998;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    animation: tmdt-cb-pulse 2.5s infinite;
+}
+#tmdt-cb-trigger:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 28px rgba(102, 126, 234, 0.7);
+}
+#tmdt-cb-trigger svg {
+    width: 28px;
+    height: 28px;
+    fill: white;
+    transition: transform 0.3s ease;
+}
+#tmdt-cb-trigger.is-open svg.icon-chat { display: none; }
+#tmdt-cb-trigger svg.icon-close { display: none; }
+#tmdt-cb-trigger.is-open svg.icon-close { display: block; }
+
+@keyframes tmdt-cb-pulse {
+    0%, 100% { box-shadow: 0 4px 20px rgba(102, 126, 234, 0.5); }
+    50%       { box-shadow: 0 4px 30px rgba(102, 126, 234, 0.85), 0 0 0 10px rgba(102,126,234,0.1); }
+}
+
+/* Container chính của cửa sổ chat */
+#tmdt-cb-window {
+    position: fixed;
+    bottom: 96px;
+    right: 24px;
+    width: 370px;
+    height: 560px;
+    border-radius: 20px;
+    background: #ffffff;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.18);
+    display: flex;
+    flex-direction: column;
+    z-index: 99997;
+    overflow: hidden;
+    transform: scale(0.85) translateY(20px);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+                opacity 0.25s ease;
+}
+#tmdt-cb-window.is-visible {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+    pointer-events: all;
+}
+
+/* Header */
+#tmdt-cb-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 16px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+.tmdt-cb-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+}
+.tmdt-cb-header-info h4 {
+    margin: 0;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.2;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.tmdt-cb-header-info span {
+    font-size: 12px;
+    color: rgba(255,255,255,0.8);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.tmdt-cb-online-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #4ade80;
+    margin-right: 5px;
+    animation: tmdt-cb-blink 2s infinite;
+}
+@keyframes tmdt-cb-blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.4; }
+}
+
+/* Khu vực tin nhắn */
+#tmdt-cb-messages {
+    flex: 1;
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: #f7f8fc;
+    scroll-behavior: smooth;
+}
+#tmdt-cb-messages::-webkit-scrollbar { width: 5px; }
+#tmdt-cb-messages::-webkit-scrollbar-track { background: transparent; }
+#tmdt-cb-messages::-webkit-scrollbar-thumb { background: #d0d4e8; border-radius: 10px; }
+
+/* Tin nhắn */
+.tmdt-cb-msg {
+    max-width: 82%;
+    padding: 10px 14px;
+    border-radius: 18px;
+    font-size: 14px;
+    line-height: 1.6;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    word-break: break-word;
+}
+.tmdt-cb-msg.user {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #fff;
+    align-self: flex-end;
+    border-bottom-right-radius: 4px;
+}
+.tmdt-cb-msg.bot {
+    background: #ffffff;
+    color: #1a1a2e;
+    align-self: flex-start;
+    border-bottom-left-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+}
+.tmdt-cb-msg.bot a {
+    color: #667eea;
+    text-decoration: underline;
+    font-weight: 600;
+}
+.tmdt-cb-msg.bot strong { font-weight: 700; }
+
+/* Typing indicator */
+.tmdt-cb-typing {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 12px 16px;
+    background: #ffffff;
+    border-radius: 18px;
+    border-bottom-left-radius: 4px;
+    align-self: flex-start;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+}
+.tmdt-cb-typing span {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #9ca3af;
+    display: inline-block;
+    animation: tmdt-cb-bounce 1.3s infinite ease-in-out;
+}
+.tmdt-cb-typing span:nth-child(1) { animation-delay: 0s; }
+.tmdt-cb-typing span:nth-child(2) { animation-delay: 0.2s; }
+.tmdt-cb-typing span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes tmdt-cb-bounce {
+    0%, 60%, 100% { transform: translateY(0); }
+    30%           { transform: translateY(-8px); background: #667eea; }
+}
+
+/* Product card */
+.tmdt-cb-product {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #fff;
+    border: 1px solid #e8eaf0;
+    border-radius: 12px;
+    padding: 10px;
+    text-decoration: none;
+    color: inherit;
+    align-self: flex-start;
+    width: 88%;
+    transition: box-shadow 0.2s, transform 0.2s;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.tmdt-cb-product:hover {
+    box-shadow: 0 5px 18px rgba(102, 126, 234, 0.25);
+    transform: translateY(-2px);
+}
+.tmdt-cb-product-img {
+    width: 58px;
+    height: 58px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid #f0f0f0;
+    flex-shrink: 0;
+    background: #f7f8fc;
+}
+.tmdt-cb-product-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.tmdt-cb-product-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1a1a2e;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+}
+.tmdt-cb-product-price {
+    font-size: 13px;
+    font-weight: 700;
+    color: #667eea;
+}
+.tmdt-cb-product-cta {
+    font-size: 11px;
+    color: #9ca3af;
+    margin-top: 2px;
+}
+
+/* Input area */
+#tmdt-cb-input-area {
+    display: flex;
+    gap: 8px;
+    padding: 12px 14px;
+    border-top: 1px solid #eef0f7;
+    background: #fff;
+    flex-shrink: 0;
+    align-items: center;
+}
+#tmdt-cb-input {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1.5px solid #e2e5f0;
+    border-radius: 24px;
+    outline: none;
+    font-size: 14px;
+    color: #1a1a2e;
+    background: #f7f8fc;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    transition: border-color 0.2s;
+}
+#tmdt-cb-input:focus { border-color: #667eea; background: #fff; }
+#tmdt-cb-send {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 2px 10px rgba(102, 126, 234, 0.4);
+}
+#tmdt-cb-send:hover { transform: scale(1.08); box-shadow: 0 4px 14px rgba(102,126,234,0.55); }
+#tmdt-cb-send:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+#tmdt-cb-send svg { width: 18px; height: 18px; fill: white; }
+
+/* Responsive mobile */
+@media (max-width: 480px) {
+    #tmdt-cb-window {
+        width: calc(100vw - 20px);
+        right: 10px;
+        bottom: 88px;
+        height: 70vh;
+    }
+    #tmdt-cb-trigger { right: 16px; bottom: 16px; }
+}
+</style>
+
+<!-- ==================== CHATBOT HTML ==================== -->
+
+<!-- Nút trigger -->
+<button id="tmdt-cb-trigger" onclick="tmdtCbToggle()" aria-label="Mở chatbot tư vấn">
+    <!-- Icon chat -->
+    <svg class="icon-chat" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
+    </svg>
+    <!-- Icon đóng -->
+    <svg class="icon-close" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+    </svg>
+</button>
+
+<!-- Cửa sổ chat -->
+<div id="tmdt-cb-window" role="dialog" aria-label="Chatbot tư vấn sản phẩm">
+    <div id="tmdt-cb-header">
+        <div class="tmdt-cb-avatar">🤖</div>
+        <div class="tmdt-cb-header-info">
+            <h4>Trợ lý AI TMDT</h4>
+            <span><span class="tmdt-cb-online-dot"></span>Đang hoạt động</span>
+        </div>
+    </div>
+
+    <div id="tmdt-cb-messages" aria-live="polite">
+        <!-- Tin nhắn chào mừng ban đầu -->
+        <div class="tmdt-cb-msg bot">
+            Xin chào! 👋 Tôi là trợ lý AI của <strong>TMDT Shop</strong>. Tôi có thể giúp bạn tìm sản phẩm phù hợp. Bạn đang tìm kiếm gì hôm nay?
+        </div>
+    </div>
+
+    <div id="tmdt-cb-input-area">
+        <input
+            type="text"
+            id="tmdt-cb-input"
+            placeholder="Nhập câu hỏi của bạn..."
+            onkeydown="tmdtCbHandleKey(event)"
+            autocomplete="off"
+            aria-label="Nhập tin nhắn"
+        />
+        <button id="tmdt-cb-send" onclick="tmdtCbSend()" aria-label="Gửi tin nhắn">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+            </svg>
+        </button>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    // ==== CONFIG ====
+    var CHATBOT_API = '/rest/V1/chatbot/ask';
+    var isOpen      = false;
+    var isLoading   = false;
+
+    // ==== TOGGLE ====
+    window.tmdtCbToggle = function () {
+        isOpen = !isOpen;
+        var win     = document.getElementById('tmdt-cb-window');
+        var trigger = document.getElementById('tmdt-cb-trigger');
+        win.classList.toggle('is-visible', isOpen);
+        trigger.classList.toggle('is-open', isOpen);
+        if (isOpen) {
+            setTimeout(function () {
+                document.getElementById('tmdt-cb-input').focus();
+            }, 300);
+        }
+    };
+
+    // ==== KEYBOARD ====
+    window.tmdtCbHandleKey = function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            tmdtCbSend();
+        }
+    };
+
+    // ==== SEND ====
+    window.tmdtCbSend = function () {
+        if (isLoading) return;
+        var inputEl = document.getElementById('tmdt-cb-input');
+        var text    = (inputEl.value || '').trim();
+        if (!text) return;
+
+        tmdtCbAppendMsg('user', tmdtCbEscape(text));
+        inputEl.value = '';
+        tmdtCbSetLoading(true);
+
+        fetch(CHATBOT_API, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ message: text })
+        })
+        .then(function (res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.json();
+        })
+        .then(function (data) {
+            tmdtCbSetLoading(false);
+            // Magento REST trả chuỗi JSON-encoded
+            var reply = typeof data === 'string' ? data : (data.reply || data.message || JSON.stringify(data));
+            // Loại bỏ các escape ký tự nếu cần
+            try { reply = JSON.parse('"' + reply.replace(/^"|"$/g, '') + '"'); } catch(e) {}
+            tmdtCbAppendMsg('bot', tmdtCbRenderMarkdown(reply));
+        })
+        .catch(function (err) {
+            tmdtCbSetLoading(false);
+            tmdtCbAppendMsg('bot', '⚠️ Không thể kết nối máy chủ. Vui lòng thử lại sau.');
+            console.error('[TMDT Chatbot]', err);
+        });
+    };
+
+    // ==== APPEND MESSAGE ====
+    function tmdtCbAppendMsg(sender, htmlContent) {
+        var container = document.getElementById('tmdt-cb-messages');
+        var div       = document.createElement('div');
+        div.className = 'tmdt-cb-msg ' + sender;
+        div.innerHTML = htmlContent;
+        container.appendChild(div);
+        tmdtCbScrollBottom(container);
+        return div;
+    }
+
+    // ==== LOADING (typing indicator) ====
+    var typingEl = null;
+    function tmdtCbSetLoading(state) {
+        isLoading = state;
+        var sendBtn   = document.getElementById('tmdt-cb-send');
+        sendBtn.disabled = state;
+
+        if (state) {
+            var container = document.getElementById('tmdt-cb-messages');
+            typingEl = document.createElement('div');
+            typingEl.className = 'tmdt-cb-typing';
+            typingEl.innerHTML = '<span></span><span></span><span></span>';
+            container.appendChild(typingEl);
+            tmdtCbScrollBottom(container);
+        } else {
+            if (typingEl && typingEl.parentNode) {
+                typingEl.parentNode.removeChild(typingEl);
+            }
+            typingEl = null;
+        }
+    }
+
+    // ==== RENDER MARKDOWN đơn giản ====
+    function tmdtCbRenderMarkdown(text) {
+        if (!text) return '';
+        // Xử lý link dạng http://... . html
+        text = text.replace(
+            /(https?:\/\/[^\s<>"]+)/g,
+            '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+        );
+        // **in đậm**
+        text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        // *in nghiêng*
+        text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+        // Xuống dòng
+        text = text.replace(/\n/g, '<br>');
+        // Gạch đầu dòng
+        text = text.replace(/<br>-\s+/g, '<br>• ');
+        return text;
+    }
+
+    // ==== ESCAPE HTML ====
+    function tmdtCbEscape(str) {
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    // ==== SCROLL ====
+    function tmdtCbScrollBottom(el) {
+        setTimeout(function () {
+            el.scrollTop = el.scrollHeight;
+        }, 50);
+    }
+
+})();
+</script>

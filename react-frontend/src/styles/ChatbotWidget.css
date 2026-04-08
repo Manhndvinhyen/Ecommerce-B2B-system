@@ -1,0 +1,83 @@
+/* src/app/components/ChatbotWidget.css */
+#chat-trigger {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #ff5722;
+    color: white;
+    border: none;
+    padding: 15px 25px;
+    border-radius: 30px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    z-index: 9999;
+    transition: 0.3s;
+}
+#chat-trigger:hover {
+    background: #e64a19;
+    transform: scale(1.05);
+}
+.chat-container { 
+    position: fixed;
+    bottom: 80px; 
+    right: 20px;
+    width: 350px; 
+    height: 500px; 
+    background: white; 
+    border-radius: 12px; 
+    box-shadow: 0 5px 25px rgba(0,0,0,0.2); 
+    display: flex; 
+    flex-direction: column; 
+    overflow: hidden; 
+    z-index: 9999;
+}
+.chat-header { 
+    background: #ff5722; 
+    color: white; 
+    padding: 15px; 
+    font-size: 16px; 
+    font-weight: bold; 
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.close-btn {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+}
+.chat-box { 
+    flex: 1; 
+    padding: 15px; 
+    overflow-y: auto; 
+    display: flex; 
+    flex-direction: column; 
+    gap: 12px; 
+    background: #fafafa; 
+}
+.message { 
+    max-width: 85%; 
+    padding: 10px 12px; 
+    border-radius: 15px; 
+    line-height: 1.4; 
+    font-size: 14px; 
+    white-space: pre-wrap; /* Giup tu dong xuong dong \n trong React */
+}
+.user-msg { background: #0084ff; color: white; align-self: flex-end; border-bottom-right-radius: 3px; }
+.bot-msg { background: #e4e6eb; color: #050505; align-self: flex-start; border-bottom-left-radius: 3px; }
+.product-card { display: flex; align-items: center; background: white; border: 1px solid #ddd; border-radius: 8px; padding: 8px; margin-top: 5px; text-decoration: none; color: inherit; transition: 0.2s; align-self: flex-start; width: 85%; }
+.product-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+.product-img { width: 60px; height: 60px; object-fit: cover; border-radius: 6px; margin-right: 12px; border: 1px solid #eee; }
+.product-info { display: flex; flex-direction: column; }
+.product-name { font-weight: bold; font-size: 14px; margin-bottom: 4px; color: #1c1e21; line-height: 1.2; }
+.product-price { color: #ff5722; font-weight: bold; font-size: 13px; }
+.input-area { display: flex; padding: 10px; border-top: 1px solid #ddd; background: white; }
+.input-area input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 20px; outline: none; font-size: 14px; }
+.input-area button { background: #0084ff; color: white; border: none; padding: 8px 15px; margin-left: 8px; border-radius: 20px; cursor: pointer; font-weight: bold; font-size: 14px; }
+.input-area button:hover { background: #006bce; }
+.loading { font-style: italic; color: #666; font-size: 13px; align-self: flex-start; }

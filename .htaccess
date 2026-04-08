@@ -1,0 +1,12 @@
+RewriteEngine on
+
+# Redirect root to React SPA
+RewriteCond %{REQUEST_URI} ^/$
+RewriteRule ^(.*)$ /react/ [R=301,L]
+
+RewriteCond %{REQUEST_URI} !^/pub/
+RewriteCond %{REQUEST_URI} !^/setup/
+RewriteCond %{REQUEST_URI} !^/update/
+RewriteCond %{REQUEST_URI} !^/dev/
+RewriteRule .* /pub/$0 [L]
+DirectoryIndex index.php

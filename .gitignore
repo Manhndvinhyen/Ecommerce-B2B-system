@@ -1,0 +1,12 @@
+/vendor/
+/var/
+/generated/
+/pub/media/
+/pub/static/
+/react-frontend/node_modules/
+/react-frontend/dist/
+/.vscode/
+/.idea/
+.DS_Store
+auth.json
+app/etc/env.php

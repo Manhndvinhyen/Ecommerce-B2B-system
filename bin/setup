@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -o errexit
-if [ -f "../env/magento.env" ]; then
-    source "../env/magento.env"
+if [ -f "env/magento.env" ]; then
+    source "env/magento.env"
 else
     echo "Warning: magento.env file not found."
 fi
@@ -12,25 +12,48 @@ MEM_MB=$(( MEM_BYTES / 1000000 ))
 (( MEM_MB < 6227 )) && echo "There must be at least 6GB of RAM allocated to Docker in order to continue." && exit
 
 DOMAIN=${1:-magento.test}
+HOST_HAS_MAGENTO=false
+[ -f "src/bin/magento" ] && HOST_HAS_MAGENTO=true
 
 bin/stop
 
 bin/start --no-dev
 [ $? != 0 ] && echo "Failed to start Docker services" && exit
 
+if ! bin/clinotty test -f bin/magento; then
+    if [ "$HOST_HAS_MAGENTO" = true ]; then
+        echo "Magento source found on host but missing in container. Syncing source into container..."
+        bin/copytocontainer --all
+    else
+        echo "Magento source is missing in both container and host. Please run 'bin/download' first, then retry 'bin/setup'."
+        exit 1
+    fi
+fi
+
 bin/clinotty chmod u+x bin/magento
-rm -rf src && mkdir src
+
+if [ "$HOST_HAS_MAGENTO" = false ]; then
+    rm -rf src && mkdir src
+fi
 
 echo "Adding Magento modules to Composer allow-plugins directive..."
 bin/clinotty composer config --no-plugins allow-plugins.magento/magento-composer-installer true
 bin/clinotty composer config --no-plugins allow-plugins.magento/inventory-composer-installer true
 bin/clinotty composer config --no-plugins allow-plugins.laminas/laminas-dependency-plugin true
 
+if ! bin/clinotty test -f vendor/autoload.php; then
+    echo "Composer dependencies not found. Running composer install..."
+    bin/setup-composer-auth
+    bin/clinotty composer install --no-interaction --prefer-dist
+fi
+
 echo "Running, Magento setup:install..."
 bin/setup-install "${DOMAIN}"
 
-echo "Copying files from container to host after install..."
-bin/copyfromcontainer --all
+if [ "$HOST_HAS_MAGENTO" = false ]; then
+    echo "Copying files from container to host after install..."
+    bin/copyfromcontainer --all
+fi
 
 echo "Forcing deploy of static content to speed up initial requests..."
 bin/clinotty bin/magento setup:static-content:deploy -f

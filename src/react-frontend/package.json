@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "npm run build"
+    "sync:magento": "node scripts/magento-sync.mjs",
+    "refresh:magento": "node scripts/magento-refresh.mjs",
+    "deploy:magento": "npm run build && npm run sync:magento && npm run refresh:magento",
+    "deploy": "npm run deploy:magento"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

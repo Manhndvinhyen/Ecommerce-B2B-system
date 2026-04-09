@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 
-const phpContainer = process.env.MAGENTO_PHP_CONTAINER || 'magento-phpfpm-1';
+const phpContainer = process.env.MAGENTO_PHP_CONTAINER || 'ecommerce-b2b-system-phpfpm-1';
 const locales = process.env.MAGENTO_LOCALES || 'en_US vi_VN';
 
 const command = [

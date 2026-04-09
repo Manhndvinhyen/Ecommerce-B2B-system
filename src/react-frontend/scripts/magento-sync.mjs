@@ -2,8 +2,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const projectRoot = process.cwd();
-const distDir = path.join(projectRoot, 'dist');
-const themeDir = process.env.MAGENTO_THEME_DIR || '/Users/socnhi/Sites/magento/src/app/design/frontend/MyCompany/MyTheme';
+const buildDirCandidates = [
+  process.env.REACT_BUILD_DIR,
+  path.join(projectRoot, 'dist'),
+  path.join(projectRoot, '..', 'pub', 'react')
+].filter(Boolean);
+
+const distDir = buildDirCandidates.find((dir) => fs.existsSync(dir));
+const themeDir = process.env.MAGENTO_THEME_DIR || '/Users/socnhi/Sites/Ecommerce-B2B-system/src/app/design/frontend/MyCompany/MyTheme';
 const targetAssetDir = path.join(themeDir, 'web', 'react-home');
 const targetTemplateDir = path.join(themeDir, 'Magento_Theme', 'templates');
 const targetLayoutDir = path.join(themeDir, 'Magento_Theme', 'layout');
@@ -19,6 +25,10 @@ function removeDirIfExists(dirPath) {
 }
 
 function readManifest() {
+  if (!distDir) {
+    throw new Error('Build output not found. Run npm run build first.');
+  }
+
   const manifestPath = path.join(distDir, '.vite', 'manifest.json');
 
   if (!fs.existsSync(manifestPath)) {
@@ -165,8 +175,8 @@ body.cms-index-index #root {
 }
 
 function copyDistToTheme() {
-  if (!fs.existsSync(distDir)) {
-    throw new Error('dist directory not found. Run npm run build first.');
+  if (!distDir || !fs.existsSync(distDir)) {
+    throw new Error('Build output directory not found. Run npm run build first.');
   }
 
   removeDirIfExists(targetAssetDir);
@@ -177,10 +187,7 @@ function copyDistToTheme() {
 
 function main() {
   console.log(`Using theme dir: ${themeDir}`);
-
-  if (!fs.existsSync(themeDir)) {
-    throw new Error(`Theme directory does not exist: ${themeDir}`);
-  }
+  ensureDir(themeDir);
 
   copyDistToTheme();
   writeMagentoBridgeCss();

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# bin/db-dump — Export database to dump/magento.sql.gz
+#
+# Usage:
+#   bin/db-dump              → saves to dump/magento.sql.gz (default)
+#   bin/db-dump myfile.sql   → saves to dump/myfile.sql.gz
+
+set -o errexit
+
+# shellcheck source=../env/db.env
+source env/db.env
+
+FILENAME="${1:-magento.sql}"
+BASENAME="${FILENAME%.sql}"
+OUTPUT="dump/${BASENAME}.sql.gz"
+
+mkdir -p dump
+
+echo "Exporting database '${MYSQL_DATABASE}' to ${OUTPUT}..."
+
+bin/clinotty bash -c \
+    "mysqldump -h${MYSQL_HOST} -u${MYSQL_USER} -p${MYSQL_PASSWORD} ${MYSQL_DATABASE} \
+    --single-transaction --quick --lock-tables=false" \
+    | gzip > "${OUTPUT}"
+
+echo "✅ Database dump saved: ${OUTPUT}"
+echo "   Size: $(du -sh "${OUTPUT}" | cut -f1)"
+echo "   To import on another machine: bin/db-import ${BASENAME}.sql"

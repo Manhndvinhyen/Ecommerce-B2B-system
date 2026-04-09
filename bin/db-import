@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# bin/db-import — Import a SQL dump into the Magento database
+#
+# Usage:
+#   bin/db-import              → imports dump/magento.sql or dump/magento.sql.gz
+#   bin/db-import myfile.sql   → imports dump/myfile.sql or dump/myfile.sql.gz
+
+set -o errexit
+
+# shellcheck source=../env/db.env
+source env/db.env
+
+FILENAME="${1:-magento.sql}"
+BASENAME="${FILENAME%.sql}"
+
+GZ_FILE="dump/${BASENAME}.sql.gz"
+SQL_FILE="dump/${BASENAME}.sql"
+
+if [ ! -f "${GZ_FILE}" ] && [ ! -f "${SQL_FILE}" ]; then
+    echo "❌ No dump file found."
+    echo "   Looked for: ${GZ_FILE}"
+    echo "   Looked for: ${SQL_FILE}"
+    echo ""
+    echo "   To create a dump from your current machine: bin/db-dump"
+    exit 1
+fi
+
+if [ -f "${GZ_FILE}" ]; then
+    echo "Importing ${GZ_FILE} into database '${MYSQL_DATABASE}'..."
+    gunzip -c "${GZ_FILE}" | bin/clinotty bash -c \
+        "mysql -h${MYSQL_HOST} -u${MYSQL_USER} -p${MYSQL_PASSWORD} ${MYSQL_DATABASE}"
+else
+    echo "Importing ${SQL_FILE} into database '${MYSQL_DATABASE}'..."
+    bin/clinotty bash -c \
+        "mysql -h${MYSQL_HOST} -u${MYSQL_USER} -p${MYSQL_PASSWORD} ${MYSQL_DATABASE}" \
+        < "${SQL_FILE}"
+fi
+
+echo "✅ Database imported successfully."
+echo "   Run 'bin/magento cache:flush' to clear stale cache."

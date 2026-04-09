@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+# bin/setup-new-machine — Thiết lập môi trường trên máy mới (sau khi pull từ Git)
+#
+# Sử dụng:
+#   bin/setup-new-machine             → dùng domain magento.test (mặc định)
+#   bin/setup-new-machine mysite.test → dùng domain tùy chọn
+
+set -o errexit
+
+DOMAIN="${1:-magento.test}"
+
+echo ""
+echo "╔══════════════════════════════════════════════════════════════╗"
+echo "║           Magento Docker — Setup Máy Mới                    ║"
+echo "╚══════════════════════════════════════════════════════════════╝"
+echo ""
+
+# ─────────────────────────────────────────────
+# BƯỚC 1: Kiểm tra file custom.env
+# ─────────────────────────────────────────────
+echo "▶ [1/8] Kiểm tra cấu hình secrets..."
+
+if [ ! -f "env/custom.env" ]; then
+    echo "   Không tìm thấy env/custom.env. Đang tạo từ template..."
+    cp env/custom.env.sample env/custom.env
+    echo ""
+    echo "   ⚠️  QUAN TRỌNG: Hãy mở file env/custom.env và điền GEMINI_API_KEY trước khi tiếp tục."
+    echo "   Sau đó chạy lại: bin/setup-new-machine ${DOMAIN}"
+    echo ""
+    exit 1
+fi
+
+if grep -q "YOUR_GEMINI_API_KEY_HERE" env/custom.env; then
+    echo ""
+    echo "   ⚠️  env/custom.env vẫn chứa giá trị mặc định từ template."
+    echo "   Hãy điền GEMINI_API_KEY thực tế vào file env/custom.env."
+    echo "   (Bỏ qua nếu bạn không dùng Chatbot — xóa dòng đó hoặc để trống)"
+    echo ""
+    read -rp "   Tiếp tục mà không có Gemini API key? [y/N] " confirm
+    [[ ! "$confirm" =~ ^[Yy]$ ]] && echo "Đã huỷ." && exit 1
+fi
+
+# ─────────────────────────────────────────────
+# BƯỚC 2: Kiểm tra file env.php
+# ─────────────────────────────────────────────
+echo "▶ [2/8] Kiểm tra env.php..."
+
+if [ ! -f "src/app/etc/env.php" ]; then
+    echo "   Không tìm thấy env.php. Đang tạo từ template..."
+    cp src/app/etc/env.php.sample src/app/etc/env.php
+    echo "   ✅ Đã tạo src/app/etc/env.php từ template."
+    echo "      (Env.php sẽ được ghi đè sau khi setup:install chạy)"
+fi
+
+# ─────────────────────────────────────────────
+# BƯỚC 3: Cấu hình /etc/hosts
+# ─────────────────────────────────────────────
+echo "▶ [3/8] Cấu hình /etc/hosts..."
+
+if ! grep -q "${DOMAIN}" /etc/hosts; then
+    echo "   Thêm ${DOMAIN} → 127.0.0.1 vào /etc/hosts (cần mật khẩu sudo)..."
+    echo "127.0.0.1 ::1 ${DOMAIN}" | sudo tee -a /etc/hosts > /dev/null
+    echo "   ✅ Đã thêm entry vào /etc/hosts."
+else
+    echo "   ✅ ${DOMAIN} đã có trong /etc/hosts."
+fi
+
+# ─────────────────────────────────────────────
+# BƯỚC 4: Khởi động containers
+# ─────────────────────────────────────────────
+echo "▶ [4/8] Khởi động Docker containers..."
+bin/start --no-dev
+echo "   ✅ Containers đang chạy."
+
+# ─────────────────────────────────────────────
+# BƯỚC 5: Cài Composer dependencies
+# ─────────────────────────────────────────────
+echo "▶ [5/8] Cài đặt Composer dependencies..."
+bin/clinotty composer install --no-interaction --prefer-dist
+echo "   ✅ Composer dependencies đã cài xong."
+
+# ─────────────────────────────────────────────
+# BƯỚC 6: Database — import dump hoặc fresh install
+# ─────────────────────────────────────────────
+echo "▶ [6/8] Thiết lập database..."
+
+if [ -f "dump/magento.sql.gz" ] || [ -f "dump/magento.sql" ]; then
+    echo "   Tìm thấy database dump. Đang import..."
+    bin/db-import
+    echo "   ✅ Database đã được import từ dump."
+
+    echo "   Chạy setup:upgrade để apply schema mới nhất..."
+    bin/clinotty bin/magento setup:upgrade --no-interaction
+else
+    echo "   Không tìm thấy database dump. Chạy fresh Magento install..."
+    bin/setup-install "${DOMAIN}"
+    echo "   ✅ Magento đã được cài đặt từ đầu."
+fi
+
+# ─────────────────────────────────────────────
+# BƯỚC 7: Generate code và deploy static files
+# ─────────────────────────────────────────────
+echo "▶ [7/8] Compile & Deploy static content..."
+
+# Copy vendor + generated files từ container về host
+bin/copyfromcontainer vendor
+bin/copyfromcontainer generated
+
+bin/clinotty bin/magento setup:di:compile
+bin/clinotty bin/magento setup:static-content:deploy -f
+bin/clinotty bin/magento indexer:reindex
+bin/clinotty bin/magento cache:flush
+
+echo "   ✅ Build hoàn tất."
+
+# ─────────────────────────────────────────────
+# BƯỚC 8: SSL và domain
+# ─────────────────────────────────────────────
+echo "▶ [8/8] Cấu hình SSL certificate cho ${DOMAIN}..."
+
+# Restart với dev config để load volume mounts đúng
+bin/stop
+bin/start
+bin/setup-ssl "${DOMAIN}"
+bin/fixowns
+bin/fixperms
+
+echo ""
+echo "╔══════════════════════════════════════════════════════════════╗"
+echo "║   ✅  Thiết lập hoàn tất!                                   ║"
+echo "╚══════════════════════════════════════════════════════════════╝"
+echo ""
+echo "  🌐  Frontend : https://${DOMAIN}/"
+echo "  🔧  Admin    : https://${DOMAIN}/admin"
+echo "  📧  Mail     : http://localhost:1080"
+echo "  🗄️  PHPMyAdmin: http://localhost:8080"
+echo ""
+# shellcheck source=../env/magento.env
+source env/magento.env
+echo "  👤  Admin user    : ${MAGENTO_ADMIN_USER}"
+echo "  🔑  Admin password: ${MAGENTO_ADMIN_PASSWORD}"
+echo ""

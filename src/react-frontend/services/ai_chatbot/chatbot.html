@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot Dac San Widget</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            background-color: #f0f2f5; 
+            margin: 0; 
+            padding: 20px; 
+            /* Mo phong trang web co noi dung dai */
+            height: 2000px;
+        }
+
+        /* Nut bong bong chat goc duoi */
+        #chat-trigger {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #ff5722;
+            color: white;
+            border: none;
+            padding: 15px 25px;
+            border-radius: 30px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+            transition: 0.3s;
+        }
+        #chat-trigger:hover {
+            background: #e64a19;
+            transform: scale(1.05);
+        }
+
+        /* Khung chat an/hien */
+        .chat-container { 
+            position: fixed;
+            bottom: 80px; 
+            right: 20px;
+            width: 350px; 
+            height: 500px; 
+            background: white; 
+            border-radius: 12px; 
+            box-shadow: 0 5px 25px rgba(0,0,0,0.2); 
+            display: none; /* An mac dinh */
+            flex-direction: column; 
+            overflow: hidden; 
+            z-index: 1000;
+        }
+
+        .chat-header { 
+            background: #ff5722; 
+            color: white; 
+            padding: 15px; 
+            font-size: 16px; 
+            font-weight: bold; 
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .chat-box { 
+            flex: 1; 
+            padding: 15px; 
+            overflow-y: auto; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 12px; 
+            background: #fafafa; 
+        }
+
+        .message { 
+            max-width: 85%; 
+            padding: 10px 12px; 
+            border-radius: 15px; 
+            line-height: 1.4; 
+            font-size: 14px; 
+        }
+        .user-msg { background: #0084ff; color: white; align-self: flex-end; border-bottom-right-radius: 3px; }
+        .bot-msg { background: #e4e6eb; color: #050505; align-self: flex-start; border-bottom-left-radius: 3px; }
+        
+        .product-card { display: flex; align-items: center; background: white; border: 1px solid #ddd; border-radius: 8px; padding: 8px; margin-top: 5px; text-decoration: none; color: inherit; transition: 0.2s; align-self: flex-start; width: 85%; }
+        .product-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+        .product-img { width: 60px; height: 60px; object-fit: cover; border-radius: 6px; margin-right: 12px; border: 1px solid #eee; }
+        .product-info { display: flex; flex-direction: column; }
+        .product-name { font-weight: bold; font-size: 14px; margin-bottom: 4px; color: #1c1e21; line-height: 1.2; }
+        .product-price { color: #ff5722; font-weight: bold; font-size: 13px; }
+        
+        .input-area { display: flex; padding: 10px; border-top: 1px solid #ddd; background: white; }
+        .input-area input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 20px; outline: none; font-size: 14px; }
+        .input-area button { background: #0084ff; color: white; border: none; padding: 8px 15px; margin-left: 8px; border-radius: 20px; cursor: pointer; font-weight: bold; font-size: 14px; }
+        .input-area button:hover { background: #006bce; }
+        .loading { font-style: italic; color: #666; font-size: 13px; align-self: flex-start; }
+    </style>
+</head>
+<body>
+
+<h1>Trang web dac san cua ban</h1>
+<p>Cuon chuot xuong duoi hoac bam vao nut "Chat ngay" o goc duoi ben phai de thu nghiem.</p>
+
+<button id="chat-trigger" onclick="toggleChat()">Chat ngay</button>
+
+<div class="chat-container" id="chat-widget">
+    <div class="chat-header">
+        <span>Trợ lý bán hàng</span>
+        <button class="close-btn" onclick="toggleChat()">X</button>
+    </div>
+    <div class="chat-box" id="chat-box">
+        <div class="message bot-msg">Chào anh chị, anh chị muốn tìm kiếm sản phẩm nào hôm nay ạ?</div>
+    </div>
+    <div class="input-area">
+        <input type="text" id="user-input" placeholder="Nhap cau hoi..." onkeypress="handleKeyPress(event)">
+        <button onclick="sendMessage()">Gui</button>
+    </div>
+</div>
+
+<script>
+    const chatBox = document.getElementById("chat-box");
+    const userInput = document.getElementById("user-input");
+    const chatWidget = document.getElementById("chat-widget");
+
+    // Ham bat/tat khung chat
+    function toggleChat() {
+        if (chatWidget.style.display === "none" || chatWidget.style.display === "") {
+            chatWidget.style.display = "flex";
+            userInput.focus();
+        } else {
+            chatWidget.style.display = "none";
+        }
+    }
+
+    function appendMessage(sender, text) {
+        const div = document.createElement("div");
+        div.className = `message ${sender === 'user' ? 'user-msg' : 'bot-msg'}`;
+        div.innerHTML = text.replace(/\n/g, '<br>');
+        chatBox.appendChild(div);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function appendProduct(product) {
+        const a = document.createElement("a");
+        a.href = product.url;
+        a.target = "_blank";
+        a.className = "product-card";
+        a.innerHTML = `
+            <img src="${product.image}" alt="anh-san-pham" class="product-img" onerror="this.src='https://via.placeholder.com/60?text=No+Image'">
+            <div class="product-info">
+                <span class="product-name">${product.name}</span>
+                <span class="product-price">Gia: ${product.price} USD</span>
+            </div>
+        `;
+        chatBox.appendChild(a);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    async function sendMessage() {
+        const text = userInput.value.trim();
+        if (!text) return;
+
+        appendMessage('user', text);
+        userInput.value = '';
+        
+        const loadingId = "loading-" + Date.now();
+        const loadingDiv = document.createElement("div");
+        loadingDiv.id = loadingId;
+        loadingDiv.className = "loading";
+        loadingDiv.textContent = "AI dang suy nghi...";
+        chatBox.appendChild(loadingDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        try {
+            const response = await fetch("http://localhost:8000/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message: text })
+            });
+
+            const data = await response.json();
+            document.getElementById(loadingId).remove();
+
+            if (data.error) {
+                appendMessage('bot', "Xin loi, co loi xay ra: " + data.error);
+                return;
+            }
+
+            appendMessage('bot', data.reply);
+
+            if (data.products && data.products.length > 0) {
+                data.products.forEach(product => appendProduct(product));
+            }
+
+        } catch (error) {
+            document.getElementById(loadingId).remove();
+            appendMessage('bot', "Khong the ket noi den may chu API.");
+        }
+    }
+
+    function handleKeyPress(event) {
+        if (event.key === "Enter") {
+            sendMessage();
+        }
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+# Bo qua moi truong ao Python
+venv/
+__pycache__/
+*.pyc
+
+# TUYET DOI BO QUA FILE CAU HINH MAT KHAU
+.env
+
+# Bo qua file log hoac index cua FAISS (neu tao ra file cung)
+*.index
+*.log

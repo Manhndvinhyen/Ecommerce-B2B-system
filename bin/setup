@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -o errexit
-if [ -f "../env/magento.env" ]; then
-    source "../env/magento.env"
+if [ -f "env/magento.env" ]; then
+    source "env/magento.env"
 else
     echo "Warning: magento.env file not found."
 fi

@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-bin/cli bin/magento "$@"
+docker compose exec -u www-data phpfpm bin/magento "$@"

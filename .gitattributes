@@ -1,0 +1,5 @@
+* text=auto
+
+# Bash scripts should always have LF line endings to avoid syntax errors on Linux/WSL
+bin/* text eol=lf
+env/*.sample text eol=lf

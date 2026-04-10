@@ -58,9 +58,17 @@ fi
 echo "▶ [3/8] Cấu hình /etc/hosts..."
 
 if ! grep -q "${DOMAIN}" /etc/hosts; then
-    echo "   Thêm ${DOMAIN} → 127.0.0.1 vào /etc/hosts (cần mật khẩu sudo)..."
-    echo "127.0.0.1 ::1 ${DOMAIN}" | sudo tee -a /etc/hosts > /dev/null
-    echo "   ✅ Đã thêm entry vào /etc/hosts."
+    if grep -qEi "(microsoft|wsl)" /proc/version &> /dev/null; then
+        echo "   ⚠️ Phát hiện bạn đang dùng Windows/WSL."
+        echo "   Vui lòng mở Notepad bằng Quyền Administrator trên Windows,"
+        echo "   và thêm dòng sau vào file C:\Windows\System32\drivers\etc\hosts:"
+        echo "   127.0.0.1 ${DOMAIN}"
+        echo ""
+    else
+        echo "   Thêm ${DOMAIN} → 127.0.0.1 vào /etc/hosts (cần mật khẩu sudo)..."
+        echo "127.0.0.1 ::1 ${DOMAIN}" | sudo tee -a /etc/hosts > /dev/null
+        echo "   ✅ Đã thêm entry vào /etc/hosts."
+    fi
 else
     echo "   ✅ ${DOMAIN} đã có trong /etc/hosts."
 fi

@@ -15,22 +15,18 @@ DOMAIN=${1:-magento.test}
 
 bin/stop
 
-bin/start --no-dev
+bin/start
 [ $? != 0 ] && echo "Failed to start Docker services" && exit
 
-bin/clinotty chmod u+x bin/magento
-rm -rf src && mkdir src
+echo "Assuming existing Magento code in src/ directory. Running composer install..."
+bin/composer install
 
-echo "Adding Magento modules to Composer allow-plugins directive..."
-bin/clinotty composer config --no-plugins allow-plugins.magento/magento-composer-installer true
+bin/clinotty chmod u+x bin/magento
 bin/clinotty composer config --no-plugins allow-plugins.magento/inventory-composer-installer true
 bin/clinotty composer config --no-plugins allow-plugins.laminas/laminas-dependency-plugin true
 
 echo "Running, Magento setup:install..."
 bin/setup-install "${DOMAIN}"
-
-echo "Copying files from container to host after install..."
-bin/copyfromcontainer --all
 
 echo "Forcing deploy of static content to speed up initial requests..."
 bin/clinotty bin/magento setup:static-content:deploy -f

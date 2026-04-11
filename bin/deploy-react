@@ -8,6 +8,11 @@ cd src/react-frontend || { echo "❌ Không tìm thấy thư mục src/react-fro
 echo "📦 Cài đặt thư viện NPM..."
 npm install
 
+if [ ! -f ".env" ]; then
+    echo "⚠️ Không tìm thấy file .env, đang tự động tạo từ .env.example..."
+    cp .env.example .env
+fi
+
 echo "🛠️ Build ứng dụng React..."
 npm run build
 

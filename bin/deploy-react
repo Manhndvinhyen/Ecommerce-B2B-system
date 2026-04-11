@@ -12,7 +12,12 @@ echo "🛠️ Build ứng dụng React..."
 npm run build
 
 echo "🔗 Đồng bộ UI bundle vào thư mục Magento Theme..."
-MAGENTO_THEME_DIR=../app/design/frontend/Magento/luma node scripts/magento-sync.mjs
+if command -v node &> /dev/null; then
+    MAGENTO_THEME_DIR=../app/design/frontend/Magento/luma node scripts/magento-sync.mjs
+else
+    export MAGENTO_THEME_DIR="../app/design/frontend/Magento/luma"
+    node.exe scripts/magento-sync.mjs
+fi
 
 echo "🔄 Xóa Magento Cache & Triển khai Static Content..."
 cd ../../

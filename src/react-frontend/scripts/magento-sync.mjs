@@ -3,7 +3,7 @@ import path from 'node:path';
 
 const projectRoot = process.cwd();
 const distDir = path.join(projectRoot, 'dist');
-const themeDir = process.env.MAGENTO_THEME_DIR || '/Users/socnhi/Sites/magento/src/app/design/frontend/MyCompany/MyTheme';
+const themeDir = process.env.MAGENTO_THEME_DIR || path.join(projectRoot, '../app/design/frontend/Magento/luma');
 const targetAssetDir = path.join(themeDir, 'web', 'react-home');
 const targetTemplateDir = path.join(themeDir, 'Magento_Theme', 'templates');
 const targetLayoutDir = path.join(themeDir, 'Magento_Theme', 'layout');

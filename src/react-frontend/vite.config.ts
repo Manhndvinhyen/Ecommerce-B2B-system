@@ -21,7 +21,7 @@ export default defineConfig({
   assetsInclude: ['**/*.svg', '**/*.csv'],
   build: {
     // Build trực tiếp vào pub/react/ của Magento
-    outDir: '../pub/react',
+    outDir: 'dist',
     emptyOutDir: true,
     manifest: true,
   },

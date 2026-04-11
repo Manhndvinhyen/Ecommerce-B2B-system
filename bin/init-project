@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+
+echo "🚀 Bắt đầu tự động cấu hình dự án lần đầu cho môi trường mới..."
+
+echo "🐳 [1/3] Khởi động Stack Backend của Magento..."
+./bin/start
+
+echo "⏳ Đợi Database sẵn sàng kết nối..."
+sleep 15
+
+if [ -f "dump/magento.sql" ]; then
+    echo "📦 [2/3] Tự động nạp Database mẫu..."
+    ./bin/db-import < dump/magento.sql
+else
+    echo "⚠️ Bỏ qua nạp Database: Không tìm thấy dump/magento.sql (có thể nó chưa được push lên)!"
+fi
+
+if [ -f "bin/deploy-react" ]; then
+    echo "⚛️ [3/3] Trỏ giao diện React..."
+    ./bin/deploy-react
+else
+    echo "⚠️ Bỏ qua Deploy React báo lỗi: Không tìm thấy file script bin/deploy-react"
+fi
+
+echo "🎉 Toàn bộ kiến trúc và UI đã hoàn tất!"
+echo "👉 Mời bạn truy cập vào: https://magento.test"

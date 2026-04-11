@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# This script builds the React frontend and injects it into the Magento Luma theme
+
+echo "🚀 Bắt đầu quá trình build và sync React App vào thẻ Magento..."
+
+cd src/react-frontend || { echo "❌ Không tìm thấy thư mục src/react-frontend"; exit 1; }
+
+echo "📦 Cài đặt thư viện NPM..."
+npm install
+
+echo "🛠️ Build ứng dụng React..."
+npm run build
+
+echo "🔗 Đồng bộ UI bundle vào thư mục Magento Theme..."
+MAGENTO_THEME_DIR=../app/design/frontend/Magento/luma node scripts/magento-sync.mjs
+
+echo "🔄 Xóa Magento Cache & Triển khai Static Content..."
+cd ../../
+./bin/magento cache:flush
+./bin/magento setup:static-content:deploy -f
+
+echo "✅ Hoàn tất! Giao diện mới đã được áp dụng lên magento.test"

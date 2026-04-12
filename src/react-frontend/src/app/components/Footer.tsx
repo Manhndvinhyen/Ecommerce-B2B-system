@@ -12,13 +12,13 @@ export function Footer() {
               Nền tảng giao hàng thực phẩm tươi sống hàng đầu Việt Nam
             </p>
             <div className="flex gap-3">
-              <a href="#" className="bg-gray-800 p-2 rounded-full hover:bg-green-600 transition-colors">
+              <a href="/contact" className="bg-gray-800 p-2 rounded-full hover:bg-green-600 transition-colors">
                 <Facebook className="size-5" />
               </a>
-              <a href="#" className="bg-gray-800 p-2 rounded-full hover:bg-green-600 transition-colors">
+              <a href="/contact" className="bg-gray-800 p-2 rounded-full hover:bg-green-600 transition-colors">
                 <Instagram className="size-5" />
               </a>
-              <a href="#" className="bg-gray-800 p-2 rounded-full hover:bg-green-600 transition-colors">
+              <a href="/contact" className="bg-gray-800 p-2 rounded-full hover:bg-green-600 transition-colors">
                 <Youtube className="size-5" />
               </a>
             </div>
@@ -29,17 +29,17 @@ export function Footer() {
             <h3 className="text-white font-bold mb-4">Liên kết nhanh</h3>
             <ul className="space-y-2">
               <li>
-                <a href="#" className="hover:text-green-500 transition-colors">
+                <a href="/contact" className="hover:text-green-500 transition-colors">
                   Về chúng tôi
                 </a>
               </li>
               <li>
-                <a href="#" className="hover:text-green-500 transition-colors">
+                <a href="/#san-pham-hien-thi" className="hover:text-green-500 transition-colors">
                   Sản phẩm
                 </a>
               </li>
               <li>
-                <a href="#" className="hover:text-green-500 transition-colors">
+                <a href="/contact" className="hover:text-green-500 transition-colors">
                   Liên hệ
                 </a>
               </li>
@@ -51,22 +51,22 @@ export function Footer() {
             <h3 className="text-white font-bold mb-4">Hỗ trợ</h3>
             <ul className="space-y-2">
               <li>
-                <a href="#" className="hover:text-green-500 transition-colors">
+                <a href="/contact" className="hover:text-green-500 transition-colors">
                   Câu hỏi thường gặp
                 </a>
               </li>
               <li>
-                <a href="#" className="hover:text-green-500 transition-colors">
+                <a href="/privacy-policy-cookie-restriction-mode" className="hover:text-green-500 transition-colors">
                   Chính sách giao hàng
                 </a>
               </li>
               <li>
-                <a href="#" className="hover:text-green-500 transition-colors">
+                <a href="/privacy-policy-cookie-restriction-mode" className="hover:text-green-500 transition-colors">
                   Chính sách đổi trả
                 </a>
               </li>
               <li>
-                <a href="#" className="hover:text-green-500 transition-colors">
+                <a href="/privacy-policy-cookie-restriction-mode" className="hover:text-green-500 transition-colors">
                   Điều khoản sử dụng
                 </a>
               </li>
@@ -99,10 +99,10 @@ export function Footer() {
               © 2026 Freso. All rights reserved.
             </p>
             <div className="flex gap-6 text-sm">
-              <a href="#" className="hover:text-green-500 transition-colors">
+              <a href="/privacy-policy-cookie-restriction-mode" className="hover:text-green-500 transition-colors">
                 Chính sách bảo mật
               </a>
-              <a href="#" className="hover:text-green-500 transition-colors">
+              <a href="/privacy-policy-cookie-restriction-mode" className="hover:text-green-500 transition-colors">
                 Điều khoản dịch vụ
               </a>
             </div>

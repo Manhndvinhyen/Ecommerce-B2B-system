@@ -40,6 +40,9 @@ const categories = [
   }
 ];
 
+const getProductsLink = (category: string) =>
+  `/?category=${encodeURIComponent(category)}#san-pham-hien-thi`;
+
 export function ProductsPage() {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
@@ -57,8 +60,9 @@ export function ProductsPage() {
             >
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden h-full">
                 {categories.map((category, index) => (
-                  <button
+                  <a
                     key={index}
+                    href={getProductsLink(category.name)}
                     onMouseEnter={() => setActiveCategory(category.name)}
                     className={`w-full h-16 flex items-center gap-3 px-4 transition-colors border-b border-gray-100 last:border-b-0 group ${
                       activeCategory === category.name
@@ -84,7 +88,7 @@ export function ProductsPage() {
                           : 'text-gray-400 group-hover:text-green-600'
                       }`}
                     />
-                  </button>
+                  </a>
                 ))}
               </div>
 
@@ -95,7 +99,7 @@ export function ProductsPage() {
                     {activeCategoryData.subcategories.map((subcategory) => (
                       <a
                         key={subcategory}
-                        href="#"
+                        href={getProductsLink(subcategory)}
                         className="text-sm text-gray-700 px-3 py-2 rounded-lg hover:bg-green-50 hover:text-green-700 transition-colors whitespace-normal break-words leading-snug"
                       >
                         {subcategory}
@@ -168,10 +172,10 @@ export function ProductsPage() {
                   <h3 className="text-2xl font-bold leading-tight">Hóa đơn VAT điện tử</h3>
                   <p className="text-sm opacity-95 mt-2">Xuất đầy đủ cho mọi đơn hàng</p>
                 </div>
-                <button className="mt-4 bg-white text-teal-700 px-4 py-2 rounded-full text-sm font-semibold hover:bg-teal-50 transition-colors inline-flex items-center gap-1.5 w-fit">
+                <a href="/contact" className="mt-4 bg-white text-teal-700 px-4 py-2 rounded-full text-sm font-semibold hover:bg-teal-50 transition-colors inline-flex items-center gap-1.5 w-fit">
                   Xem chi tiết
                   <ChevronRight className="size-4" />
-                </button>
+                </a>
               </div>
             </div>
 
@@ -188,10 +192,10 @@ export function ProductsPage() {
                   <h3 className="text-3xl font-extrabold leading-tight">Tặng voucher 300K</h3>
                   <p className="text-sm opacity-95 mt-2">Khi mua đơn đầu tiên từ 699K</p>
                 </div>
-                <button className="mt-4 bg-white text-green-700 px-4 py-2 rounded-full text-sm font-semibold hover:bg-green-50 transition-colors inline-flex items-center gap-1.5 w-fit">
+                <a href="/customer/account/create" className="mt-4 bg-white text-green-700 px-4 py-2 rounded-full text-sm font-semibold hover:bg-green-50 transition-colors inline-flex items-center gap-1.5 w-fit">
                   Xem chi tiết
                   <ChevronRight className="size-4" />
-                </button>
+                </a>
               </div>
             </div>
           </div>

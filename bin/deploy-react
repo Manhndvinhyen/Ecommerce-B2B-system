@@ -16,7 +16,13 @@ fi
 echo "🛠️ Build ứng dụng React..."
 npm run build
 
-echo "🔗 Đồng bộ UI bundle vào thư mục Magento Theme..."
+echo "📁 Đồng bộ dist vào runtime /pub/react..."
+rm -rf ../pub/react
+mkdir -p ../pub/react
+cp -R dist/. ../pub/react/
+echo "✅ Synced dist to runtime: src/pub/react"
+
+echo "� Đồng bộ UI bundle vào thư mục Magento Theme..."
 if command -v node &> /dev/null; then
     MAGENTO_THEME_DIR=../app/design/frontend/Magento/luma node scripts/magento-sync.mjs
 else

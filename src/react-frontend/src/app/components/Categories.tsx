@@ -3,37 +3,37 @@ import { ImageWithFallback } from './figma/ImageWithFallback';
 const categories = [
   {
     title: 'Rau củ quả',
-    image: 'https://images.unsplash.com/photo-1659027793188-94f711fdb7ef?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmcmVzaCUyMHZlZ2V0YWJsZXMlMjBkZWxpdmVyeXxlbnwxfHx8fDE3NzQ5Njc5MzB8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
+    image: 'https://images.unsplash.com/photo-1579113800032-c38bd7635818?q=80&w=1080&auto=format&fit=crop&ixlib=rb-4.1.0&v=2',
     count: '120+ sản phẩm'
   },
   {
     title: 'Trái cây',
-    image: 'https://images.unsplash.com/photo-1621295112702-f6e5ff69b8a9?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxvcmdhbmljJTIwZnJ1aXRzJTIwbWFya2V0fGVufDF8fHx8MTc3NDk2NzkzMXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
+    image: 'https://images.unsplash.com/photo-1609780447631-05b93e5a88ea?q=80&w=1080&auto=format&fit=crop&ixlib=rb-4.1.0&v=2',
     count: '80+ sản phẩm'
   },
   {
-    title: 'Thịt & hải sản',
-    image: 'https://images.unsplash.com/photo-1642517245891-74906b8d8873?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmcmVzaCUyMG1lYXQlMjBzZWFmb29kfGVufDF8fHx8MTc3NDk2NzkzMXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
+    title: 'Thực phẩm tươi sống',
+    image: 'https://images.unsplash.com/photo-1625643269470-5d3e7b69fa34?q=80&w=1080&auto=format&fit=crop&ixlib=rb-4.1.0&v=2',
     count: '60+ sản phẩm'
   },
   {
-    title: 'Sữa & phô mai',
-    image: 'https://images.unsplash.com/photo-1771255217872-99fe6c876e45?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxkYWlyeSUyMG1pbGslMjBjaGVlc2UlMjBwcm9kdWN0c3xlbnwxfHx8fDE3NzQ4NTcxNzl8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
+    title: 'Thuỷ hải sản',
+    image: 'https://images.unsplash.com/photo-1651323018466-b36b7df1d2b1?q=80&w=1080&auto=format&fit=crop&ixlib=rb-4.1.0&v=2',
     count: '45+ sản phẩm'
   },
   {
-    title: 'Trứng & gia cầm',
-    image: 'https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
+    title: 'Thực phẩm đông lạnh',
+    image: 'https://images.unsplash.com/photo-1645235247777-b0eac398d346?q=80&w=1080&auto=format&fit=crop&ixlib=rb-4.1.0&v=2',
     count: '50+ sản phẩm'
   },
   {
-    title: 'Đồ khô',
-    image: 'https://images.unsplash.com/photo-1610348725531-843dff563e2c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
+    title: 'Thực phẩm khô',
+    image: 'https://images.unsplash.com/photo-1705475388190-775066fd69a5?q=80&w=1080&auto=format&fit=crop&ixlib=rb-4.1.0&v=2',
     count: '90+ sản phẩm'
   },
   {
-    title: 'Gia vị',
-    image: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
+    title: 'Tiện ích bếp',
+    image: 'https://images.unsplash.com/photo-1736874548545-628e19dc9fab?q=80&w=1080&auto=format&fit=crop&ixlib=rb-4.1.0&v=2',
     count: '70+ sản phẩm'
   }
 ];

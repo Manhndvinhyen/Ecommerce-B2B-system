@@ -1,7 +1,7 @@
 <?php
 return [
     'backend' => [
-        'frontName' => 'admin_wuuiylb'
+        'frontName' => 'admin'
     ],
     'remote_storage' => [
         'driver' => 'file'
@@ -86,15 +86,9 @@ return [
     'install' => [
         'date' => 'Wed, 08 Apr 2026 12:29:47 +0000'
     ],
-
-    // =========================================================
-    // Custom: Tmdt Chatbot — đọc key từ biến môi trường Docker
-    // Key được cấu hình trong env/custom.env (gitignored)
-    // =========================================================
     'tmdt_chatbot' => [
         'gemini' => [
-            'api_key' => getenv('GEMINI_API_KEY') ?: ''
+            'api_key' => 'YOUR_GEMINI_API_KEY_HERE'
         ]
     ]
-
 ];

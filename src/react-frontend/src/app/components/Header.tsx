@@ -32,6 +32,9 @@ const categoryMenu = [
   }
 ];
 
+const getProductsLink = (category: string) =>
+  `/?category=${encodeURIComponent(category)}#san-pham-hien-thi`;
+
 export function Header() {
   const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState(categoryMenu[0].name);
@@ -45,15 +48,15 @@ export function Header() {
       <div className="bg-gray-50 border-b">
         <div className="container mx-auto px-4 py-2">
           <div className="flex items-center justify-end gap-3">
-            <button className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors">
+            <a href="/customer/account/login" className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors">
               Đăng nhập
-            </button>
-            <button className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors">
+            </a>
+            <a href="/customer/account/create" className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors">
               Đăng ký
-            </button>
-            <button className="px-4 py-1.5 text-sm border-2 border-orange-500 text-orange-500 rounded-full hover:bg-orange-50 transition-colors whitespace-nowrap">
+            </a>
+            <a href="/contact" className="px-4 py-1.5 text-sm border-2 border-orange-500 text-orange-500 rounded-full hover:bg-orange-50 transition-colors whitespace-nowrap">
               Đăng ký bán hàng
-            </button>
+            </a>
           </div>
         </div>
       </div>
@@ -78,11 +81,12 @@ export function Header() {
                   }}
                   onMouseLeave={() => setIsCategoryMenuOpen(false)}
                 >
-                  <button
+                  <a
+                    href="/#san-pham-hien-thi"
                     className="text-gray-700 hover:text-green-600 transition-colors font-medium"
                   >
                     Danh mục sản phẩm
-                  </button>
+                  </a>
 
                   {isCategoryMenuOpen && (
                     <div className="absolute top-full left-0 w-[760px] bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden z-50">
@@ -91,8 +95,9 @@ export function Header() {
                           {categoryMenu.map((category) => {
                             const isActive = activeCategory === category.name;
                             return (
-                              <button
+                              <a
                                 key={category.name}
+                                href={getProductsLink(category.name)}
                                 onMouseEnter={() => setActiveCategory(category.name)}
                                 className={`w-full flex items-center justify-between text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
                                   isActive
@@ -102,7 +107,7 @@ export function Header() {
                               >
                                 <span className="pr-3">{category.name}</span>
                                 <ChevronRight className={`size-4 transition-transform ${isActive ? 'translate-x-0.5' : ''}`} />
-                              </button>
+                              </a>
                             );
                           })}
                         </div>
@@ -113,7 +118,7 @@ export function Header() {
                             {currentCategory.subcategories.map((subcategory) => (
                               <a
                                 key={subcategory}
-                                href="#"
+                                href={getProductsLink(subcategory)}
                                 className="text-sm text-gray-700 px-3 py-2 rounded-lg hover:bg-green-50 hover:text-green-700 transition-colors"
                               >
                                 {subcategory}
@@ -125,10 +130,10 @@ export function Header() {
                     </div>
                   )}
                 </div>
-                <a href="#" className="text-gray-700 hover:text-green-600 transition-colors">
+                <a href="/contact" className="text-gray-700 hover:text-green-600 transition-colors">
                   Về chúng tôi
                 </a>
-                <a href="#" className="text-gray-700 hover:text-green-600 transition-colors">
+                <a href="/contact" className="text-gray-700 hover:text-green-600 transition-colors">
                   Liên hệ
                 </a>
               </nav>
@@ -148,9 +153,9 @@ export function Header() {
 
             {/* Actions */}
             <div className="flex items-center gap-3">
-              <button className="p-2 hover:bg-gray-100 rounded-full transition-colors hidden md:block">
+              <a href="/customer/account" className="p-2 hover:bg-gray-100 rounded-full transition-colors hidden md:block">
                 <User className="size-6 text-gray-700" />
-              </button>
+              </a>
               <div
                 className="relative hidden md:block pb-2 -mb-2"
                 onMouseLeave={() => setIsFavoritesOpen(false)}
@@ -171,14 +176,14 @@ export function Header() {
                 {isFavoritesOpen && (
                   <div className="absolute top-full right-0 w-56 bg-white border border-rose-100 rounded-xl shadow-xl p-2 z-50">
                     <a
-                      href="#"
+                      href="/wishlist"
                       className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-rose-50 hover:text-rose-700 transition-colors"
                     >
                       <Heart className="size-4" />
                       Sản phẩm yêu thích
                     </a>
                     <a
-                      href="#"
+                      href="/sales/order/history"
                       className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-rose-50 hover:text-rose-700 transition-colors"
                     >
                       <Heart className="size-4" />
@@ -187,12 +192,12 @@ export function Header() {
                   </div>
                 )}
               </div>
-              <button className="relative p-2 hover:bg-gray-100 rounded-full transition-colors">
+              <a href="/checkout/cart" className="relative p-2 hover:bg-gray-100 rounded-full transition-colors">
                 <ShoppingCart className="size-6 text-gray-700" />
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full size-5 flex items-center justify-center">
                   0
                 </span>
-              </button>
+              </a>
               <button className="md:hidden p-2 hover:bg-gray-100 rounded-full transition-colors">
                 <Menu className="size-6 text-gray-700" />
               </button>

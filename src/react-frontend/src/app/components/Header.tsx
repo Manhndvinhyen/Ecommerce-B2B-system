@@ -1,39 +1,6 @@
 import { useState } from 'react';
 import { ShoppingCart, User, Menu, Search, ChevronRight, Heart } from 'lucide-react';
-
-const categoryMenu = [
-  {
-    name: 'Rau củ quả',
-    subcategories: ['Rau gia vị', 'Rau phổ thông', 'Củ quả', 'Rau đặc biệt', 'Nấm', 'Rau củ chế biến sẵn']
-  },
-  {
-    name: 'Trái cây',
-    subcategories: ['Trái cây phổ thông', 'Trái cây nhập khẩu']
-  },
-  {
-    name: 'Thực phẩm tươi sống',
-    subcategories: ['Thịt heo', 'Thịt bò-bê', 'Thịt trâu-nghé', 'Thịt dê', 'Thịt gà', 'Thịt vịt-gan-ngỗng', 'Thịt chim', 'Thịt ếch', 'Trứng', 'Giò-chả-nem']
-  },
-  {
-    name: 'Thuỷ hải sản',
-    subcategories: ['Cá', 'Tôm', 'Cua', 'Mực', 'Ngao ốc', 'Hải sản chế biến']
-  },
-  {
-    name: 'Thực phẩm đông lạnh',
-    subcategories: ['Thịt heo', 'Thịt bò-bê', 'Thịt trâu-nghé', 'Thịt dê', 'Thịt gà', 'Thịt vịt-gan-ngỗng', 'Thịt chim', 'Thịt ếch', 'Trứng', 'Giò-chả-nem', 'Xúc xích - lạp xưởng']
-  },
-  {
-    name: 'Thực phẩm khô',
-    subcategories: ['Gia vị', 'Gạo', 'Bột', 'Bún-miến-phở-nui', 'Hạt khô', 'Đồ uống', 'Kem-bơ-phô mai', 'Mứt siro', 'Trà - cà phê đóng gói', 'Thực phẩm khô khác']
-  },
-  {
-    name: 'Tiện ích bếp',
-    subcategories: ['Dụng cụ ăn uống', 'Đồ dùng bếp', 'Chất tẩy rửa', 'Dụng cụ vệ sinh', 'Sản phẩm khác']
-  }
-];
-
-const getProductsLink = (category: string) =>
-  `/?category=${encodeURIComponent(category)}#san-pham-hien-thi`;
+import { categoryMenu, getCategoryPageLink } from '../data/categories';
 
 export function Header() {
   const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
@@ -82,7 +49,7 @@ export function Header() {
                   onMouseLeave={() => setIsCategoryMenuOpen(false)}
                 >
                   <a
-                    href="/#san-pham-hien-thi"
+                    href={getCategoryPageLink('Rau củ quả')}
                     className="text-gray-700 hover:text-green-600 transition-colors font-medium"
                   >
                     Danh mục sản phẩm
@@ -97,7 +64,7 @@ export function Header() {
                             return (
                               <a
                                 key={category.name}
-                                href={getProductsLink(category.name)}
+                                href={getCategoryPageLink(category.name)}
                                 onMouseEnter={() => setActiveCategory(category.name)}
                                 className={`w-full flex items-center justify-between text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
                                   isActive
@@ -118,7 +85,7 @@ export function Header() {
                             {currentCategory.subcategories.map((subcategory) => (
                               <a
                                 key={subcategory}
-                                href={getProductsLink(subcategory)}
+                                href={getCategoryPageLink(currentCategory.name, subcategory)}
                                 className="text-sm text-gray-700 px-3 py-2 rounded-lg hover:bg-green-50 hover:text-green-700 transition-colors"
                               >
                                 {subcategory}

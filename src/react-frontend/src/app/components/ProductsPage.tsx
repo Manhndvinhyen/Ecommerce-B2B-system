@@ -1,44 +1,17 @@
 import { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
+import { categoryMenu as categories, getCategoryPageLink } from '../data/categories';
 
-const categories = [
-  {
-    name: 'Rau củ quả',
-    emoji: '🥬',
-    subcategories: ['Rau gia vị', 'Rau phổ thông', 'Củ quả', 'Rau đặc biệt', 'Nấm', 'Rau củ chế biến sẵn']
-  },
-  {
-    name: 'Trái cây',
-    emoji: '🍎',
-    subcategories: ['Trái cây phổ thông', 'Trái cây nhập khẩu']
-  },
-  {
-    name: 'Thực phẩm tươi sống',
-    emoji: '🍖',
-    subcategories: ['Thịt heo', 'Thịt bò-bê', 'Thịt trâu-nghé', 'Thịt dê', 'Thịt gà', 'Thịt vịt-gan-ngỗng', 'Thịt chim', 'Thịt ếch', 'Trứng', 'Giò-chả-nem']
-  },
-  {
-    name: 'Thuỷ hải sản',
-    emoji: '🦐',
-    subcategories: ['Cá', 'Tôm', 'Cua', 'Mực', 'Ngao ốc', 'Hải sản chế biến']
-  },
-  {
-    name: 'Thực phẩm đông lạnh',
-    emoji: '❄️',
-    subcategories: ['Thịt heo', 'Thịt bò-bê', 'Thịt trâu-nghé', 'Thịt dê', 'Thịt gà', 'Thịt vịt-gan-ngỗng', 'Thịt chim', 'Thịt ếch', 'Trứng', 'Giò-chả-nem', 'Xúc xích - lạp xưởng']
-  },
-  {
-    name: 'Thực phẩm khô',
-    emoji: '🥜',
-    subcategories: ['Gia vị', 'Gạo', 'Bột', 'Bún-miến-phở-nui', 'Hạt khô', 'Đồ uống', 'Kem-bơ-phô mai', 'Mứt siro', 'Trà - cà phê đóng gói', 'Thực phẩm khô khác']
-  },
-  {
-    name: 'Tiện ích bếp',
-    emoji: '🍳',
-    subcategories: ['Dụng cụ ăn uống', 'Đồ dùng bếp', 'Chất tẩy rửa', 'Dụng cụ vệ sinh', 'Sản phẩm khác']
-  }
-];
+const categoryEmojiMap: Record<string, string> = {
+  'Rau củ quả': '🥬',
+  'Trái cây': '🍎',
+  'Thực phẩm tươi sống': '🍖',
+  'Thuỷ hải sản': '🦐',
+  'Thực phẩm đông lạnh': '❄️',
+  'Thực phẩm khô': '🥜',
+  'Tiện ích bếp': '🍳'
+};
 
 export function ProductsPage() {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -57,8 +30,9 @@ export function ProductsPage() {
             >
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden h-full">
                 {categories.map((category, index) => (
-                  <button
+                  <a
                     key={index}
+                    href={getCategoryPageLink(category.name)}
                     onMouseEnter={() => setActiveCategory(category.name)}
                     className={`w-full h-16 flex items-center gap-3 px-4 transition-colors border-b border-gray-100 last:border-b-0 group ${
                       activeCategory === category.name
@@ -66,7 +40,7 @@ export function ProductsPage() {
                         : 'hover:bg-gray-50 hover:text-green-700'
                     }`}
                   >
-                    <span className="text-xl">{category.emoji}</span>
+                    <span className="text-xl">{categoryEmojiMap[category.name] ?? '🛒'}</span>
                     <span
                       className={`flex-1 min-w-0 text-left text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis ${
                         activeCategory === category.name
@@ -84,7 +58,7 @@ export function ProductsPage() {
                           : 'text-gray-400 group-hover:text-green-600'
                       }`}
                     />
-                  </button>
+                  </a>
                 ))}
               </div>
 
@@ -95,7 +69,7 @@ export function ProductsPage() {
                     {activeCategoryData.subcategories.map((subcategory) => (
                       <a
                         key={subcategory}
-                        href="#"
+                        href={getCategoryPageLink(activeCategoryData.name, subcategory)}
                         className="text-sm text-gray-700 px-3 py-2 rounded-lg hover:bg-green-50 hover:text-green-700 transition-colors whitespace-normal break-words leading-snug"
                       >
                         {subcategory}
@@ -168,10 +142,10 @@ export function ProductsPage() {
                   <h3 className="text-2xl font-bold leading-tight">Hóa đơn VAT điện tử</h3>
                   <p className="text-sm opacity-95 mt-2">Xuất đầy đủ cho mọi đơn hàng</p>
                 </div>
-                <button className="mt-4 bg-white text-teal-700 px-4 py-2 rounded-full text-sm font-semibold hover:bg-teal-50 transition-colors inline-flex items-center gap-1.5 w-fit">
+                <a href="/contact" className="mt-4 bg-white text-teal-700 px-4 py-2 rounded-full text-sm font-semibold hover:bg-teal-50 transition-colors inline-flex items-center gap-1.5 w-fit">
                   Xem chi tiết
                   <ChevronRight className="size-4" />
-                </button>
+                </a>
               </div>
             </div>
 
@@ -188,10 +162,10 @@ export function ProductsPage() {
                   <h3 className="text-3xl font-extrabold leading-tight">Tặng voucher 300K</h3>
                   <p className="text-sm opacity-95 mt-2">Khi mua đơn đầu tiên từ 699K</p>
                 </div>
-                <button className="mt-4 bg-white text-green-700 px-4 py-2 rounded-full text-sm font-semibold hover:bg-green-50 transition-colors inline-flex items-center gap-1.5 w-fit">
+                <a href="/customer/account/create" className="mt-4 bg-white text-green-700 px-4 py-2 rounded-full text-sm font-semibold hover:bg-green-50 transition-colors inline-flex items-center gap-1.5 w-fit">
                   Xem chi tiết
                   <ChevronRight className="size-4" />
-                </button>
+                </a>
               </div>
             </div>
           </div>

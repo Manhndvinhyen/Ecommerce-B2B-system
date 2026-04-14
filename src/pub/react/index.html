@@ -67,7 +67,18 @@
           "name": "TMDT Shop - Trang Chủ",
           "isPartOf": { "@id": "http://localhost:8081/react/#website" },
           "about": { "@id": "http://localhost:8081/react/#organization" },
-          "description": "Mua thực phẩm sạch online tại TMDT Shop"
+          "description": "Mua thực phẩm sạch online tại TMDT Shop",
+          "breadcrumb": {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "Trang Chủ",
+                "item": "http://localhost:8081/react/"
+              }
+            ]
+          }
         }
       ]
     }
@@ -78,13 +89,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="dns-prefetch" href="https://generativelanguage.googleapis.com" />
     <link rel="preconnect" href="http://localhost:8081" />
-
-    <!-- Critical assets preload -->
-    <link rel="modulepreload" crossorigin href="/react/assets/index-CcLoK14-.js" />
-    <link rel="preload" as="style" href="/react/assets/index-DScx8ukF.css" />
-
-    <script type="module" crossorigin src="/react/assets/index-CcLoK14-.js"></script>
-    <link rel="stylesheet" crossorigin href="/react/assets/index-DScx8ukF.css">
+    <script type="module" crossorigin src="/react/assets/index-CtoFtR2P.js"></script>
+    <link rel="stylesheet" crossorigin href="/react/assets/index-DLV6Dleq.css">
   </head>
   <body>
     <div id="root"></div>

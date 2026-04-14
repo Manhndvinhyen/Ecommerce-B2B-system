@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Heart, ChevronRight, ShoppingCart } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 
@@ -85,16 +85,61 @@ const hotProducts = [
   }
 ];
 
+const categoryAliasMap: Record<string, string[]> = {
+  'Rau củ quả': ['Rau gia vị', 'Rau phổ thông', 'Củ quả', 'Rau củ', 'Rau lá'],
+  'Rau gia vị': ['Rau gia vị'],
+  'Rau phổ thông': ['Rau phổ thông'],
+  'Củ quả': ['Củ quả', 'Rau củ'],
+  'Thực phẩm tươi sống': ['Thịt Heo'],
+  'Thịt heo': ['Thịt Heo']
+};
+
+const normalize = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase();
+
 export function HotProducts() {
   const productsPerPage = 5;
   const [page, setPage] = useState(0);
   const [quickCartItems, setQuickCartItems] = useState<Set<string>>(new Set());
+  const [selectedCategory, setSelectedCategory] = useState('');
 
-  const totalPages = Math.ceil(hotProducts.length / productsPerPage);
+  useEffect(() => {
+    const syncCategoryFromUrl = () => {
+      const params = new URLSearchParams(window.location.search);
+      setSelectedCategory(params.get('category') ?? '');
+    };
+
+    syncCategoryFromUrl();
+    window.addEventListener('popstate', syncCategoryFromUrl);
+    return () => window.removeEventListener('popstate', syncCategoryFromUrl);
+  }, []);
+
+  const filteredProducts = useMemo(() => {
+    if (!selectedCategory) {
+      return hotProducts;
+    }
+
+    const aliases = categoryAliasMap[selectedCategory] ?? [selectedCategory];
+    const normalizedAliases = aliases.map(normalize);
+
+    return hotProducts.filter((product) => {
+      const normalizedProductCategory = normalize(product.category);
+      return normalizedAliases.some((alias) => normalizedProductCategory.includes(alias));
+    });
+  }, [selectedCategory]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / productsPerPage));
   const visibleProducts = useMemo(() => {
     const start = page * productsPerPage;
-    return hotProducts.slice(start, start + productsPerPage);
-  }, [page]);
+    return filteredProducts.slice(start, start + productsPerPage);
+  }, [filteredProducts, page]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [selectedCategory]);
 
   const handleNext = () => {
     setPage((prev) => (prev + 1) % totalPages);
@@ -113,7 +158,7 @@ export function HotProducts() {
   };
 
   return (
-    <section className="py-8 bg-white">
+    <section id="san-pham-hien-thi" className="py-8 bg-white scroll-mt-28">
       <div className="container mx-auto px-4">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -121,14 +166,26 @@ export function HotProducts() {
             Sản phẩm HOT
             <span className="text-yellow-500">⚡</span>
           </h2>
+          {selectedCategory && (
+            <span className="hidden md:inline-flex rounded-full bg-green-50 px-3 py-1 text-xs font-medium text-green-700">
+              Danh mục: {selectedCategory}
+            </span>
+          )}
           <button
             onClick={handleNext}
+            disabled={filteredProducts.length <= productsPerPage}
             className="bg-white border border-gray-200 rounded-full p-2 text-green-600 hover:text-green-700 hover:bg-gray-50 transition-colors"
             aria-label="Xem thêm sản phẩm HOT"
           >
             <ChevronRight className="size-5" />
           </button>
         </div>
+
+        {selectedCategory && filteredProducts.length === 0 && (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Chưa có sản phẩm mẫu thuộc danh mục “{selectedCategory}”. Hãy chọn danh mục khác.
+          </div>
+        )}
 
         {/* Products Grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">

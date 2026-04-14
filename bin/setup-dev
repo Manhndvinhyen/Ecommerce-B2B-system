@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# bin/setup-dev — Khởi động môi trường dev từ dump có sẵn
+#
+# Dùng khi: clone repo về lần đầu, hoặc muốn reset DB về bản shared
+#
+# Yêu cầu: dump/magento.sql hoặc dump/magento.sql.gz phải tồn tại
+#
+# Usage:
+#   bin/setup-dev              → dùng dump/magento.sql (default)
+#   bin/setup-dev myfile.sql   → dùng dump/myfile.sql
+
+set -o errexit
+
+DOMAIN=${1:-magento.test}
+DUMP_FILE="${2:-magento.sql}"
+
+echo ""
+echo "=========================================="
+echo "  TMDT Shop — Dev Environment Setup"
+echo "=========================================="
+echo ""
+
+# 1. Kiểm tra dump tồn tại
+BASENAME="${DUMP_FILE%.sql}"
+if [ ! -f "dump/${BASENAME}.sql.gz" ] && [ ! -f "dump/${BASENAME}.sql" ]; then
+    echo "❌ Không tìm thấy dump file."
+    echo "   Cần có: dump/${BASENAME}.sql hoặc dump/${BASENAME}.sql.gz"
+    echo ""
+    echo "   Nhờ teammate chạy: bin/db-dump"
+    exit 1
+fi
+
+# 2. Start Docker
+echo ">>> [1/5] Khởi động Docker containers..."
+bin/start
+
+# 3. Chờ MySQL sẵn sàng
+echo ">>> [2/5] Chờ MySQL khởi động..."
+source env/db.env
+MAX_WAIT=60
+COUNT=0
+until bin/clinotty bash -c "mysql -h${MYSQL_HOST} -u${MYSQL_USER} -p${MYSQL_PASSWORD} -e 'SELECT 1' &>/dev/null"; do
+    COUNT=$((COUNT + 1))
+    if [ $COUNT -ge $MAX_WAIT ]; then
+        echo "❌ MySQL không khởi động được sau ${MAX_WAIT}s"
+        exit 1
+    fi
+    echo "   Đợi MySQL... (${COUNT}s)"
+    sleep 1
+done
+echo "   ✅ MySQL sẵn sàng"
+
+# 4. Import dump
+echo ">>> [3/5] Import database từ dump/${BASENAME}.sql..."
+bin/db-import "${DUMP_FILE}"
+
+# 5. Cập nhật base URL theo domain
+echo ">>> [4/5] Cập nhật base URL → https://${DOMAIN}/..."
+bin/clinotty bin/magento config:set web/unsecure/base_url "https://${DOMAIN}/"
+bin/clinotty bin/magento config:set web/secure/base_url "https://${DOMAIN}/"
+
+# 6. Flush cache & reindex
+echo ">>> [5/5] Flush cache & reindex..."
+bin/clinotty bin/magento cache:flush
+bin/clinotty bin/magento indexer:reindex
+
+echo ""
+echo "✅ Môi trường dev sẵn sàng!"
+echo "   → https://${DOMAIN}/"
+echo "   → https://${DOMAIN}/admin/"
+echo ""
+echo "Lưu ý:"
+echo "  - Điền GEMINI_API_KEY vào env/custom.env để dùng Chatbot"
+echo "  - Chạy 'bin/db-dump' để export DB hiện tại chia sẻ cho team"

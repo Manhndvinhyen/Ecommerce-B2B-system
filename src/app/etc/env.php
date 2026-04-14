@@ -88,7 +88,7 @@ return [
     ],
     'tmdt_chatbot' => [
         'gemini' => [
-            'api_key' => 'YOUR_GEMINI_API_KEY_HERE'
+            'api_key' => 'AIzaSyA936iEs_7Q_Ev5oppqlt2Vi0dsouobXcI'
         ]
     ]
 ];

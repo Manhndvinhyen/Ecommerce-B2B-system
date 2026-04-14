@@ -48,12 +48,13 @@ export function Header() {
                   }}
                   onMouseLeave={() => setIsCategoryMenuOpen(false)}
                 >
-                  <a
-                    href={getCategoryPageLink('Rau củ quả')}
+                  <button
+                    type="button"
+                    onClick={() => setIsCategoryMenuOpen((prev) => !prev)}
                     className="text-gray-700 hover:text-green-600 transition-colors font-medium"
                   >
                     Danh mục sản phẩm
-                  </a>
+                  </button>
 
                   {isCategoryMenuOpen && (
                     <div className="absolute top-full left-0 w-[760px] bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden z-50">

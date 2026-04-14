@@ -10,13 +10,13 @@ import { SellerCTA } from './components/SellerCTA';
 import { Footer } from './components/Footer';
 import { ChatbotWidget } from './components/ChatbotWidget';
 import { ProductCategoryPage } from './components/ProductCategoryPage';
-import { categoryMenu } from './data/categories';
+import { getCategoryNameFromQuery, getSubcategoryNameFromQuery } from './data/categories';
 
 export default function App() {
   const params = new URLSearchParams(window.location.search);
   const view = params.get('view');
-  const category = params.get('category') ?? categoryMenu[0].name;
-  const subcategory = params.get('subcategory') ?? undefined;
+  const category = getCategoryNameFromQuery(params.get('category'));
+  const subcategory = getSubcategoryNameFromQuery(category, params.get('subcategory'));
   const isCategoryView = view === 'category';
 
   return (

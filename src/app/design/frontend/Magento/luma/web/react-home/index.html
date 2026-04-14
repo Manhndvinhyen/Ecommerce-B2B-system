@@ -3,13 +3,91 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="TMDT Shop - Nền tảng thương mại điện tử thực phẩm sạch Việt Nam" />
-    <title>TMDT Shop - Thực Phẩm Sạch</title>
+
+    <!-- Primary SEO -->
+    <title>TMDT Shop - Thực Phẩm Sạch Việt Nam | Mua Sắm Online</title>
+    <meta name="description" content="TMDT Shop - Nền tảng thương mại điện tử thực phẩm sạch Việt Nam. Mua rau củ, thịt cá, đồ khô tươi ngon, giao hàng nhanh, giá tốt nhất." />
+    <meta name="keywords" content="thực phẩm sạch, mua rau củ online, thịt cá tươi, đồ ăn sạch, siêu thị online Việt Nam, TMDT Shop" />
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="TMDT Shop" />
+    <link rel="canonical" href="http://localhost:8081/react/" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="http://localhost:8081/react/" />
+    <meta property="og:title" content="TMDT Shop - Thực Phẩm Sạch Việt Nam" />
+    <meta property="og:description" content="Mua thực phẩm sạch, rau củ tươi, thịt cá chất lượng cao. Giao hàng nhanh, giá tốt, an toàn vệ sinh thực phẩm." />
+    <meta property="og:image" content="http://localhost:8081/react/og-image.jpg" />
+    <meta property="og:site_name" content="TMDT Shop" />
+    <meta property="og:locale" content="vi_VN" />
+
+    <!-- Twitter Cards -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="TMDT Shop - Thực Phẩm Sạch Việt Nam" />
+    <meta name="twitter:description" content="Mua thực phẩm sạch, rau củ tươi, thịt cá chất lượng cao. Giao hàng nhanh, giá tốt." />
+    <meta name="twitter:image" content="http://localhost:8081/react/og-image.jpg" />
+
+    <!-- JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": "http://localhost:8081/react/#website",
+          "url": "http://localhost:8081/react/",
+          "name": "TMDT Shop",
+          "description": "Nền tảng thương mại điện tử thực phẩm sạch Việt Nam",
+          "inLanguage": "vi-VN",
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": {
+              "@type": "EntryPoint",
+              "urlTemplate": "http://localhost:8081/catalogsearch/result/?q={search_term_string}"
+            },
+            "query-input": "required name=search_term_string"
+          }
+        },
+        {
+          "@type": "Organization",
+          "@id": "http://localhost:8081/react/#organization",
+          "name": "TMDT Shop",
+          "url": "http://localhost:8081/react/",
+          "description": "Cửa hàng thực phẩm sạch trực tuyến uy tín tại Việt Nam",
+          "contactPoint": {
+            "@type": "ContactPoint",
+            "contactType": "customer service",
+            "availableLanguage": "Vietnamese"
+          }
+        },
+        {
+          "@type": "WebPage",
+          "@id": "http://localhost:8081/react/#webpage",
+          "url": "http://localhost:8081/react/",
+          "name": "TMDT Shop - Trang Chủ",
+          "isPartOf": { "@id": "http://localhost:8081/react/#website" },
+          "about": { "@id": "http://localhost:8081/react/#organization" },
+          "description": "Mua thực phẩm sạch online tại TMDT Shop"
+        }
+      ]
+    }
+    </script>
+
+    <!-- Performance: preconnect & DNS prefetch -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <script type="module" crossorigin src="/react/assets/index-Dg18IM93.js"></script>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="dns-prefetch" href="https://generativelanguage.googleapis.com" />
+    <link rel="preconnect" href="http://localhost:8081" />
+
+    <!-- Critical assets preload -->
+    <link rel="modulepreload" crossorigin href="/react/assets/index-CcLoK14-.js" />
+    <link rel="preload" as="style" href="/react/assets/index-DScx8ukF.css" />
+
+    <script type="module" crossorigin src="/react/assets/index-CcLoK14-.js"></script>
     <link rel="stylesheet" crossorigin href="/react/assets/index-DScx8ukF.css">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"></div>
+
   </body>
 </html>

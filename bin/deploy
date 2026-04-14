@@ -1,10 +1,31 @@
 #!/usr/bin/env bash
-bin/composer install
+# bin/deploy — Deploy: chạy migrations, build assets, flush cache
+# Dùng sau git pull trên server staging/production
+set -o errexit
+
+echo ">>> [1/7] Bật maintenance mode..."
 bin/magento maintenance:enable
+
+echo ">>> [2/7] Composer install..."
+bin/composer install --no-dev --optimize-autoloader
+
+echo ">>> [3/7] Dọn generated code..."
 bin/cli rm -rf generated/code var/view_preprocessed
-bin/magento cache:flush
-bin/magento setup:upgrade
+
+echo ">>> [4/7] Chạy migrations (Data Patches + db_schema)..."
+bin/magento setup:upgrade --keep-generated
+
+echo ">>> [5/7] Compile DI..."
 bin/magento setup:di:compile
-bin/magento setup:static-content:deploy en_US "$@" -f
+
+echo ">>> [6/7] Build React + deploy static content..."
+bin/deploy-react
+bin/magento setup:static-content:deploy vi_VN en_US "$@" -f
+
+echo ">>> [7/7] Flush cache, reindex, tắt maintenance..."
+bin/magento cache:flush
+bin/magento indexer:reindex
 bin/magento maintenance:disable
 bin/magento cache:flush
+
+echo "✅ Deploy hoàn tất!"

@@ -1,0 +1,25 @@
+User-agent: *
+
+# Cho phép crawl trang chính
+Allow: /
+Allow: /react/
+Allow: /catalog/
+Allow: /catalogsearch/
+Allow: /media/catalog/product/
+
+# Chặn admin và API
+Disallow: /admin/
+Disallow: /rest/
+Disallow: /soap/
+Disallow: /graphql
+
+# Chặn trang không cần index
+Disallow: /checkout/
+Disallow: /customer/
+Disallow: /wishlist/
+Disallow: /review/
+Disallow: /catalog/product_compare/
+Disallow: /*?*
+
+# Sitemap
+Sitemap: http://localhost:8081/sitemap.xml

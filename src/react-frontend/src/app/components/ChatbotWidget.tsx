@@ -3,25 +3,26 @@
 import React, { useState, useRef, useEffect } from 'react';
 
 // ========== TYPES ==========
+interface Product {
+  name: string;
+  price: string;
+  url: string;
+  image: string;
+}
+
 interface Message {
   sender: 'user' | 'bot';
   text: string;
+  products?: Product[];
   isError?: boolean;
 }
 
 // ========== CONSTANTS ==========
-// Trong production (React được serve từ Magento :8081), gọi trực tiếp same-origin
-// Trong dev mode (Vite :5173), proxy trong vite.config.ts sẽ forward sang :8081
 const CHATBOT_API = '/rest/V1/chatbot/ask';
 
 // ========== HELPER: Render markdown đơn giản ==========
 function renderMarkdown(text: string): string {
   return text
-    // Links
-    .replace(
-      /(https?:\/\/[^\s<>"]+)/g,
-      '<a href="$1" target="_blank" rel="noopener noreferrer" style="color:#6366f1;text-decoration:underline;font-weight:600">$1</a>'
-    )
     // **bold**
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     // *italic*
@@ -31,6 +32,93 @@ function renderMarkdown(text: string): string {
     // Bullet list dạng "- item"
     .replace(/<br>-\s+/g, '<br>• ');
 }
+
+// ========== PRODUCT CARD ==========
+const ProductCard: React.FC<{ product: Product }> = ({ product }) => (
+  <a
+    href={product.url}
+    target="_blank"
+    rel="noopener noreferrer"
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '10px',
+      background: '#fff',
+      border: '1px solid #e8eaf0',
+      borderRadius: '12px',
+      padding: '10px',
+      textDecoration: 'none',
+      color: 'inherit',
+      alignSelf: 'flex-start',
+      width: '88%',
+      boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
+      transition: 'box-shadow 0.2s, transform 0.2s',
+      fontFamily: 'system-ui,sans-serif',
+      cursor: 'pointer',
+    }}
+    onMouseEnter={e => {
+      (e.currentTarget as HTMLAnchorElement).style.boxShadow = '0 5px 18px rgba(102,126,234,0.25)';
+      (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(-2px)';
+    }}
+    onMouseLeave={e => {
+      (e.currentTarget as HTMLAnchorElement).style.boxShadow = '0 2px 6px rgba(0,0,0,0.05)';
+      (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(0)';
+    }}
+  >
+    {product.image ? (
+      <img
+        src={product.image}
+        alt={product.name}
+        style={{
+          width: '58px',
+          height: '58px',
+          objectFit: 'cover',
+          borderRadius: '8px',
+          border: '1px solid #f0f0f0',
+          flexShrink: 0,
+          background: '#f7f8fc',
+        }}
+        onError={e => {
+          (e.currentTarget as HTMLImageElement).style.display = 'none';
+        }}
+      />
+    ) : (
+      <div style={{
+        width: '58px',
+        height: '58px',
+        borderRadius: '8px',
+        background: '#f0f2ff',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '24px',
+        flexShrink: 0,
+      }}>🛍️</div>
+    )}
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{
+        fontSize: '13px',
+        fontWeight: 600,
+        color: '#1a1a2e',
+        lineHeight: 1.3,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+      }}>{product.name}</div>
+      <div style={{
+        fontSize: '13px',
+        fontWeight: 700,
+        color: '#667eea',
+        marginTop: '3px',
+      }}>{product.price}</div>
+      <div style={{
+        fontSize: '11px',
+        color: '#9ca3af',
+        marginTop: '2px',
+      }}>Xem sản phẩm →</div>
+    </div>
+  </a>
+);
 
 // ========== COMPONENT ==========
 export const ChatbotWidget: React.FC = () => {
@@ -65,7 +153,6 @@ export const ChatbotWidget: React.FC = () => {
     const text = input.trim();
     if (!text || isLoading) return;
 
-    // Thêm tin nhắn user vào UI
     setMessages(prev => [...prev, { sender: 'user', text }]);
     setInput('');
     setIsLoading(true);
@@ -81,18 +168,40 @@ export const ChatbotWidget: React.FC = () => {
         throw new Error(`HTTP ${response.status}`);
       }
 
-      // Magento REST trả về chuỗi JSON-encoded (string có dấu ngoặc kép)
+      // Magento REST trả về chuỗi JSON-encoded.
+      // Backend giờ trả về JSON string của object {message, products},
+      // nên cần parse 2 lần: lần 1 ra string, lần 2 ra object.
       const raw = await response.text();
-      // Bỏ dấu ngoặc kép bao ngoài nếu có
-      let reply = raw.trim().replace(/^"|"$/g, '');
-      // Decode unicode escapes (\uXXXX) do PHP json_encode tạo ra
+      let reply = '';
+      let products: Product[] = [];
+
       try {
-        reply = JSON.parse(`"${reply.replace(/"/g, '\\"')}"`);
+        const firstParse = JSON.parse(raw);
+
+        if (typeof firstParse === 'string') {
+          // Magento double-encoded: firstParse là string chứa JSON object
+          try {
+            const secondParse = JSON.parse(firstParse);
+            if (secondParse && typeof secondParse === 'object' && 'message' in secondParse) {
+              reply    = String(secondParse.message || '');
+              products = Array.isArray(secondParse.products) ? secondParse.products : [];
+            } else {
+              reply = firstParse;
+            }
+          } catch {
+            reply = firstParse;
+          }
+        } else if (firstParse && typeof firstParse === 'object' && 'message' in firstParse) {
+          reply    = String(firstParse.message || '');
+          products = Array.isArray(firstParse.products) ? firstParse.products : [];
+        } else {
+          reply = String(firstParse);
+        }
       } catch {
-        // Giữ nguyên nếu parse lỗi
+        reply = raw;
       }
 
-      setMessages(prev => [...prev, { sender: 'bot', text: reply }]);
+      setMessages(prev => [...prev, { sender: 'bot', text: reply, products }]);
     } catch (error) {
       console.error('[ChatbotWidget] API Error:', error);
       setMessages(prev => [
@@ -220,27 +329,47 @@ export const ChatbotWidget: React.FC = () => {
           aria-live="polite"
         >
           {messages.map((msg, i) => (
-            <div
-              key={i}
-              style={{
-                maxWidth: '85%',
-                padding: '10px 14px',
-                borderRadius: '18px',
-                fontSize: '14px',
-                lineHeight: '1.6',
-                fontFamily: 'system-ui,sans-serif',
-                wordBreak: 'break-word',
-                alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start',
-                background: msg.sender === 'user'
-                  ? 'linear-gradient(135deg,#667eea,#764ba2)'
-                  : msg.isError ? '#fff3f3' : '#fff',
-                color: msg.sender === 'user' ? '#fff' : '#1a1a2e',
-                borderBottomRightRadius: msg.sender === 'user' ? '4px' : '18px',
-                borderBottomLeftRadius: msg.sender === 'bot' ? '4px' : '18px',
-                boxShadow: msg.sender === 'bot' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none',
-              }}
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }}
-            />
+            <React.Fragment key={i}>
+              {/* Bong bóng tin nhắn */}
+              <div
+                style={{
+                  maxWidth: '85%',
+                  padding: '10px 14px',
+                  borderRadius: '18px',
+                  fontSize: '14px',
+                  lineHeight: '1.6',
+                  fontFamily: 'system-ui,sans-serif',
+                  wordBreak: 'break-word',
+                  alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start',
+                  background: msg.sender === 'user'
+                    ? 'linear-gradient(135deg,#667eea,#764ba2)'
+                    : msg.isError ? '#fff3f3' : '#fff',
+                  color: msg.sender === 'user' ? '#fff' : '#1a1a2e',
+                  borderBottomRightRadius: msg.sender === 'user' ? '4px' : '18px',
+                  borderBottomLeftRadius: msg.sender === 'bot' ? '4px' : '18px',
+                  boxShadow: msg.sender === 'bot' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none',
+                }}
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }}
+              />
+
+              {/* Thẻ sản phẩm (chỉ hiển thị khi bot trả về danh sách) */}
+              {msg.sender === 'bot' && msg.products && msg.products.length > 0 && (
+                <>
+                  <div style={{
+                    fontSize: '12px',
+                    color: '#9ca3af',
+                    fontFamily: 'system-ui,sans-serif',
+                    alignSelf: 'flex-start',
+                    paddingLeft: '2px',
+                  }}>
+                    Sản phẩm liên quan:
+                  </div>
+                  {msg.products.map((p, pi) => (
+                    <ProductCard key={pi} product={p} />
+                  ))}
+                </>
+              )}
+            </React.Fragment>
           ))}
 
           {/* Typing indicator */}

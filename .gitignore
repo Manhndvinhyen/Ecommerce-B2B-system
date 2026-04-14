@@ -14,6 +14,10 @@ src/nginx.conf
 # Custom secrets (per-developer, never committed)
 env/custom.env
 
+# Magento env.php — chứa DB credentials, session key, API keys
+# Không bao giờ commit. Dùng src/app/etc/env.php.sample làm template.
+src/app/etc/env.php
+
 # OS / Editor
 .DS_Store
 Thumbs.db

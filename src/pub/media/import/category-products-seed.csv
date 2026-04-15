@@ -1,0 +1,26 @@
+sku,attribute_set_code,product_type,categories,product_websites,name,description,short_description,weight,product_online,tax_class_name,visibility,price,url_key,base_image,small_image,thumbnail_image,qty,is_in_stock
+rau-cu-qua-carrot,Default,simple,"Rau cu qua/Cu qua",base,Carrot,"Fresh Carrot","Fresh Carrot",1,1,Taxable Goods,"Catalog, Search",15000,carrot,/rau-cu-qua/carrot.jpg,/rau-cu-qua/carrot.jpg,/rau-cu-qua/carrot.jpg,100,1
+rau-cu-qua-chilli,Default,simple,"Rau cu qua/Rau gia vi",base,Chilli,"Fresh Chilli","Fresh Chilli",1,1,Taxable Goods,"Catalog, Search",18000,chilli,/rau-cu-qua/chilli.jpg,/rau-cu-qua/chilli.jpg,/rau-cu-qua/chilli.jpg,100,1
+rau-cu-qua-do,Default,simple,"Rau cu qua/Rau pho thong",base,Do,"Fresh Do","Fresh Do",1,1,Taxable Goods,"Catalog, Search",12000,do,/rau-cu-qua/do.jpg,/rau-cu-qua/do.jpg,/rau-cu-qua/do.jpg,100,1
+rau-cu-qua-potato,Default,simple,"Rau cu qua/Cu qua",base,Potato,"Fresh Potato","Fresh Potato",1,1,Taxable Goods,"Catalog, Search",13000,potato,/rau-cu-qua/potato.jpg,/rau-cu-qua/potato.jpg,/rau-cu-qua/potato.jpg,100,1
+rau-cu-qua-red-bell-pepper,Default,simple,"Rau cu qua/Rau gia vi",base,Red Bell Pepper,"Fresh Red Bell Pepper","Fresh Red Bell Pepper",1,1,Taxable Goods,"Catalog, Search",22000,red-bell-pepper,/rau-cu-qua/red-bell-pepper.jpg,/rau-cu-qua/red-bell-pepper.jpg,/rau-cu-qua/red-bell-pepper.jpg,100,1
+rau-cu-qua-sup-lo-trang,Default,simple,"Rau cu qua/Rau pho thong",base,Sup Lo Trang,"Fresh Sup Lo Trang","Fresh Sup Lo Trang",1,1,Taxable Goods,"Catalog, Search",20000,sup-lo-trang,/rau-cu-qua/sup-lo-trang.jpg,/rau-cu-qua/sup-lo-trang.jpg,/rau-cu-qua/sup-lo-trang.jpg,100,1
+rau-cu-qua-tomato,Default,simple,"Rau cu qua/Rau pho thong",base,Tomato,"Fresh Tomato","Fresh Tomato",1,1,Taxable Goods,"Catalog, Search",17000,tomato,/rau-cu-qua/tomato.jpg,/rau-cu-qua/tomato.jpg,/rau-cu-qua/tomato.jpg,100,1
+cat-tc-tao-do,Default,simple,"Trai cay/Trai cay nhap khau",base,Táo đỏ,"Sản phẩm Táo đỏ","Táo đỏ",1,1,Taxable Goods,"Catalog, Search",79000,tao-do,,,,100,1
+cat-tc-chuoi-gia,Default,simple,"Trai cay/Trai cay pho thong",base,Chuối già,"Sản phẩm Chuối già","Chuối già",1,1,Taxable Goods,"Catalog, Search",28000,chuoi-gia,,,,100,1
+cat-tc-cam-sanh,Default,simple,"Trai cay/Trai cay pho thong",base,Cam sành,"Sản phẩm Cam sành","Cam sành",1,1,Taxable Goods,"Catalog, Search",35000,cam-sanh,,,,100,1
+cat-tpts-ba-chi-heo,Default,simple,"Thuc pham tuoi song/Thit heo",base,Ba chỉ heo,"Sản phẩm Ba chỉ heo","Ba chỉ heo",1,1,Taxable Goods,"Catalog, Search",155000,ba-chi-heo,,,,100,1
+cat-tpts-dui-ga,Default,simple,"Thuc pham tuoi song/Thit ga",base,Đùi gà,"Sản phẩm Đùi gà","Đùi gà",1,1,Taxable Goods,"Catalog, Search",98000,dui-ga,,,,100,1
+cat-tpts-trung-ga-ta,Default,simple,"Thuc pham tuoi song/Trung",base,Trứng gà ta,"Sản phẩm Trứng gà ta","Trứng gà ta",1,1,Taxable Goods,"Catalog, Search",42000,trung-ga-ta,,,,100,1
+cat-ths-ca-hoi-phi-le,Default,simple,"Thuy hai san/Ca",base,Cá hồi phi lê,"Sản phẩm Cá hồi phi lê","Cá hồi phi lê",1,1,Taxable Goods,"Catalog, Search",289000,ca-hoi-phi-le,,,,100,1
+cat-ths-tom-su,Default,simple,"Thuy hai san/Tom",base,Tôm sú,"Sản phẩm Tôm sú","Tôm sú",1,1,Taxable Goods,"Catalog, Search",215000,tom-su,,,,100,1
+cat-ths-muc-ong,Default,simple,"Thuy hai san/Muc",base,Mực ống,"Sản phẩm Mực ống","Mực ống",1,1,Taxable Goods,"Catalog, Search",180000,muc-ong,,,,100,1
+cat-tpdl-ca-vien-dong-lanh,Default,simple,"Thuc pham dong lanh/Gio-cha-nem",base,Cá viên đông lạnh,"Sản phẩm Cá viên đông lạnh","Cá viên đông lạnh",1,1,Taxable Goods,"Catalog, Search",68000,ca-vien-dong-lanh,,,,100,1
+cat-tpdl-xuc-xich-hun-khoi,Default,simple,"Thuc pham dong lanh/Xuc xich - lap xuong",base,Xúc xích hun khói,"Sản phẩm Xúc xích hun khói","Xúc xích hun khói",1,1,Taxable Goods,"Catalog, Search",89000,xuc-xich-hun-khoi,,,,100,1
+cat-tpdl-thit-bo-cat-lat,Default,simple,"Thuc pham dong lanh/Thit bo-be",base,Thịt bò cắt lát,"Sản phẩm Thịt bò cắt lát","Thịt bò cắt lát",1,1,Taxable Goods,"Catalog, Search",210000,thit-bo-cat-lat,,,,100,1
+cat-tpk-gao-st25,Default,simple,"Thuc pham kho/Gao",base,Gạo ST25,"Sản phẩm Gạo ST25","Gạo ST25",1,1,Taxable Goods,"Catalog, Search",198000,gao-st25,,,,100,1
+cat-tpk-bun-gao-kho,Default,simple,"Thuc pham kho/Bun-mien-pho-nui",base,Bún gạo khô,"Sản phẩm Bún gạo khô","Bún gạo khô",1,1,Taxable Goods,"Catalog, Search",34000,bun-gao-kho,,,,100,1
+cat-tpk-hat-dieu-rang,Default,simple,"Thuc pham kho/Hat kho",base,Hạt điều rang,"Sản phẩm Hạt điều rang","Hạt điều rang",1,1,Taxable Goods,"Catalog, Search",125000,hat-dieu-rang,,,,100,1
+cat-tib-bo-noi-inox,Default,simple,"Tien ich bep/Do dung bep",base,Bộ nồi inox,"Sản phẩm Bộ nồi inox","Bộ nồi inox",1,1,Taxable Goods,"Catalog, Search",990000,bo-noi-inox,,,,100,1
+cat-tib-nuoc-rua-chen,Default,simple,"Tien ich bep/Chat tay rua",base,Nước rửa chén,"Sản phẩm Nước rửa chén","Nước rửa chén",1,1,Taxable Goods,"Catalog, Search",38000,nuoc-rua-chen,,,,100,1
+cat-tib-ban-chai-co-noi,Default,simple,"Tien ich bep/Dung cu ve sinh",base,Bàn chải cọ nồi,"Sản phẩm Bàn chải cọ nồi","Bàn chải cọ nồi",1,1,Taxable Goods,"Catalog, Search",22000,ban-chai-co-noi,,,,100,1

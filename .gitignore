@@ -3,8 +3,6 @@ rootCA.pem
 nginx.key
 nginx.crt
 
-# Empty placeholder overridden by volume mount — do not track
-src/nginx.conf
 
 # Database dumps (use bin/db-dump / bin/db-import to share)
 # Database dumps (now tracked for team sync)

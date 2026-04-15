@@ -70,6 +70,8 @@ help:
 	@echo "$(call format,root,'Run any CLI command as root without going into the bash prompt.')"
 	@echo "$(call format,rootnotty,'Run any CLI command as root with no TTY.')"
 	@echo "$(call format,setup,'Run the Magento setup process$(comma) with optional domain name.')"
+	@echo "$(call format,setup-env,'Copy env.php.sample and custom.env.sample to create local config files.')"
+	@echo "$(call format,setup-db,'Import database from dump/magento.sql.gz and flush cache.')"
 	@echo "$(call format,setup-composer-auth,'Setup authentication credentials for Composer.')"
 	@echo "$(call format,setup-domain,'Setup Magento domain name.')"
 	@echo "$(call format,setup-grunt,'Install and configure Grunt JavaScript task runner.')"
@@ -227,6 +229,32 @@ rootnotty:
 setup:
 	@./bin/setup $(call args)
 
+setup-env:
+	@if [ ! -f src/app/etc/env.php ]; then \
+		cp src/app/etc/env.php.sample src/app/etc/env.php; \
+		echo "Created src/app/etc/env.php from sample"; \
+	else \
+		echo "src/app/etc/env.php already exists, skipping"; \
+	fi
+	@if [ ! -f env/custom.env ]; then \
+		cp env/custom.env.sample env/custom.env; \
+		echo "Created env/custom.env from sample"; \
+		echo ""; \
+		echo "ACTION REQUIRED: Edit env/custom.env and set your GEMINI_API_KEY"; \
+	else \
+		echo "env/custom.env already exists, skipping"; \
+	fi
+	@echo ""
+	@echo "Next steps:"
+	@echo "  1. Edit env/custom.env and set GEMINI_API_KEY"
+	@echo "  2. Start containers: bin/start"
+	@echo "  3. Import database: make setup-db"
+
+setup-db:
+	@echo "Importing database from dump/magento.sql.gz..."
+	@./bin/db-import
+	@./bin/magento cache:flush
+
 setup-composer-auth:
 	@./bin/setup-composer-auth
 
@@ -257,6 +285,9 @@ setup-ssl-ca:
 spx:
 	@./bin/spx $(call args)
 	
+dev:
+	@./bin/start $(call args)
+
 start:
 	@./bin/start $(call args)
 

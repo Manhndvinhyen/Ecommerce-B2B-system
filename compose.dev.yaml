@@ -14,12 +14,15 @@ services:
       - env/custom.env
 
   react:
-    image: node:22-alpine
+    build:
+      context: ./src/react-frontend
+      dockerfile: Dockerfile
     working_dir: /app
     volumes:
       - ./src/react-frontend:/app:cached
+      - /app/node_modules
       - ./src/pub/react:/pub/react
-    command: sh -c "npm install --prefer-offline && npx vite build && npx vite build --watch"
+    command: sh -c "npm run build && npm run build -- --watch"
     environment:
       - NODE_ENV=development
 

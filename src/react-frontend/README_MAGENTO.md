@@ -51,6 +51,21 @@ Ví dụ header CORS cần có (dev):
 - Tạo vài sản phẩm ở Magento Admin.
 - Đảm bảo product được enable, có giá, có ảnh và thuộc website/store view đang dùng.
 
+### Chia sẻ dữ liệu cho cả team (quan trọng)
+
+Nếu bạn import bằng CSV (ví dụ `category-products-seed.csv`) thì dữ liệu chỉ nằm trong DB local của bạn.
+
+- CSV dùng chung được đặt tại: `src/pub/media/import/category-products-seed.csv`
+- Import bằng lệnh:
+  - `bin/import-products-seed`
+- `bin/setup-dev` và `bin/setup-new-machine` đã tự động chạy bước này nếu file CSV tồn tại.
+
+Để đảm bảo teammate pull về ra **đúng y hệt DB của bạn** (không chỉ sản phẩm):
+
+- Export dump mới: `bin/db-dump`
+- Commit file `dump/magento.sql.gz`
+- Teammate chạy: `bin/setup-dev` (hoặc `bin/setup-new-machine`)
+
 ## 6) Edge cases đã xử lý trong frontend
 
 - Magento chưa chạy hoặc endpoint lỗi.

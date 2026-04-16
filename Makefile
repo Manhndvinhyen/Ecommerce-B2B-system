@@ -48,6 +48,7 @@ help:
 	@echo "$(call format,grunt,'Run the grunt binary.')"
 	@echo "$(call format,init,'Initialize development environment with sample data and dev-related modules.')"
 	@echo "$(call format,install-php-extensions,'Install PHP extension in the container.')"
+	@echo "$(call format,import-products-seed,'Import shared product CSV seed into Magento and reindex.')"
 	@echo "$(call format,log,'Monitor the Magento log files. Pass no params to tail all files.')"
 	@echo "$(call format,magento,'Run the Magento CLI.')"
 	@echo "$(call format,magento-version,'Determine the Magento version installed in the current environment.')"
@@ -162,6 +163,9 @@ grunt:
 
 install-php-extensions:
 	@./bin/install-php-extensions $(call args)
+
+import-products-seed:
+	@./bin/import-products-seed $(call args)
 	
 log:
 	@./bin/log $(call args)

@@ -54,6 +54,12 @@ echo "   ✅ MySQL sẵn sàng"
 echo ">>> [3/5] Import database từ dump/${BASENAME}.sql..."
 bin/db-import "${DUMP_FILE}"
 
+# 4.1 Import shared product seed (if present)
+if [ -f "src/pub/media/import/category-products-seed.csv" ]; then
+    echo ">>> [3.1/5] Import CSV seed sản phẩm (category-products-seed.csv)..."
+    bin/import-products-seed "pub/media/import/category-products-seed.csv" add_update
+fi
+
 # 5. Cập nhật base URL theo domain
 echo ">>> [4/5] Cập nhật base URL → https://${DOMAIN}/..."
 bin/clinotty bin/magento config:set web/unsecure/base_url "https://${DOMAIN}/"

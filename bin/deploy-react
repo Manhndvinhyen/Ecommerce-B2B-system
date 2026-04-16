@@ -32,6 +32,16 @@ fi
 
 echo "🔄 Xóa Magento Cache & Triển khai Static Content..."
 cd ../../
+
+source env/db.env
+DEFAULT_WEBSITE_COUNT=$(./bin/clinotty bash -lc "mysql -h${MYSQL_HOST} -u${MYSQL_USER} -p${MYSQL_PASSWORD} ${MYSQL_DATABASE} -Nse \"SELECT COUNT(*) FROM store_website WHERE is_default = 1;\"")
+
+if [ "${DEFAULT_WEBSITE_COUNT}" -lt 1 ]; then
+    echo "❌ Database chưa có default website (store_website.is_default = 1)."
+    echo "   Hãy chạy: ./bin/setup-dev hoặc ./bin/setup-new-machine để nạp DB chuẩn trước khi deploy."
+    exit 1
+fi
+
 ./bin/magento cache:flush
 ./bin/magento setup:static-content:deploy -f
 

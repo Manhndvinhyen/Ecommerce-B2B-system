@@ -10,7 +10,12 @@ sleep 15
 
 if [ -f "dump/magento.sql" ]; then
     echo "📦 [2/3] Tự động nạp Database mẫu..."
-    ./bin/db-import < dump/magento.sql
+    ./bin/db-import
+
+    if [ -f "src/pub/media/import/category-products-seed.csv" ]; then
+        echo "🛍️ [2.1/3] Import CSV seed sản phẩm..."
+        ./bin/import-products-seed "pub/media/import/category-products-seed.csv" add_update
+    fi
 else
     echo "⚠️ Bỏ qua nạp Database: Không tìm thấy dump/magento.sql (có thể nó chưa được push lên)!"
 fi

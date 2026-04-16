@@ -10,6 +10,7 @@ import { SellerCTA } from './components/SellerCTA';
 import { Footer } from './components/Footer';
 import { ChatbotWidget } from './components/ChatbotWidget';
 import { ProductCategoryPage } from './components/ProductCategoryPage';
+import { RegisterPage } from './components/RegisterPage';
 import { getCategoryNameFromQuery, getSubcategoryNameFromQuery } from './data/categories';
 
 export default function App() {
@@ -18,6 +19,11 @@ export default function App() {
   const category = getCategoryNameFromQuery(params.get('category'));
   const subcategory = getSubcategoryNameFromQuery(category, params.get('subcategory'));
   const isCategoryView = view === 'category';
+  const isRegisterView = view === 'register';
+
+  if (isRegisterView) {
+    return <RegisterPage />;
+  }
 
   return (
     <div className="min-h-screen bg-white">

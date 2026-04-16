@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<schema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Setup/Declaration/Schema/etc/schema.xsd">
+    <table name="tmdt_customer_registration" resource="default" engine="innodb" comment="Customer registration requests">
+        <column xsi:type="int" name="registration_id" padding="10" unsigned="true" nullable="false" identity="true" comment="Registration ID" />
+        <column xsi:type="int" name="customer_id" padding="10" unsigned="true" nullable="false" comment="Customer ID" />
+        <column xsi:type="varchar" name="email" nullable="false" length="255" comment="Email" />
+        <column xsi:type="varchar" name="tax_code" nullable="false" length="64" comment="Tax Code" />
+        <column xsi:type="varchar" name="business_name" nullable="false" length="255" comment="Business Name" />
+        <column xsi:type="varchar" name="registration_type" nullable="false" length="64" comment="Registration Type" />
+        <column xsi:type="varchar" name="province" nullable="false" length="255" comment="Province" />
+        <column xsi:type="varchar" name="district" nullable="true" length="255" comment="District" />
+        <column xsi:type="varchar" name="ward" nullable="false" length="255" comment="Ward" />
+        <column xsi:type="text" name="detail_address" nullable="true" comment="Detail Address" />
+        <column xsi:type="varchar" name="unit_nickname" nullable="false" length="255" comment="Unit Nickname" />
+        <column xsi:type="varchar" name="login_code" nullable="false" length="255" comment="Login Code" />
+        <column xsi:type="varchar" name="full_name" nullable="false" length="255" comment="Full Name" />
+        <column xsi:type="varchar" name="phone_number" nullable="false" length="32" comment="Phone Number" />
+        <column xsi:type="smallint" name="agree_to_terms" nullable="false" default="0" comment="Agree To Terms" />
+        <column xsi:type="text" name="files_json" nullable="true" comment="Uploaded Files" />
+        <column xsi:type="text" name="sanitized_payload_json" nullable="true" comment="Sanitized Registration Payload" />
+        <column xsi:type="varchar" name="status" nullable="false" length="32" default="pending" comment="Status" />
+        <column xsi:type="text" name="notes" nullable="true" comment="Notes" />
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At" />
+        <column xsi:type="timestamp" name="updated_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Updated At" />
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="registration_id" />
+        </constraint>
+        <constraint xsi:type="unique" referenceId="TMDT_CUSTOMER_REGISTRATION_CUSTOMER_ID_UNIQUE">
+            <column name="customer_id" />
+        </constraint>
+        <constraint xsi:type="unique" referenceId="TMDT_CUSTOMER_REGISTRATION_LOGIN_CODE_UNIQUE">
+            <column name="login_code" />
+        </constraint>
+        <index referenceId="TMDT_CUSTOMER_REGISTRATION_EMAIL_IDX">
+            <column name="email" />
+        </index>
+        <index referenceId="TMDT_CUSTOMER_REGISTRATION_STATUS_IDX">
+            <column name="status" />
+        </index>
+    </table>
+</schema>

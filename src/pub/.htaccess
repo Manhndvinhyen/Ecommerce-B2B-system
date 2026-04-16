@@ -167,11 +167,6 @@
     #RewriteRule ^(.*)$ /mobiledirectoryhere/ [L,R=302]
 
 ############################################
-## Redirect root to the new React SPA
-    RewriteCond %{REQUEST_URI} ^/$
-    RewriteRule ^(.*)$ /react/index.html [L]
-
-############################################
 ## Never rewrite for existing files, directories and links
 
     RewriteCond %{REQUEST_FILENAME} !-f

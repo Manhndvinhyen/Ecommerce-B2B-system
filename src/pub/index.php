@@ -8,11 +8,6 @@
 
 use Magento\Framework\App\Bootstrap;
 
-if ($_SERVER['REQUEST_URI'] === '/' || $_SERVER['REQUEST_URI'] === '/index.php' || $_SERVER['REQUEST_URI'] === '') {
-    header('Location: /react/');
-    exit;
-}
-
 try {
     require __DIR__ . '/../app/bootstrap.php';
 } catch (\Exception $e) {

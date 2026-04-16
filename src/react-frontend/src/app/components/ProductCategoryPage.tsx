@@ -1,11 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, ShoppingCart, Heart } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import {
   categoryMenu,
-  getCategoryId,
   getCategoryPageLink,
-  getSubcategoryId,
   getSubcategoryNameFromQuery,
   toQuerySlug
 } from '../data/categories';
@@ -24,6 +22,11 @@ type GraphQlProductItem = {
   id: number;
   sku: string;
   name: string;
+  categories?: Array<{
+    id: number;
+    name: string;
+    path?: string;
+  }>;
   small_image?: { url?: string | null } | null;
   price_range?: {
     minimum_price?: {
@@ -32,6 +35,130 @@ type GraphQlProductItem = {
       };
     };
   };
+};
+
+type GraphQlCategoryNode = {
+  id: number;
+  name: string;
+  children?: GraphQlCategoryNode[];
+};
+
+type InferredCategory = {
+  category: string;
+  subcategory?: string;
+};
+
+const pickSubcategoryFromText = (
+  haystack: string,
+  rules: Array<{ keywords: string[]; label: string }>,
+  fallback?: string
+) => {
+  const matched = rules.find((rule) => rule.keywords.some((keyword) => haystack.includes(keyword)));
+  return matched?.label ?? fallback;
+};
+
+const inferCategoryFromSku = (sku: string): InferredCategory | null => {
+  const normalized = toQuerySlug(sku);
+
+  if (normalized.startsWith('rau-cu-qua-')) {
+    return {
+      category: 'Rau củ quả',
+      subcategory: pickSubcategoryFromText(
+        normalized,
+        [
+          { keywords: ['chilli', 'red-bell-pepper'], label: 'Rau gia vị' },
+          { keywords: ['carrot', 'potato'], label: 'Củ quả' }
+        ],
+        'Rau phổ thông'
+      )
+    };
+  }
+
+  if (normalized.startsWith('cat-tc-')) {
+    return {
+      category: 'Trái cây',
+      subcategory: normalized.includes('tao') ? 'Trái cây nhập khẩu' : 'Trái cây phổ thông'
+    };
+  }
+
+  if (normalized.startsWith('cat-tpts-')) {
+    return {
+      category: 'Thực phẩm tươi sống',
+      subcategory: pickSubcategoryFromText(normalized, [
+        { keywords: ['heo'], label: 'Thịt heo' },
+        { keywords: ['bo', 'be'], label: 'Thịt bò-bê' },
+        { keywords: ['trau', 'nghe'], label: 'Thịt trâu-nghé' },
+        { keywords: ['de'], label: 'Thịt dê' },
+        { keywords: ['ga'], label: 'Thịt gà' },
+        { keywords: ['vit', 'ngong'], label: 'Thịt vịt-gan-ngỗng' },
+        { keywords: ['chim'], label: 'Thịt chim' },
+        { keywords: ['ech'], label: 'Thịt ếch' },
+        { keywords: ['trung'], label: 'Trứng' }
+      ], 'Giò-chả-nem')
+    };
+  }
+
+  if (normalized.startsWith('cat-ths-')) {
+    return {
+      category: 'Thuỷ hải sản',
+      subcategory: pickSubcategoryFromText(normalized, [
+        { keywords: ['ca'], label: 'Cá' },
+        { keywords: ['tom'], label: 'Tôm' },
+        { keywords: ['cua'], label: 'Cua' },
+        { keywords: ['muc'], label: 'Mực' },
+        { keywords: ['ngao', 'oc'], label: 'Ngao ốc' }
+      ], 'Hải sản chế biến')
+    };
+  }
+
+  if (normalized.startsWith('cat-tpdl-')) {
+    return {
+      category: 'Thực phẩm đông lạnh',
+      subcategory: pickSubcategoryFromText(normalized, [
+        { keywords: ['heo'], label: 'Thịt heo' },
+        { keywords: ['bo', 'be'], label: 'Thịt bò-bê' },
+        { keywords: ['trau', 'nghe'], label: 'Thịt trâu-nghé' },
+        { keywords: ['de'], label: 'Thịt dê' },
+        { keywords: ['ga'], label: 'Thịt gà' },
+        { keywords: ['vit', 'ngong'], label: 'Thịt vịt-gan-ngỗng' },
+        { keywords: ['chim'], label: 'Thịt chim' },
+        { keywords: ['ech'], label: 'Thịt ếch' },
+        { keywords: ['trung'], label: 'Trứng' },
+        { keywords: ['xuc-xich', 'lap-xuong'], label: 'Xúc xích - lạp xưởng' }
+      ], 'Giò-chả-nem')
+    };
+  }
+
+  if (normalized.startsWith('cat-tpk-')) {
+    return {
+      category: 'Thực phẩm khô',
+      subcategory: pickSubcategoryFromText(normalized, [
+        { keywords: ['gia-vi'], label: 'Gia vị' },
+        { keywords: ['gao'], label: 'Gạo' },
+        { keywords: ['bot'], label: 'Bột' },
+        { keywords: ['bun', 'mien', 'pho', 'nui'], label: 'Bún-miến-phở-nui' },
+        { keywords: ['hat'], label: 'Hạt khô' },
+        { keywords: ['do-uong'], label: 'Đồ uống' },
+        { keywords: ['kem', 'bo', 'pho-mai'], label: 'Kem-bơ-phô mai' },
+        { keywords: ['mut', 'siro'], label: 'Mứt siro' },
+        { keywords: ['tra', 'ca-phe'], label: 'Trà - cà phê đóng gói' }
+      ], 'Thực phẩm khô khác')
+    };
+  }
+
+  if (normalized.startsWith('cat-tib-')) {
+    return {
+      category: 'Tiện ích bếp',
+      subcategory: pickSubcategoryFromText(normalized, [
+        { keywords: ['dung-cu-an-uong'], label: 'Dụng cụ ăn uống' },
+        { keywords: ['do-dung-bep', 'noi'], label: 'Đồ dùng bếp' },
+        { keywords: ['chat-tay-rua', 'rua-chen'], label: 'Chất tẩy rửa' },
+        { keywords: ['dung-cu-ve-sinh', 'ban-chai', 'co-noi'], label: 'Dụng cụ vệ sinh' }
+      ], 'Sản phẩm khác')
+    };
+  }
+
+  return null;
 };
 
 const formatPrice = (value?: number) => {
@@ -57,6 +184,9 @@ type ProductCategoryPageProps = {
   initialSubcategory?: string;
 };
 
+let cachedCategoryLookup: Record<string, number> | null = null;
+const productsResponseCache = new Map<string, ProductItem[]>();
+
 export function ProductCategoryPage({ categoryName, initialSubcategory }: ProductCategoryPageProps) {
   const category = useMemo(() => {
     return categoryMenu.find((item) => item.name === categoryName) ?? categoryMenu[0];
@@ -67,6 +197,34 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [categoryIdLookup, setCategoryIdLookup] = useState<Record<string, number>>({});
+  const latestRequestRef = useRef(0);
+
+  const getCategoryDisplayLabel = (product: GraphQlProductItem) => {
+    const inferred = inferCategoryFromSku(product.sku);
+    const rawNames = (product.categories ?? []).map((item) => item.name).filter(Boolean);
+    if (!rawNames.length) {
+      return inferred?.subcategory ?? inferred?.category ?? (activeSubcategory === 'Tất cả' ? category.name : activeSubcategory);
+    }
+
+    const ignoredSlugs = new Set([
+      'root-catalog',
+      'default-category',
+      'products',
+      toQuerySlug(category.name)
+    ]);
+
+    const preferred = rawNames.find((name) => !ignoredSlugs.has(toQuerySlug(name)));
+    if (preferred) {
+      return preferred;
+    }
+
+    if (inferred?.subcategory) {
+      return inferred.subcategory;
+    }
+
+    return inferred?.category ?? rawNames[rawNames.length - 1] ?? (activeSubcategory === 'Tất cả' ? category.name : activeSubcategory);
+  };
 
   useEffect(() => {
     setActiveSubcategory(initialSubcategory ?? 'Tất cả');
@@ -109,20 +267,93 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
   };
 
   useEffect(() => {
+    const fetchCategoryLookup = async () => {
+      if (cachedCategoryLookup && Object.keys(cachedCategoryLookup).length > 0) {
+        setCategoryIdLookup(cachedCategoryLookup);
+        return;
+      }
+
+      try {
+        const response = await fetch('/graphql', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            query: `
+              query CategoryTree {
+                categoryList(filters: { ids: { in: ["2"] } }) {
+                  id
+                  name
+                  children {
+                    id
+                    name
+                    children {
+                      id
+                      name
+                      children {
+                        id
+                        name
+                      }
+                    }
+                  }
+                }
+              }
+            `
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Category lookup failed: ${response.status}`);
+        }
+
+        const json = await response.json();
+        const roots: GraphQlCategoryNode[] = json?.data?.categoryList ?? [];
+
+        const lookup: Record<string, number> = {};
+        const walk = (node: GraphQlCategoryNode) => {
+          lookup[toQuerySlug(node.name)] = node.id;
+          (node.children ?? []).forEach(walk);
+        };
+
+        roots.forEach(walk);
+        cachedCategoryLookup = lookup;
+        setCategoryIdLookup(lookup);
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    fetchCategoryLookup();
+  }, []);
+
+  useEffect(() => {
+    const requestId = ++latestRequestRef.current;
+    const controller = new AbortController();
+
     const fetchProducts = async () => {
-      const parentCategoryId = getCategoryId(category.name);
+      const parentCategoryId = categoryIdLookup[toQuerySlug(category.name)];
       const subcategoryIds = category.subcategories
-        .map((subcategory) => getSubcategoryId(category.name, subcategory))
+        .map((subcategory) => categoryIdLookup[toQuerySlug(subcategory)])
         .filter((id): id is number => Boolean(id));
 
       const categoryIds =
         activeSubcategory === 'Tất cả'
-          ? [parentCategoryId, ...subcategoryIds].filter((id): id is number => Boolean(id))
-          : [getSubcategoryId(category.name, activeSubcategory)].filter((id): id is number => Boolean(id));
+          ? [...subcategoryIds, parentCategoryId].filter((id): id is number => Boolean(id))
+          : [categoryIdLookup[toQuerySlug(activeSubcategory)]].filter((id): id is number => Boolean(id));
 
-      if (!categoryIds.length) {
-        setProducts([]);
-        setLoadError('Không tìm thấy cấu hình danh mục phù hợp.');
+      const isUsingSkuFallback = categoryIds.length === 0;
+
+      const requestCategoryIds = (isUsingSkuFallback ? [2] : categoryIds)
+        .map((id) => String(id))
+        .sort();
+      const cacheKey = `${toQuerySlug(category.name)}|${toQuerySlug(activeSubcategory)}|${requestCategoryIds.join(',')}|${isUsingSkuFallback ? 'fallback' : 'strict'}`;
+
+      const cachedProducts = productsResponseCache.get(cacheKey);
+      if (cachedProducts) {
+        setProducts(cachedProducts);
+        setLoadError('');
+        setIsLoading(false);
         return;
       }
 
@@ -136,6 +367,10 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
               id
               sku
               name
+              categories {
+                id
+                name
+              }
               small_image {
                 url
               }
@@ -154,13 +389,14 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
       try {
         const response = await fetch('/graphql', {
           method: 'POST',
+          signal: controller.signal,
           headers: {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
             query,
             variables: {
-              categoryIds: categoryIds.map((id) => String(id))
+              categoryIds: requestCategoryIds
             }
           })
         });
@@ -176,13 +412,25 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
 
         const items: GraphQlProductItem[] = json?.data?.products?.items ?? [];
 
-        setProducts(
-          items.map((item) => {
+        const mappedProducts = items
+          .map((item) => {
             const imageUrl = item.small_image?.url ?? '';
             const isPlaceholderImage = imageUrl.includes('/placeholder/');
             const fallbackImage =
               fallbackImageByCategory[category.name] ??
               'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop';
+
+            const inferred = inferCategoryFromSku(item.sku);
+
+            if (isUsingSkuFallback) {
+              const categoryMatched = inferred?.category === category.name;
+              const subcategoryMatched =
+                activeSubcategory === 'Tất cả' || inferred?.subcategory === activeSubcategory;
+
+              if (!categoryMatched || !subcategoryMatched) {
+                return null;
+              }
+            }
 
             return {
               id: item.id,
@@ -191,21 +439,38 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
               price: formatPrice(item.price_range?.minimum_price?.final_price?.value),
               unit: 'SP',
               image: !imageUrl || isPlaceholderImage ? fallbackImage : imageUrl,
-              categoryLabel: activeSubcategory === 'Tất cả' ? category.name : activeSubcategory
+              categoryLabel: getCategoryDisplayLabel(item)
             };
           })
-        );
+          .filter((item): item is NonNullable<typeof item> => item !== null);
+
+        if (latestRequestRef.current !== requestId) {
+          return;
+        }
+
+        productsResponseCache.set(cacheKey, mappedProducts);
+        setProducts(mappedProducts);
       } catch (error) {
+        if (controller.signal.aborted || latestRequestRef.current !== requestId) {
+          return;
+        }
+
         setProducts([]);
         setLoadError('Không tải được dữ liệu sản phẩm từ database.');
         console.error(error);
       } finally {
-        setIsLoading(false);
+        if (latestRequestRef.current === requestId) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchProducts();
-  }, [category.name, activeSubcategory]);
+
+    return () => {
+      controller.abort();
+    };
+  }, [category.name, category.subcategories, activeSubcategory, categoryIdLookup]);
 
   const productsToShow = products.slice(0, visibleCount);
   const canLoadMore = visibleCount < products.length;
@@ -299,6 +564,8 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
                     <ImageWithFallback
                       src={product.image}
                       alt={product.name}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                     />
                     <button

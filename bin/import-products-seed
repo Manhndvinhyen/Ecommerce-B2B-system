@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# bin/import-products-seed — Import shared product seed CSV into Magento
+#
+# Usage:
+#   bin/import-products-seed
+#   bin/import-products-seed pub/media/import/category-products-seed.csv add_update
+
+set -o errexit
+
+CSV_PATH="${1:-pub/media/import/category-products-seed.csv}"
+BEHAVIOR="${2:-add_update}"
+
+echo "Importing products from ${CSV_PATH} (behavior=${BEHAVIOR})..."
+
+bin/clinotty php -f /var/www/html/dev/tools/import-products-seed.php -- "${CSV_PATH}" "${BEHAVIOR}"
+
+echo "Reindexing and flushing cache..."
+bin/clinotty bin/magento indexer:reindex
+bin/clinotty bin/magento cache:flush
+
+echo "✅ Product seed import completed."

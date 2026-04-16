@@ -105,6 +105,12 @@ else
     echo "   ✅ Magento đã được cài đặt từ đầu."
 fi
 
+if [ -f "src/pub/media/import/category-products-seed.csv" ]; then
+    echo "   Import seed CSV sản phẩm (category-products-seed.csv)..."
+    bin/import-products-seed "pub/media/import/category-products-seed.csv" add_update
+    echo "   ✅ Product seed CSV đã được import."
+fi
+
 # ─────────────────────────────────────────────
 # BƯỚC 7: Generate code và deploy static files
 # ─────────────────────────────────────────────

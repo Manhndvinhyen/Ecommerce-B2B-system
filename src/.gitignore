@@ -2,6 +2,12 @@
 /var/
 /generated/
 /pub/static/
+/pub/media/catalog/product/
+/pub/media/theme/
+/pub/react/assets/
+/pub/react/.vite/
+/app/design/frontend/Magento/luma/web/react-home/assets/
+/app/design/frontend/Magento/luma/web/react-home/.vite/
 /react-frontend/node_modules/
 /react-frontend/dist/
 /.vscode/

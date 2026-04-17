@@ -80,6 +80,15 @@ export function RegisterPage() {
     window.location.href = target;
   };
 
+  const buildLoginHref = () => {
+    const params = new URLSearchParams(window.location.search);
+    params.set('view', 'login');
+    params.delete('category');
+    params.delete('subcategory');
+
+    return `${window.location.pathname}?${params.toString()}`;
+  };
+
   const handleInputChange = <K extends keyof FormDataState>(field: K, value: FormDataState[K]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     setHasDraft(true);
@@ -624,7 +633,7 @@ export function RegisterPage() {
 
                 <div className="mt-8 text-center border-t border-gray-50 pt-6">
                   <span className="text-[14px] text-gray-500 font-medium">Bạn đã có tài khoản? </span>
-                  <a href="/customer/account/login" className="text-[14px] font-extrabold text-[#00b14f] hover:text-[#006a4e] transition-colors underline underline-offset-4 decoration-2">
+                  <a href={buildLoginHref()} className="text-[14px] font-extrabold text-[#00b14f] hover:text-[#006a4e] transition-colors underline underline-offset-4 decoration-2">
                     Đăng nhập
                   </a>
                 </div>

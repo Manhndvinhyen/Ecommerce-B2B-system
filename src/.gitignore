@@ -3,6 +3,7 @@
 /generated/
 /pub/static/
 /pub/media/catalog/product/
+/pub/media/captcha/
 /pub/media/theme/
 /pub/react/assets/
 /pub/react/.vite/

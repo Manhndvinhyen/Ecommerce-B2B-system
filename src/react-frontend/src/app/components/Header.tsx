@@ -6,6 +6,11 @@ export function Header() {
   const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState(categoryMenu[0].name);
   const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
+  const registerParams = new URLSearchParams(window.location.search);
+  registerParams.set('view', 'register');
+  registerParams.delete('category');
+  registerParams.delete('subcategory');
+  const registerHref = `${window.location.pathname}?${registerParams.toString()}`;
 
   const currentCategory = categoryMenu.find((category) => category.name === activeCategory) ?? categoryMenu[0];
 
@@ -18,7 +23,7 @@ export function Header() {
             <a href="/customer/account/login" className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors">
               Đăng nhập
             </a>
-            <a href="/customer/account/create" className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors">
+            <a href={registerHref} className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors">
               Đăng ký
             </a>
             <a href="/contact" className="px-4 py-1.5 text-sm border-2 border-orange-500 text-orange-500 rounded-full hover:bg-orange-50 transition-colors whitespace-nowrap">

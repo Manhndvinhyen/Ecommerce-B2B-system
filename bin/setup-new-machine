@@ -152,5 +152,5 @@ echo ""
 # shellcheck source=../env/magento.env
 source env/magento.env
 echo "  👤  Admin user    : ${MAGENTO_ADMIN_USER}"
-echo "  🔑  Admin password: ${MAGENTO_ADMIN_PASSWORD}"
+echo "  🔑   password: ${MAGENTO_ADMIN_PASSWORD}"
 echo ""

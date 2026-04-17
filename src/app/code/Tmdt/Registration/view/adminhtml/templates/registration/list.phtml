@@ -1,0 +1,71 @@
+<?php
+/** @var \Tmdt\Registration\Block\Adminhtml\Registration $block */
+$rows = $block->getRows();
+?>
+<div class="page-main-actions">
+    <div class="page-actions-placeholder"></div>
+</div>
+
+<div class="admin__data-grid-wrap">
+    <style>
+        .tmdt-registration-table td,
+        .tmdt-registration-table th {
+            white-space: nowrap;
+            vertical-align: top;
+        }
+        .tmdt-registration-table .wrap {
+            white-space: normal;
+            max-width: 320px;
+        }
+    </style>
+    <table class="data-grid tmdt-registration-table">
+        <thead>
+            <tr>
+                <th class="data-grid-th">ID</th>
+                <th class="data-grid-th">Customer ID</th>
+                <th class="data-grid-th">Doanh nghiệp</th>
+                <th class="data-grid-th">Người đại diện</th>
+                <th class="data-grid-th">Email</th>
+                <th class="data-grid-th">Số điện thoại</th>
+                <th class="data-grid-th">Mã số thuế</th>
+                <th class="data-grid-th">Đối tượng đăng ký</th>
+                <th class="data-grid-th">Tỉnh/Thành</th>
+                <th class="data-grid-th">Quận/Huyện</th>
+                <th class="data-grid-th">Phường/Xã</th>
+                <th class="data-grid-th">Địa chỉ chi tiết</th>
+                <th class="data-grid-th">Tên gợi nhớ đơn vị</th>
+                <th class="data-grid-th">Mã đăng nhập</th>
+                <th class="data-grid-th">Trạng thái</th>
+                <th class="data-grid-th">Ngày tạo</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php if (!empty($rows)): ?>
+                <?php foreach ($rows as $row): ?>
+                    <tr>
+                        <td><?= (int) $row['registration_id'] ?></td>
+                        <td><?= (int) $row['customer_id'] ?></td>
+                        <td class="wrap"><strong><?= $block->escapeHtml($row['business_name']) ?></strong></td>
+                        <td><?= $block->escapeHtml($row['full_name']) ?></td>
+                        <td><?= $block->escapeHtml($row['email']) ?></td>
+                        <td><?= $block->escapeHtml($row['phone_number']) ?></td>
+                        <td><?= $block->escapeHtml($row['tax_code']) ?></td>
+                        <td><?= $block->escapeHtml($row['registration_type']) ?></td>
+                        <td><?= $block->escapeHtml($row['province']) ?></td>
+                        <td><?= $block->escapeHtml((string) ($row['district'] ?? '')) ?></td>
+                        <td><?= $block->escapeHtml($row['ward']) ?></td>
+                        <td class="wrap"><?= $block->escapeHtml((string) ($row['detail_address'] ?? '')) ?></td>
+                        <td><?= $block->escapeHtml($row['unit_nickname']) ?></td>
+                        <td><?= $block->escapeHtml($row['login_code']) ?></td>
+                        <td><?= $block->escapeHtml(ucfirst((string) $row['status'])) ?></td>
+                        <td><?= $block->escapeHtml($row['created_at']) ?></td>
+                    </tr>
+                <?php endforeach; ?>
+            <?php else: ?>
+                <tr>
+                    <td colspan="16">Chưa có lượt đăng ký nào.</td>
+                </tr>
+            <?php endif; ?>
+        </tbody>
+    </table>
+</div>

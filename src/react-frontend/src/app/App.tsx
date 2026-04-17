@@ -11,6 +11,7 @@ import { Footer } from './components/Footer';
 import { ChatbotWidget } from './components/ChatbotWidget';
 import { ProductCategoryPage } from './components/ProductCategoryPage';
 import { RegisterPage } from './components/RegisterPage';
+import { LoginPage } from './components/LoginPage';
 import { getCategoryNameFromQuery, getSubcategoryNameFromQuery } from './data/categories';
 
 export default function App() {
@@ -20,9 +21,14 @@ export default function App() {
   const subcategory = getSubcategoryNameFromQuery(category, params.get('subcategory'));
   const isCategoryView = view === 'category';
   const isRegisterView = view === 'register';
+  const isLoginView = view === 'login';
 
   if (isRegisterView) {
     return <RegisterPage />;
+  }
+
+  if (isLoginView) {
+    return <LoginPage />;
   }
 
   return (

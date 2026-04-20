@@ -17,7 +17,8 @@ echo "========================================"
 
 echo ""
 echo "📥 Pulling latest code from $BRANCH..."
-git pull origin "$BRANCH"
+git fetch origin "$BRANCH"
+git reset --hard "origin/$BRANCH"
 
 echo ""
 echo "⚙️  Running Magento setup:upgrade..."

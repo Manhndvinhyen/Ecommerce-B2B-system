@@ -15,6 +15,7 @@ jobs:
           host: ${{ secrets.GCP_VM_IP }}
           username: ${{ secrets.GCP_VM_USER }}
           key: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
+          key_format: base64
           script: |
             cd ~/B2B
             bin/deploy-prod manh-docker

@@ -21,6 +21,11 @@ echo "✅ Build xong: src/pub/react/"
 
 echo "🔄 Reload nginx..."
 cd ../../
-docker compose exec app nginx -s reload
+NGINX_CONTAINER=$(docker ps --filter "label=com.docker.compose.service=app" --format "{{.ID}}" | head -1)
+if [ -n "$NGINX_CONTAINER" ]; then
+  docker exec "$NGINX_CONTAINER" nginx -s reload
+else
+  echo "⚠️ Nginx container not found, skipping reload"
+fi
 
 echo "✅ Hoàn tất! Truy cập https://magento.test để xem React app."

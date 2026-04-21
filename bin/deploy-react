@@ -44,9 +44,9 @@ if [[ -z "${VITE_GOOGLE_CLIENT_ID:-}" && -n "${GOOGLE_OAUTH_CLIENT_ID:-}" ]]; th
 fi
 
 if [[ -z "${VITE_GOOGLE_CLIENT_ID:-}" ]]; then
-  echo "❌ Thiếu VITE_GOOGLE_CLIENT_ID (hoặc GOOGLE_OAUTH_CLIENT_ID) nên không build được nút đăng nhập Google."
-  echo "👉 Cách an toàn: lưu GOOGLE_OAUTH_CLIENT_ID trong env/custom.env (đã gitignore) hoặc set secret CI/CD."
-  exit 1
+  echo "⚠️ Thiếu VITE_GOOGLE_CLIENT_ID (hoặc GOOGLE_OAUTH_CLIENT_ID)."
+  echo "➡️ Vẫn tiếp tục build, nhưng nút đăng nhập Google sẽ bị tắt trên frontend."
+  echo "👉 Khuyến nghị: lưu GOOGLE_OAUTH_CLIENT_ID trong env/custom.env (đã gitignore) hoặc set secret CI/CD."
 fi
 
 echo "🛠️ Build ứng dụng React..."

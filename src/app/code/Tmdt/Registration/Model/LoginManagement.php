@@ -63,7 +63,9 @@ class LoginManagement implements LoginInterface
             'token' => (string) $token,
             'customer_id' => (int) $registrationRow['customer_id'],
             'email' => (string) $registrationRow['email'],
-            'redirect_url' => '/customer/account',
+            'full_name' => (string) ($registrationRow['full_name'] ?? ''),
+            'branch_name' => (string) ($registrationRow['unit_nickname'] ?? ''),
+            'redirect_url' => '/react/index.html',
         ];
     }
 
@@ -74,7 +76,7 @@ class LoginManagement implements LoginInterface
 
         $row = $connection->fetchRow(
             $connection->select()
-                ->from($tableName, ['customer_id', 'email', 'phone_number'])
+                ->from($tableName, ['customer_id', 'email', 'phone_number', 'full_name', 'unit_nickname'])
                 ->where('login_code = ?', $loginCode)
                 ->limit(1)
         );

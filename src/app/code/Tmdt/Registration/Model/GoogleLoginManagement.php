@@ -84,7 +84,9 @@ class GoogleLoginManagement implements GoogleLoginInterface
             'token' => (string) $token,
             'customer_id' => (int) $registrationRow['customer_id'],
             'email' => $registrationEmail,
-            'redirect_url' => '/customer/account',
+            'full_name' => (string) ($registrationRow['full_name'] ?? ''),
+            'branch_name' => (string) ($registrationRow['unit_nickname'] ?? ''),
+            'redirect_url' => '/react/index.html',
         ];
     }
 
@@ -143,7 +145,7 @@ class GoogleLoginManagement implements GoogleLoginInterface
 
         $row = $connection->fetchRow(
             $connection->select()
-                ->from($tableName, ['customer_id', 'email'])
+                ->from($tableName, ['customer_id', 'email', 'full_name', 'unit_nickname'])
                 ->where('login_code = ?', $loginCode)
                 ->limit(1)
         );

@@ -493,7 +493,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
   const breadcrumbItems = [
     {
       label: 'Trang chủ',
-      href: './index.html'
+      href: '/'
     },
     {
       label: category.name,

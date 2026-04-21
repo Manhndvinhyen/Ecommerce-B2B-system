@@ -12,6 +12,7 @@ import { ChatbotWidget } from './components/ChatbotWidget';
 import { ProductCategoryPage } from './components/ProductCategoryPage';
 import { RegisterPage } from './components/RegisterPage';
 import { ShoppingCartPage } from './components/ShoppingCartPage';
+import { LoginPage } from './components/LoginPage';
 import { getCategoryNameFromQuery, getSubcategoryNameFromQuery } from './data/categories';
 import { CartProvider } from './cart/CartProvider';
 
@@ -23,6 +24,7 @@ function AppContent() {
   const isCategoryView = view === 'category';
   const isRegisterView = view === 'register';
   const isCartView = view === 'cart';
+  const isLoginView = view === 'login';
 
   if (isRegisterView) {
     return <RegisterPage />;
@@ -30,6 +32,10 @@ function AppContent() {
 
   if (isCartView) {
     return <ShoppingCartPage />;
+  }
+
+  if (isLoginView) {
+    return <LoginPage />;
   }
 
   return (

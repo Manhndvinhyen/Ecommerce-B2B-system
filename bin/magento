@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-docker compose exec -u www-data phpfpm bin/magento "$@"
+docker compose exec -u app phpfpm bin/magento "$@"

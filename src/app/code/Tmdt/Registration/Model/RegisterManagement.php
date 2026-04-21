@@ -41,6 +41,11 @@ class RegisterManagement implements RegisterInterface
         $password = (string) $payload['password'];
         $fullName = trim((string) $payload['fullName']);
         $loginCode = trim((string) $payload['loginCode']);
+        $taxCode = $this->normalize((string) $payload['taxCode']);
+        $businessName = trim((string) $payload['businessName']);
+        $registrationType = trim((string) $payload['registrationType']);
+        $unitNickname = trim((string) $payload['unitNickname']);
+        $phoneNumber = $this->normalize((string) $payload['phoneNumber']);
         $agreeToTerms = filter_var($payload['agreeToTerms'] ?? false, FILTER_VALIDATE_BOOLEAN);
         [$firstName, $lastName] = $this->splitName($fullName);
 
@@ -63,6 +68,11 @@ class RegisterManagement implements RegisterInterface
         $customer->setEmail($email);
         $customer->setFirstname($firstName);
         $customer->setLastname($lastName);
+        $customer->setTaxvat($taxCode);
+        $customer->setCustomAttribute('tmdt_business_name', $businessName);
+        $customer->setCustomAttribute('tmdt_login_code', $loginCode);
+        $customer->setCustomAttribute('tmdt_registration_type', $registrationType);
+        $customer->setCustomAttribute('tmdt_unit_nickname', $unitNickname);
 
         $createdCustomer = $this->accountManagement->createAccount($customer, $password);
 
@@ -70,17 +80,17 @@ class RegisterManagement implements RegisterInterface
             $connection->insert($tableName, [
                 'customer_id' => (int) $createdCustomer->getId(),
                 'email' => $email,
-                'tax_code' => $this->normalize((string) $payload['taxCode']),
-                'business_name' => trim((string) $payload['businessName']),
-                'registration_type' => trim((string) $payload['registrationType']),
+                'tax_code' => $taxCode,
+                'business_name' => $businessName,
+                'registration_type' => $registrationType,
                 'province' => trim((string) $payload['province']),
                 'district' => trim((string) ($payload['district'] ?? '')),
                 'ward' => trim((string) $payload['ward']),
                 'detail_address' => trim((string) ($payload['detailAddress'] ?? '')),
-                'unit_nickname' => trim((string) $payload['unitNickname']),
+                'unit_nickname' => $unitNickname,
                 'login_code' => $loginCode,
                 'full_name' => $fullName,
-                'phone_number' => $this->normalize((string) $payload['phoneNumber']),
+                'phone_number' => $phoneNumber,
                 'agree_to_terms' => (int) $agreeToTerms,
                 'files_json' => $this->serializer->serialize($payload['files'] ?? []),
                 'sanitized_payload_json' => $this->buildSanitizedPayloadJson($payload),

@@ -14,6 +14,12 @@ const categoryEmojiMap: Record<string, string> = {
 };
 
 export function ProductsPage() {
+  const registerParams = new URLSearchParams(window.location.search);
+  registerParams.set('view', 'register');
+  registerParams.delete('category');
+  registerParams.delete('subcategory');
+  const registerHref = `${window.location.pathname}?${registerParams.toString()}`;
+
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const reactHomePath = '/react/index.html';
 
@@ -163,7 +169,7 @@ export function ProductsPage() {
                   <h3 className="text-3xl font-extrabold leading-tight">Tặng voucher 300K</h3>
                   <p className="text-sm opacity-95 mt-2">Khi mua đơn đầu tiên từ 699K</p>
                 </div>
-                <a href={`${reactHomePath}?view=register`} className="mt-4 bg-white text-green-700 px-4 py-2 rounded-full text-sm font-semibold hover:bg-green-50 transition-colors inline-flex items-center gap-1.5 w-fit">
+                <a href={registerHref} className="mt-4 bg-white text-green-700 px-4 py-2 rounded-full text-sm font-semibold hover:bg-green-50 transition-colors inline-flex items-center gap-1.5 w-fit">
                   Xem chi tiết
                   <ChevronRight className="size-4" />
                 </a>

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# This script builds the React frontend and injects it into the Magento Luma theme
+# Build React frontend and serve via nginx at magento.test/
 
-echo "🚀 Bắt đầu quá trình build và sync React App vào thẻ Magento..."
+echo "🚀 Bắt đầu build React App..."
 
 cd src/react-frontend || { echo "❌ Không tìm thấy thư mục src/react-frontend"; exit 1; }
 
@@ -15,50 +15,17 @@ fi
 
 echo "🛠️ Build ứng dụng React..."
 npm run build
+# Vite tự build thẳng vào ../pub/react/ (cấu hình trong vite.config.ts)
 
-BUILD_OUTPUT_DIR="../pub/react"
-if [ ! -f "$BUILD_OUTPUT_DIR/.vite/manifest.json" ]; then
-    if [ -f "dist/.vite/manifest.json" ]; then
-        BUILD_OUTPUT_DIR="dist"
-    else
-        echo "❌ Không tìm thấy build output hợp lệ (.vite/manifest.json)."
-        echo "   Đã kiểm tra: ../pub/react và dist"
-        exit 1
-    fi
-fi
+echo "✅ Build xong: src/pub/react/"
 
-if [ "$BUILD_OUTPUT_DIR" = "dist" ]; then
-    echo "📁 Đồng bộ dist vào runtime /pub/react..."
-    rm -rf ../pub/react
-    mkdir -p ../pub/react
-    cp -R dist/. ../pub/react/
-    echo "✅ Synced dist to runtime: src/pub/react"
-else
-    echo "📁 Vite đã build trực tiếp vào runtime: src/pub/react"
-fi
-
-echo "� Đồng bộ UI bundle vào thư mục Magento Theme..."
-if command -v node &> /dev/null; then
-    MAGENTO_THEME_DIR=../app/design/frontend/Magento/luma REACT_BUILD_OUTPUT_DIR="$BUILD_OUTPUT_DIR" node scripts/magento-sync.mjs
-else
-    export MAGENTO_THEME_DIR="../app/design/frontend/Magento/luma"
-    export REACT_BUILD_OUTPUT_DIR="$BUILD_OUTPUT_DIR"
-    node.exe scripts/magento-sync.mjs
-fi
-
-echo "🔄 Xóa Magento Cache & Triển khai Static Content..."
+echo "🔄 Reload nginx..."
 cd ../../
-
-source env/db.env
-DEFAULT_WEBSITE_COUNT=$(./bin/clinotty bash -lc "mysql -h${MYSQL_HOST} -u${MYSQL_USER} -p${MYSQL_PASSWORD} ${MYSQL_DATABASE} -Nse \"SELECT COUNT(*) FROM store_website WHERE is_default = 1;\"")
-
-if [ "${DEFAULT_WEBSITE_COUNT}" -lt 1 ]; then
-    echo "❌ Database chưa có default website (store_website.is_default = 1)."
-    echo "   Hãy chạy: ./bin/setup-dev hoặc ./bin/setup-new-machine để nạp DB chuẩn trước khi deploy."
-    exit 1
+NGINX_CONTAINER=$(docker ps --filter "label=com.docker.compose.service=app" --format "{{.ID}}" | head -1)
+if [ -n "$NGINX_CONTAINER" ]; then
+  docker exec "$NGINX_CONTAINER" nginx -s reload
+else
+  echo "⚠️ Nginx container not found, skipping reload"
 fi
 
-./bin/magento cache:flush
-./bin/magento setup:static-content:deploy -f
-
-echo "✅ Hoàn tất! Giao diện mới đã được áp dụng lên magento.test"
+echo "✅ Hoàn tất! Truy cập https://magento.test để xem React app."

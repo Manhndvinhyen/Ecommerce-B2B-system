@@ -15,6 +15,12 @@ export function Header() {
   registerParams.delete('subcategory');
   const registerHref = `${reactHomePath}?${registerParams.toString()}`;
 
+  const loginParams = new URLSearchParams(window.location.search);
+  loginParams.set('view', 'login');
+  loginParams.delete('category');
+  loginParams.delete('subcategory');
+  const loginHref = `${window.location.pathname}?${loginParams.toString()}`;
+
   const currentCategory = categoryMenu.find((category) => category.name === activeCategory) ?? categoryMenu[0];
 
   return (
@@ -23,7 +29,7 @@ export function Header() {
       <div className="bg-gray-50 border-b">
         <div className="container mx-auto px-4 py-2">
           <div className="flex items-center justify-end gap-3">
-            <a href="/customer/account/login" className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors">
+            <a href={loginHref} className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors">
               Đăng nhập
             </a>
             <a href={registerHref} className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors">

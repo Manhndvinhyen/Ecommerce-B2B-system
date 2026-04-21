@@ -1,5 +1,19 @@
 * text=auto
 
-# Bash scripts should always have LF line endings to avoid syntax errors on Linux/WSL
+# Bash scripts — LF bắt buộc để chạy được trong Linux/WSL container
 bin/* text eol=lf
+
+# Env files — LF để tránh lỗi \r trong bash khi source
+env/*.env   text eol=lf
 env/*.sample text eol=lf
+
+# Nginx config — LF để nginx trong container parse đúng
+src/nginx.conf        text eol=lf
+src/nginx.conf.sample text eol=lf
+
+# Docker Compose files — LF để docker CLI parse đúng trên mọi OS
+compose*.yaml text eol=lf
+
+# Magento config & template files — LF để tránh lỗi PHP parse trên Linux
+*.phtml text eol=lf
+*.xml   text eol=lf

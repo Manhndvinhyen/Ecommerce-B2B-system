@@ -2,7 +2,7 @@ services:
   app:
     volumes: &appvolumes
       - ./src:/var/www/html:cached
-      - ./src/nginx.conf.sample:/var/www/html/nginx.conf:cached
+      - ./src/nginx.conf:/var/www/html/nginx.conf:cached
     env_file:
       - env/phpfpm.env
       - env/custom.env

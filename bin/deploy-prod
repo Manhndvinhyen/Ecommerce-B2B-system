@@ -21,6 +21,10 @@ git fetch origin "$BRANCH"
 git reset --hard "origin/$BRANCH"
 
 echo ""
+echo "🔑 Fixing file permissions..."
+chmod -R 777 src/app/etc/ 2>/dev/null || true
+
+echo ""
 echo "⚙️  Running Magento setup:upgrade..."
 bin/docker-compose --prod exec -T phpfpm bin/magento setup:upgrade --no-interaction
 

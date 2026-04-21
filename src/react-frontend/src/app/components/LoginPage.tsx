@@ -28,6 +28,17 @@ type LoginApiResponse = {
   token: string;
   customer_id?: number;
   email?: string;
+  full_name?: string;
+  branch_name?: string;
+  redirect_url?: string;
+};
+
+type SessionStartResponse = {
+  success: boolean;
+  message?: string;
+  email?: string;
+  full_name?: string;
+  branch_name?: string;
   redirect_url?: string;
 };
 
@@ -61,7 +72,9 @@ const parseLoginApiResponse = (rawData: unknown): LoginApiResponse | null => {
       token: String(rawData[2] ?? ''),
       customer_id: typeof rawData[3] === 'number' ? rawData[3] : undefined,
       email: typeof rawData[4] === 'string' ? rawData[4] : undefined,
-      redirect_url: typeof rawData[5] === 'string' ? rawData[5] : undefined,
+      full_name: typeof rawData[5] === 'string' ? rawData[5] : undefined,
+      branch_name: typeof rawData[6] === 'string' ? rawData[6] : undefined,
+      redirect_url: typeof rawData[7] === 'string' ? rawData[7] : undefined,
     };
   }
 
@@ -77,6 +90,8 @@ const parseLoginApiResponse = (rawData: unknown): LoginApiResponse | null => {
     token: String(data.token ?? ''),
     customer_id: typeof data.customer_id === 'number' ? data.customer_id : undefined,
     email: typeof data.email === 'string' ? data.email : undefined,
+    full_name: typeof data.full_name === 'string' ? data.full_name : undefined,
+    branch_name: typeof data.branch_name === 'string' ? data.branch_name : undefined,
     redirect_url: typeof data.redirect_url === 'string' ? data.redirect_url : undefined,
   };
 };
@@ -88,6 +103,45 @@ const defaultFormData: LoginFormData = {
   rememberMe: false,
 };
 
+const startCustomerSession = async (token: string, storage: Storage): Promise<string | null> => {
+  if (!token) {
+    return null;
+  }
+
+  const response = await fetch(`${window.location.origin}/tmdt/registration/session`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ token }),
+  });
+
+  const data = (await response.json().catch(() => null)) as SessionStartResponse | null;
+
+  if (!response.ok || !data?.success) {
+    return null;
+  }
+
+  const normalizedEmail = typeof data.email === 'string' ? data.email.trim() : '';
+  const normalizedFullName = typeof data.full_name === 'string' ? data.full_name.trim() : '';
+  const normalizedBranchName = typeof data.branch_name === 'string' ? data.branch_name.trim() : '';
+
+  if (normalizedEmail) {
+    storage.setItem('freso_customer_email', normalizedEmail);
+  }
+
+  if (normalizedFullName) {
+    storage.setItem('freso_customer_name', normalizedFullName);
+  }
+
+  if (normalizedBranchName) {
+    storage.setItem('freso_branch_name', normalizedBranchName);
+  }
+
+  const redirectUrl = typeof data.redirect_url === 'string' ? data.redirect_url.trim() : '';
+  return redirectUrl || null;
+};
+
 export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState<LoginFormData>(defaultFormData);
@@ -96,6 +150,13 @@ export function LoginPage() {
   const [submitError, setSubmitError] = useState('');
   const googleButtonRef = useRef<HTMLDivElement | null>(null);
   const googleClientId = ((import.meta as ImportMeta & { env?: Record<string, string> }).env?.VITE_GOOGLE_CLIENT_ID ?? '').trim();
+
+  const getPostLoginRedirect = (rawRedirectUrl?: string): string => {
+    if (rawRedirectUrl && rawRedirectUrl.trim()) {
+      return rawRedirectUrl;
+    }
+    return '/react/index.html';
+  };
 
   const navigateHome = () => {
     const params = new URLSearchParams(window.location.search);
@@ -167,10 +228,20 @@ export function LoginPage() {
         }
 
         const storage = formData.rememberMe ? window.localStorage : window.sessionStorage;
+        const fallbackEmail = data.email || formData.identifier.trim();
         storage.setItem('freso_customer_token', data.token);
-        storage.setItem('freso_customer_email', data.email || formData.identifier.trim());
+        storage.setItem('freso_customer_email', fallbackEmail);
 
-        window.location.href = data.redirect_url ? data.redirect_url : '/customer/account';
+        if (data.full_name?.trim()) {
+          storage.setItem('freso_customer_name', data.full_name.trim());
+        }
+
+        if (data.branch_name?.trim()) {
+          storage.setItem('freso_branch_name', data.branch_name.trim());
+        }
+
+        const sessionRedirect = await startCustomerSession(data.token, storage);
+        window.location.href = sessionRedirect || getPostLoginRedirect(data.redirect_url);
       })
       .catch((error: unknown) => {
         setSubmitError(error instanceof Error ? error.message : 'Không thể đăng nhập vào hệ thống.');
@@ -220,7 +291,16 @@ export function LoginPage() {
         storage.setItem('freso_customer_token', data.token);
         storage.setItem('freso_customer_email', data.email || '');
 
-        window.location.href = data.redirect_url ? data.redirect_url : '/customer/account';
+        if (data.full_name?.trim()) {
+          storage.setItem('freso_customer_name', data.full_name.trim());
+        }
+
+        if (data.branch_name?.trim()) {
+          storage.setItem('freso_branch_name', data.branch_name.trim());
+        }
+
+        const sessionRedirect = await startCustomerSession(data.token, storage);
+        window.location.href = sessionRedirect || getPostLoginRedirect(data.redirect_url);
       })
       .catch((error: unknown) => {
         setSubmitError(error instanceof Error ? error.message : 'Không thể đăng nhập bằng Google.');

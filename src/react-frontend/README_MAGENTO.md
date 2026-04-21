@@ -36,6 +36,21 @@ Biến môi trường backend cần có (file `env/custom.env`):
 
 - `GOOGLE_OAUTH_CLIENT_ID=...apps.googleusercontent.com`
 
+### Triển khai an toàn, không lộ key khi push
+
+- Tuyệt đối không commit `VITE_GOOGLE_CLIENT_ID` vào source code hoặc file tracked.
+- File `env/custom.env` đã được gitignore ở root repo, nên có thể lưu:
+  - `GOOGLE_OAUTH_CLIENT_ID=...apps.googleusercontent.com`
+- Script `bin/deploy-react` sẽ tự động:
+  - Nạp `env/custom.env` nếu có.
+  - Map `GOOGLE_OAUTH_CLIENT_ID` -> `VITE_GOOGLE_CLIENT_ID` khi build React.
+  - Dừng build nếu thiếu key (tránh deploy lên production nhưng không hiện nút Google).
+
+Gợi ý cho CI/CD production:
+
+- Lưu secret trong hệ thống CI (GitHub Actions/GitLab/Jenkins...), không lưu trong git.
+- Inject biến `VITE_GOOGLE_CLIENT_ID` (hoặc `GOOGLE_OAUTH_CLIENT_ID`) vào bước `bin/deploy-react`.
+
 ## 4) Cấu hình Magento (Docker)
 
 Đảm bảo stack Magento Docker đang chạy và truy cập được:

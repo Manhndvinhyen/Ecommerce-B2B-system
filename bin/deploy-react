@@ -1,16 +1,52 @@
 #!/usr/bin/env bash
 # Build React frontend and serve via nginx at magento.test/
 
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REACT_DIR="$PROJECT_ROOT/src/react-frontend"
+CUSTOM_ENV_FILE="$PROJECT_ROOT/env/custom.env"
+
 echo "🚀 Bắt đầu build React App..."
 
-cd src/react-frontend || { echo "❌ Không tìm thấy thư mục src/react-frontend"; exit 1; }
+cd "$REACT_DIR" || { echo "❌ Không tìm thấy thư mục src/react-frontend"; exit 1; }
 
 echo "📦 Cài đặt thư viện NPM..."
 npm install
 
+HOST_UID="$(id -u)"
+HOST_GID="$(id -g)"
+
+if [[ -x "$PROJECT_ROOT/bin/root" ]]; then
+  echo "🔧 Đồng bộ quyền ghi thư mục src/pub/react..."
+  (
+    cd "$PROJECT_ROOT"
+    bin/root sh -lc "mkdir -p /var/www/html/pub/react && chown -R ${HOST_UID}:${HOST_GID} /var/www/html/pub/react"
+  ) || true
+fi
+
 if [ ! -f ".env" ]; then
     echo "⚠️ Không tìm thấy file .env, đang tự động tạo từ .env.example..."
     cp .env.example .env
+fi
+
+if [[ -z "${VITE_GOOGLE_CLIENT_ID:-}" && -f "$CUSTOM_ENV_FILE" ]]; then
+  echo "🔐 Nạp biến môi trường local từ env/custom.env (không commit)"
+  # shellcheck disable=SC1090
+  set -a
+  source "$CUSTOM_ENV_FILE"
+  set +a
+fi
+
+if [[ -z "${VITE_GOOGLE_CLIENT_ID:-}" && -n "${GOOGLE_OAUTH_CLIENT_ID:-}" ]]; then
+  export VITE_GOOGLE_CLIENT_ID="$GOOGLE_OAUTH_CLIENT_ID"
+fi
+
+if [[ -z "${VITE_GOOGLE_CLIENT_ID:-}" ]]; then
+  echo "❌ Thiếu VITE_GOOGLE_CLIENT_ID (hoặc GOOGLE_OAUTH_CLIENT_ID) nên không build được nút đăng nhập Google."
+  echo "👉 Cách an toàn: lưu GOOGLE_OAUTH_CLIENT_ID trong env/custom.env (đã gitignore) hoặc set secret CI/CD."
+  exit 1
 fi
 
 echo "🛠️ Build ứng dụng React..."
@@ -20,7 +56,7 @@ npm run build
 echo "✅ Build xong: src/pub/react/"
 
 echo "🔄 Reload nginx..."
-cd ../../
+cd "$PROJECT_ROOT"
 NGINX_CONTAINER=$(docker ps --filter "label=com.docker.compose.service=app" --format "{{.ID}}" | head -1)
 if [ -n "$NGINX_CONTAINER" ]; then
   docker exec "$NGINX_CONTAINER" nginx -s reload

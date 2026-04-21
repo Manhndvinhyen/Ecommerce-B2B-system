@@ -16,17 +16,33 @@ fi
 echo "🛠️ Build ứng dụng React..."
 npm run build
 
-echo "📁 Đồng bộ dist vào runtime /pub/react..."
-rm -rf ../pub/react
-mkdir -p ../pub/react
-cp -R dist/. ../pub/react/
-echo "✅ Synced dist to runtime: src/pub/react"
+BUILD_OUTPUT_DIR="../pub/react"
+if [ ! -f "$BUILD_OUTPUT_DIR/.vite/manifest.json" ]; then
+    if [ -f "dist/.vite/manifest.json" ]; then
+        BUILD_OUTPUT_DIR="dist"
+    else
+        echo "❌ Không tìm thấy build output hợp lệ (.vite/manifest.json)."
+        echo "   Đã kiểm tra: ../pub/react và dist"
+        exit 1
+    fi
+fi
+
+if [ "$BUILD_OUTPUT_DIR" = "dist" ]; then
+    echo "📁 Đồng bộ dist vào runtime /pub/react..."
+    rm -rf ../pub/react
+    mkdir -p ../pub/react
+    cp -R dist/. ../pub/react/
+    echo "✅ Synced dist to runtime: src/pub/react"
+else
+    echo "📁 Vite đã build trực tiếp vào runtime: src/pub/react"
+fi
 
 echo "� Đồng bộ UI bundle vào thư mục Magento Theme..."
 if command -v node &> /dev/null; then
-    MAGENTO_THEME_DIR=../app/design/frontend/Magento/luma node scripts/magento-sync.mjs
+    MAGENTO_THEME_DIR=../app/design/frontend/Magento/luma REACT_BUILD_OUTPUT_DIR="$BUILD_OUTPUT_DIR" node scripts/magento-sync.mjs
 else
     export MAGENTO_THEME_DIR="../app/design/frontend/Magento/luma"
+    export REACT_BUILD_OUTPUT_DIR="$BUILD_OUTPUT_DIR"
     node.exe scripts/magento-sync.mjs
 fi
 

@@ -21,6 +21,20 @@ Tạo file `.env` từ `.env.example`:
 
 - `VITE_MAGENTO_URL`: URL Magento expose từ Docker (ví dụ `http://localhost:8080`).
 - `VITE_MAGENTO_STORE_CODE`: để trống nếu dùng default store; điền `default` nếu hệ thống yêu cầu.
+- `VITE_GOOGLE_CLIENT_ID`: Google OAuth Web Client ID để bật nút đăng nhập Google ở trang login.
+
+### Google Login (B2B)
+
+- Frontend gọi endpoint: `/rest/V1/tmdt-registration/google-login`.
+- Backend chỉ cho đăng nhập nếu:
+  - Google ID token hợp lệ.
+  - `email_verified = true`.
+  - Email Google trùng email đã đăng ký trong bảng B2B (`tmdt_customer_registration`) theo `login_code`.
+- Khi dùng Google login, người dùng vẫn cần nhập `Mã nhà hàng` trước khi bấm nút Google.
+
+Biến môi trường backend cần có (file `env/custom.env`):
+
+- `GOOGLE_OAUTH_CLIENT_ID=...apps.googleusercontent.com`
 
 ## 4) Cấu hình Magento (Docker)
 

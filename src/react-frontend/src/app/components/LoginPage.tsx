@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ArrowRight,
   ChevronLeft,
@@ -31,6 +31,56 @@ type LoginApiResponse = {
   redirect_url?: string;
 };
 
+type GoogleCredentialResponse = {
+  credential?: string;
+};
+
+type GoogleAccountsId = {
+  initialize: (config: {
+    client_id: string;
+    callback: (response: GoogleCredentialResponse) => void;
+    auto_select?: boolean;
+    cancel_on_tap_outside?: boolean;
+  }) => void;
+  renderButton: (element: HTMLElement, options: Record<string, string>) => void;
+};
+
+type GoogleWindow = Window & {
+  google?: {
+    accounts?: {
+      id?: GoogleAccountsId;
+    };
+  };
+};
+
+const parseLoginApiResponse = (rawData: unknown): LoginApiResponse | null => {
+  if (Array.isArray(rawData)) {
+    return {
+      success: Boolean(rawData[0]),
+      message: String(rawData[1] ?? ''),
+      token: String(rawData[2] ?? ''),
+      customer_id: typeof rawData[3] === 'number' ? rawData[3] : undefined,
+      email: typeof rawData[4] === 'string' ? rawData[4] : undefined,
+      redirect_url: typeof rawData[5] === 'string' ? rawData[5] : undefined,
+    };
+  }
+
+  if (!rawData || typeof rawData !== 'object') {
+    return null;
+  }
+
+  const data = rawData as Partial<LoginApiResponse>;
+
+  return {
+    success: Boolean(data.success),
+    message: String(data.message ?? ''),
+    token: String(data.token ?? ''),
+    customer_id: typeof data.customer_id === 'number' ? data.customer_id : undefined,
+    email: typeof data.email === 'string' ? data.email : undefined,
+    redirect_url: typeof data.redirect_url === 'string' ? data.redirect_url : undefined,
+  };
+};
+
 const defaultFormData: LoginFormData = {
   restaurantCode: '',
   identifier: '',
@@ -42,7 +92,10 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState<LoginFormData>(defaultFormData);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const googleButtonRef = useRef<HTMLDivElement | null>(null);
+  const googleClientId = ((import.meta as ImportMeta & { env?: Record<string, string> }).env?.VITE_GOOGLE_CLIENT_ID ?? '').trim();
 
   const navigateHome = () => {
     const params = new URLSearchParams(window.location.search);
@@ -107,16 +160,7 @@ export function LoginPage() {
     })
       .then(async (response) => {
         const rawData = await response.json().catch(() => null);
-        const data: LoginApiResponse | null = Array.isArray(rawData)
-          ? {
-              success: Boolean(rawData[0]),
-              message: String(rawData[1] ?? ''),
-              token: String(rawData[2] ?? ''),
-              customer_id: typeof rawData[3] === 'number' ? rawData[3] : undefined,
-              email: typeof rawData[4] === 'string' ? rawData[4] : undefined,
-              redirect_url: typeof rawData[5] === 'string' ? rawData[5] : undefined,
-            }
-          : rawData;
+        const data = parseLoginApiResponse(rawData);
 
         if (!response.ok || data?.success === false || !data?.token) {
           throw new Error(data?.message || 'Thông tin đăng nhập không hợp lệ.');
@@ -135,6 +179,115 @@ export function LoginPage() {
         setIsSubmitting(false);
       });
   };
+
+  const handleGoogleCredential = (response: GoogleCredentialResponse) => {
+    const idToken = response.credential?.trim() ?? '';
+
+    if (!idToken) {
+      setSubmitError('Không thể lấy thông tin đăng nhập từ Google.');
+      return;
+    }
+
+    if (!formData.restaurantCode.trim()) {
+      setSubmitError('Vui lòng nhập Mã nhà hàng trước khi đăng nhập Google.');
+      return;
+    }
+
+    setIsGoogleSubmitting(true);
+    setSubmitError('');
+
+    fetch(`${window.location.origin}/rest/V1/tmdt-registration/google-login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        payload: {
+          restaurantCode: formData.restaurantCode.trim(),
+          googleIdToken: idToken,
+        },
+      }),
+    })
+      .then(async (responseData) => {
+        const rawData = await responseData.json().catch(() => null);
+        const data = parseLoginApiResponse(rawData);
+
+        if (!responseData.ok || data?.success === false || !data?.token) {
+          throw new Error(data?.message || 'Đăng nhập Google không thành công.');
+        }
+
+        const storage = formData.rememberMe ? window.localStorage : window.sessionStorage;
+        storage.setItem('freso_customer_token', data.token);
+        storage.setItem('freso_customer_email', data.email || '');
+
+        window.location.href = data.redirect_url ? data.redirect_url : '/customer/account';
+      })
+      .catch((error: unknown) => {
+        setSubmitError(error instanceof Error ? error.message : 'Không thể đăng nhập bằng Google.');
+      })
+      .finally(() => {
+        setIsGoogleSubmitting(false);
+      });
+  };
+
+  useEffect(() => {
+    if (!googleClientId || !googleButtonRef.current) {
+      return;
+    }
+
+    const windowRef = window as GoogleWindow;
+    const mountGoogleButton = () => {
+      const googleId = windowRef.google?.accounts?.id;
+      if (!googleId || !googleButtonRef.current) {
+        return;
+      }
+
+      googleId.initialize({
+        client_id: googleClientId,
+        callback: handleGoogleCredential,
+        auto_select: false,
+        cancel_on_tap_outside: true,
+      });
+
+      googleButtonRef.current.innerHTML = '';
+      googleId.renderButton(googleButtonRef.current, {
+        theme: 'outline',
+        size: 'large',
+        text: 'signin_with',
+        shape: 'pill',
+        width: '360',
+      });
+    };
+
+    if (windowRef.google?.accounts?.id) {
+      mountGoogleButton();
+      return;
+    }
+
+    const scriptId = 'google-identity-services-sdk';
+    const existingScript = document.getElementById(scriptId) as HTMLScriptElement | null;
+    if (existingScript) {
+      existingScript.addEventListener('load', mountGoogleButton);
+      return () => {
+        existingScript.removeEventListener('load', mountGoogleButton);
+      };
+    }
+
+    const script = document.createElement('script');
+    script.id = scriptId;
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.addEventListener('load', mountGoogleButton);
+    script.addEventListener('error', () => {
+      setSubmitError('Không thể tải Google Sign-In. Vui lòng thử lại sau.');
+    });
+    document.head.appendChild(script);
+
+    return () => {
+      script.removeEventListener('load', mountGoogleButton);
+    };
+  }, [googleClientId]);
 
   return (
     <div className="flex flex-col min-h-screen bg-white text-[#333]">
@@ -264,12 +417,31 @@ export function LoginPage() {
                   <div className="pt-2">
                     <button
                       type="submit"
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || isGoogleSubmitting}
                       className="group w-full py-5 bg-[#00b14f] hover:bg-[#009642] disabled:bg-green-300 text-white font-extrabold rounded-full transition-all shadow-xl shadow-green-200/50 text-[17px] active:scale-[0.98] disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                       {isSubmitting ? 'Đang đăng nhập...' : 'Đăng nhập'}
                       {!isSubmitting && <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />}
                     </button>
+                  </div>
+
+                  <div className="relative py-1">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t border-gray-100" />
+                    </div>
+                    <div className="relative flex justify-center">
+                      <span className="bg-white px-4 text-[12px] font-semibold text-gray-400 uppercase tracking-wide">Hoặc</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {googleClientId ? (
+                      <div className="w-full flex justify-center" ref={googleButtonRef} />
+                    ) : (
+                      <p className="text-[12px] text-center text-amber-600 font-medium">Thiếu cấu hình VITE_GOOGLE_CLIENT_ID cho nút đăng nhập Google.</p>
+                    )}
+
+                    {isGoogleSubmitting && <p className="text-[12px] text-center text-gray-500 font-medium">Đang xác thực tài khoản Google...</p>}
                   </div>
                 </form>
 

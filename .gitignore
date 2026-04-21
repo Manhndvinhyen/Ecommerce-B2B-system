@@ -111,3 +111,6 @@ src/pub/media/catalog/product/t/o/tom-su.jpg
 src/pub/media/catalog/product/t/o/tomato_1.jpg
 src/pub/media/catalog/product/t/r/trung-ga-ta.jpg
 src/pub/media/catalog/product/x/u/xuc-xich-hun-khoi.jpg
+
+# Generated resized images
+src/pub/media/catalog/product/cache/**/*.jpg

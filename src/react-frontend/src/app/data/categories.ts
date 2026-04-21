@@ -150,5 +150,5 @@ export const getCategoryPageLink = (category: string, subcategory?: string) => {
     params.set('subcategory', toQuerySlug(subcategory));
   }
 
-  return `./index.html?${params.toString()}`;
+  return `/react/index.html?${params.toString()}`;
 };

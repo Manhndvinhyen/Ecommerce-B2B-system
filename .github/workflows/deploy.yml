@@ -17,5 +17,10 @@ jobs:
           key: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
           script: |
             cd ~/B2B
-            bin/deploy-prod manh-docker
+            git fetch origin manh-docker
+            git reset --hard origin/manh-docker
+            chmod -R 777 src/app/etc/
+            bin/docker-compose --prod exec -T phpfpm bin/magento setup:upgrade --no-interaction
+            bin/docker-compose --prod exec -T phpfpm bin/magento cache:flush
+            bin/deploy-react
           command_timeout: 10m

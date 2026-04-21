@@ -11,20 +11,27 @@ import { Footer } from './components/Footer';
 import { ChatbotWidget } from './components/ChatbotWidget';
 import { ProductCategoryPage } from './components/ProductCategoryPage';
 import { RegisterPage } from './components/RegisterPage';
+import { ShoppingCartPage } from './components/ShoppingCartPage';
 import { LoginPage } from './components/LoginPage';
 import { getCategoryNameFromQuery, getSubcategoryNameFromQuery } from './data/categories';
+import { CartProvider } from './cart/CartProvider';
 
-export default function App() {
+function AppContent() {
   const params = new URLSearchParams(window.location.search);
   const view = params.get('view');
   const category = getCategoryNameFromQuery(params.get('category'));
   const subcategory = getSubcategoryNameFromQuery(category, params.get('subcategory'));
   const isCategoryView = view === 'category';
   const isRegisterView = view === 'register';
+  const isCartView = view === 'cart';
   const isLoginView = view === 'login';
 
   if (isRegisterView) {
     return <RegisterPage />;
+  }
+
+  if (isCartView) {
+    return <ShoppingCartPage />;
   }
 
   if (isLoginView) {
@@ -53,5 +60,13 @@ export default function App() {
       <Footer />
       <ChatbotWidget />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <CartProvider>
+      <AppContent />
+    </CartProvider>
   );
 }

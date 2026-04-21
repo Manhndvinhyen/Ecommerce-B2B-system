@@ -1,8 +1,10 @@
 import { Facebook, Instagram, Youtube, Mail, Phone, MapPin } from 'lucide-react';
 
 export function Footer() {
+  const reactHomePath = '/react/index.html';
+
   return (
-    <footer className="bg-gray-900 text-gray-300 pt-16 pb-8">
+    <footer id="lien-he" className="bg-gray-900 text-gray-300 pt-16 pb-8">
       <div className="container mx-auto px-4">
         <div className="grid md:grid-cols-4 gap-8 mb-12">
           {/* Company Info */}
@@ -12,13 +14,13 @@ export function Footer() {
               Nền tảng giao hàng thực phẩm tươi sống hàng đầu Việt Nam
             </p>
             <div className="flex gap-3">
-              <a href="/contact" className="bg-gray-800 p-2 rounded-full hover:bg-green-600 transition-colors">
+              <a href={`${reactHomePath}#lien-he`} className="bg-gray-800 p-2 rounded-full hover:bg-green-600 transition-colors">
                 <Facebook className="size-5" />
               </a>
-              <a href="/contact" className="bg-gray-800 p-2 rounded-full hover:bg-green-600 transition-colors">
+              <a href={`${reactHomePath}#lien-he`} className="bg-gray-800 p-2 rounded-full hover:bg-green-600 transition-colors">
                 <Instagram className="size-5" />
               </a>
-              <a href="/contact" className="bg-gray-800 p-2 rounded-full hover:bg-green-600 transition-colors">
+              <a href={`${reactHomePath}#lien-he`} className="bg-gray-800 p-2 rounded-full hover:bg-green-600 transition-colors">
                 <Youtube className="size-5" />
               </a>
             </div>
@@ -29,17 +31,17 @@ export function Footer() {
             <h3 className="text-white font-bold mb-4">Liên kết nhanh</h3>
             <ul className="space-y-2">
               <li>
-                <a href="/contact" className="hover:text-green-500 transition-colors">
+                <a href={`${reactHomePath}#ve-chung-toi`} className="hover:text-green-500 transition-colors">
                   Về chúng tôi
                 </a>
               </li>
               <li>
-                <a href="/#san-pham-hien-thi" className="hover:text-green-500 transition-colors">
+                <a href={`${reactHomePath}#san-pham-hien-thi`} className="hover:text-green-500 transition-colors">
                   Sản phẩm
                 </a>
               </li>
               <li>
-                <a href="/contact" className="hover:text-green-500 transition-colors">
+                <a href={`${reactHomePath}#lien-he`} className="hover:text-green-500 transition-colors">
                   Liên hệ
                 </a>
               </li>
@@ -51,7 +53,7 @@ export function Footer() {
             <h3 className="text-white font-bold mb-4">Hỗ trợ</h3>
             <ul className="space-y-2">
               <li>
-                <a href="/contact" className="hover:text-green-500 transition-colors">
+                <a href={`${reactHomePath}#lien-he`} className="hover:text-green-500 transition-colors">
                   Câu hỏi thường gặp
                 </a>
               </li>

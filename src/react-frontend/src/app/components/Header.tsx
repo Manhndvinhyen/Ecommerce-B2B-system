@@ -1,16 +1,19 @@
 import { useState } from 'react';
 import { ShoppingCart, User, Menu, Search, ChevronRight, Heart } from 'lucide-react';
 import { categoryMenu, getCategoryPageLink } from '../data/categories';
+import { useCart } from '../cart/CartProvider';
 
 export function Header() {
+  const { cartItemCount } = useCart();
   const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState(categoryMenu[0].name);
   const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
+  const reactHomePath = '/react/index.html';
   const registerParams = new URLSearchParams(window.location.search);
   registerParams.set('view', 'register');
   registerParams.delete('category');
   registerParams.delete('subcategory');
-  const registerHref = `${window.location.pathname}?${registerParams.toString()}`;
+  const registerHref = `${reactHomePath}?${registerParams.toString()}`;
 
   const loginParams = new URLSearchParams(window.location.search);
   loginParams.set('view', 'login');
@@ -32,7 +35,7 @@ export function Header() {
             <a href={registerHref} className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors">
               Đăng ký
             </a>
-            <a href="/contact" className="px-4 py-1.5 text-sm border-2 border-orange-500 text-orange-500 rounded-full hover:bg-orange-50 transition-colors whitespace-nowrap">
+            <a href="/react/index.html?view=register" className="px-4 py-1.5 text-sm border-2 border-orange-500 text-orange-500 rounded-full hover:bg-orange-50 transition-colors whitespace-nowrap">
               Đăng ký bán hàng
             </a>
           </div>
@@ -45,7 +48,7 @@ export function Header() {
           <div className="flex items-center justify-between gap-4">
             {/* Logo */}
             <div className="flex items-center gap-8">
-              <a href="/" className="text-2xl font-bold text-green-600">
+              <a href={reactHomePath} className="text-2xl font-bold text-green-600">
                 Freso
               </a>
               
@@ -109,10 +112,10 @@ export function Header() {
                     </div>
                   )}
                 </div>
-                <a href="/contact" className="text-gray-700 hover:text-green-600 transition-colors">
+                <a href="/react/index.html#ve-chung-toi" className="text-gray-700 hover:text-green-600 transition-colors">
                   Về chúng tôi
                 </a>
-                <a href="/contact" className="text-gray-700 hover:text-green-600 transition-colors">
+                <a href="/react/index.html#lien-he" className="text-gray-700 hover:text-green-600 transition-colors">
                   Liên hệ
                 </a>
               </nav>
@@ -171,10 +174,10 @@ export function Header() {
                   </div>
                 )}
               </div>
-              <a href="/checkout/cart" className="relative p-2 hover:bg-gray-100 rounded-full transition-colors">
+              <a id="header-cart-icon" href="/checkout/cart" className="relative p-2 hover:bg-gray-100 rounded-full transition-colors">
                 <ShoppingCart className="size-6 text-gray-700" />
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full size-5 flex items-center justify-center">
-                  0
+                  {cartItemCount}
                 </span>
               </a>
               <button className="md:hidden p-2 hover:bg-gray-100 rounded-full transition-colors">

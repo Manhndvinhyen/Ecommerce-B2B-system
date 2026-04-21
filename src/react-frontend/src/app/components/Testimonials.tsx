@@ -26,7 +26,7 @@ const testimonials = [
 
 export function Testimonials() {
   return (
-    <section className="py-16 bg-gradient-to-br from-green-50 to-emerald-50">
+    <section id="ve-chung-toi" className="py-16 bg-gradient-to-br from-green-50 to-emerald-50">
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">

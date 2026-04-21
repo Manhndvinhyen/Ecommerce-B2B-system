@@ -21,11 +21,12 @@ export function ProductsPage() {
   const registerHref = `${window.location.pathname}?${registerParams.toString()}`;
 
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const reactHomePath = '/react/index.html';
 
   const activeCategoryData = categories.find((category) => category.name === activeCategory);
 
   return (
-    <section className="py-6 bg-gray-50">
+    <section id="san-pham-hien-thi" className="py-6 bg-gray-50">
       <div className="container mx-auto px-4">
         <div className="grid grid-cols-1 lg:grid-cols-[23%_49%_28%] xl:grid-cols-[24%_47%_29%] gap-5 items-stretch">
           {/* Category Sidebar - Left */}
@@ -148,7 +149,7 @@ export function ProductsPage() {
                   <h3 className="text-2xl font-bold leading-tight">Hóa đơn VAT điện tử</h3>
                   <p className="text-sm opacity-95 mt-2">Xuất đầy đủ cho mọi đơn hàng</p>
                 </div>
-                <a href="/contact" className="mt-4 bg-white text-teal-700 px-4 py-2 rounded-full text-sm font-semibold hover:bg-teal-50 transition-colors inline-flex items-center gap-1.5 w-fit">
+                <a href={`${reactHomePath}#ve-chung-toi`} className="mt-4 bg-white text-teal-700 px-4 py-2 rounded-full text-sm font-semibold hover:bg-teal-50 transition-colors inline-flex items-center gap-1.5 w-fit">
                   Xem chi tiết
                   <ChevronRight className="size-4" />
                 </a>

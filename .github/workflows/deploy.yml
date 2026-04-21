@@ -2,7 +2,7 @@ name: Deploy to Production
 
 on:
   push:
-    branches: [manh-docker]
+    branches: [manh]
 
 jobs:
   deploy:
@@ -17,8 +17,8 @@ jobs:
           key: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
           script: |
             cd ~/B2B
-            git fetch origin manh-docker
-            git reset --hard origin/manh-docker
+            git fetch origin manh
+            git reset --hard origin/manh
             chmod -R 777 src/app/etc/
             bin/docker-compose --prod exec -T phpfpm bin/magento setup:upgrade --no-interaction
             bin/docker-compose --prod exec -T phpfpm bin/magento cache:flush

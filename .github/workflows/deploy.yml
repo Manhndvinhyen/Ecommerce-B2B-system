@@ -1,0 +1,26 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [manh]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to GCP VM
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.GCP_VM_IP }}
+          username: ${{ secrets.GCP_VM_USER }}
+          key: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
+          script: |
+            cd ~/B2B
+            git fetch origin manh
+            git reset --hard origin/manh
+            chmod -R 777 src/app/etc/
+            bin/docker-compose --prod exec -T phpfpm bin/magento setup:upgrade --no-interaction
+            bin/docker-compose --prod exec -T phpfpm bin/magento cache:flush
+            bin/deploy-react
+          command_timeout: 10m

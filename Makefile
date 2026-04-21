@@ -72,6 +72,10 @@ help:
 	@echo "$(call format,rootnotty,'Run any CLI command as root with no TTY.')"
 	@echo "$(call format,setup,'Run the Magento setup process$(comma) with optional domain name.')"
 	@echo "$(call format,setup-env,'Copy env.php.sample and custom.env.sample to create local config files.')"
+	@echo "$(call format,post-pull,'Run after every git pull: setup:upgrade$(comma) cache:flush$(comma) deploy-react.')"
+	@echo "$(call format,prod-start,'Start production stack (no dev services$(comma) tuned resources).')"
+	@echo "$(call format,prod-stop,'Stop production stack.')"
+	@echo "$(call format,prod-deploy,'Pull latest code and redeploy on production server.')"
 	@echo "$(call format,setup-db,'Import database from dump/magento.sql.gz and flush cache.')"
 	@echo "$(call format,setup-composer-auth,'Setup authentication credentials for Composer.')"
 	@echo "$(call format,setup-domain,'Setup Magento domain name.')"
@@ -248,11 +252,36 @@ setup-env:
 	else \
 		echo "env/custom.env already exists, skipping"; \
 	fi
+	@if [ ! -f env/magento.env ]; then \
+		cp env/magento.env.sample env/magento.env; \
+		echo "Created env/magento.env from sample"; \
+		echo "ACTION REQUIRED: Edit env/magento.env and set admin credentials"; \
+	else \
+		echo "env/magento.env already exists, skipping"; \
+	fi
+	@mkdir -p src/generated src/var src/pub/static src/pub/media
 	@echo ""
 	@echo "Next steps:"
 	@echo "  1. Edit env/custom.env and set GEMINI_API_KEY"
-	@echo "  2. Start containers: bin/start"
-	@echo "  3. Import database: make setup-db"
+	@echo "  2. Edit env/magento.env and set admin credentials"
+	@echo "  3. Start containers: bin/start"
+	@echo "  4. Import database: make setup-db"
+
+post-pull:
+	@echo "Running post-pull tasks..."
+	@./bin/clinotty bin/magento setup:upgrade --no-interaction
+	@./bin/clinotty bin/magento cache:flush
+	@./bin/deploy-react
+	@echo "Done."
+
+prod-start:
+	@./bin/docker-compose --prod up -d --remove-orphans
+
+prod-stop:
+	@./bin/docker-compose --prod down
+
+prod-deploy:
+	@./bin/deploy-prod $(call args)
 
 setup-db:
 	@echo "Importing database from dump/magento.sql.gz..."

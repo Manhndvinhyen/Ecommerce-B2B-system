@@ -1,0 +1,76 @@
+## Production-only Docker Compose configuration
+## Usage: bin/docker-compose --prod up -d
+##        or: make prod-start
+##
+## Differences from dev:
+##   - No phpmyadmin, mailcatcher, react builder (dev-only services)
+##   - No internal ports exposed (secured by GCP firewall)
+##   - OpenSearch heap limited to 512MB (fits 8GB VM)
+##   - All services restart automatically on failure
+
+services:
+  app:
+    image: markoshust/magento-nginx:1.24-0
+    ports:
+      - "80:8000"
+      - "443:8443"
+    volumes: &appvolumes
+      - ./src:/var/www/html:cached
+      - ./src/nginx.conf:/var/www/html/nginx.conf:cached
+      - sockdata:/sock
+      - ssldata:/etc/nginx/certs
+    env_file:
+      - env/phpfpm.env
+      - env/custom.env
+    restart: unless-stopped
+    depends_on:
+      - phpfpm
+      - db
+      - redis
+      - opensearch
+
+  phpfpm:
+    image: markoshust/magento-php:8.4-fpm-0
+    volumes: *appvolumes
+    env_file:
+      - env/phpfpm.env
+      - env/custom.env
+    restart: unless-stopped
+
+  db:
+    image: mariadb:11.4
+    command:
+      --max_allowed_packet=64M
+      --optimizer_use_condition_selectivity=1
+      --optimizer_switch="rowid_filter=off"
+      --log_bin_trust_function_creators=1
+    env_file: env/db.env
+    volumes:
+      - dbdata:/var/lib/mysql
+    restart: unless-stopped
+
+  redis:
+    image: valkey/valkey:8.1-alpine
+    restart: unless-stopped
+
+  opensearch:
+    image: markoshust/magento-opensearch:2.12-0
+    env_file: env/opensearch.env
+    environment:
+      - "discovery.type=single-node"
+      - "cluster.routing.allocation.disk.threshold_enabled=false"
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+    restart: unless-stopped
+
+  rabbitmq:
+    image: markoshust/magento-rabbitmq:4.1-0
+    volumes:
+      - rabbitmqdata:/var/lib/rabbitmq
+    env_file: env/rabbitmq.env
+    restart: unless-stopped
+
+volumes:
+  dbdata:
+  rabbitmqdata:
+  sockdata:
+  ssldata:

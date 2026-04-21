@@ -3,3 +3,4 @@ dist/
 .env.sync.local
 .DS_Store
 .env.local
+index.html

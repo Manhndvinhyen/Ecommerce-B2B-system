@@ -7,6 +7,7 @@ import {
   getSubcategoryNameFromQuery,
   toQuerySlug
 } from '../data/categories';
+import { toCurrencyTextFromLooseValue, toUnitPriceFromLooseValue, useCart } from '../cart/CartProvider';
 
 type ProductItem = {
   id: string | number;
@@ -169,6 +170,20 @@ const formatPrice = (value?: number) => {
   return new Intl.NumberFormat('vi-VN').format(value);
 };
 
+const inferUnitByCategory = (categoryName: string) => {
+  const normalized = toQuerySlug(categoryName);
+
+  if (normalized.includes('tien-ich-bep')) {
+    return 'bộ';
+  }
+
+  if (normalized.includes('thuc-pham-kho')) {
+    return 'gói';
+  }
+
+  return 'kg';
+};
+
 const fallbackImageByCategory: Record<string, string> = {
   'Rau củ quả': 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&h=500&fit=crop',
   'Trái cây': 'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=500&h=500&fit=crop',
@@ -188,6 +203,7 @@ let cachedCategoryLookup: Record<string, number> | null = null;
 const productsResponseCache = new Map<string, ProductItem[]>();
 
 export function ProductCategoryPage({ categoryName, initialSubcategory }: ProductCategoryPageProps) {
+  const { openAddToCartModal } = useCart();
   const category = useMemo(() => {
     return categoryMenu.find((item) => item.name === categoryName) ?? categoryMenu[0];
   }, [categoryName]);
@@ -437,7 +453,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
               sku: item.sku,
               name: item.name,
               price: formatPrice(item.price_range?.minimum_price?.final_price?.value),
-              unit: 'SP',
+              unit: inferUnitByCategory(inferred?.category ?? category.name),
               image: !imageUrl || isPlaceholderImage ? fallbackImage : imageUrl,
               categoryLabel: getCategoryDisplayLabel(item)
             };
@@ -477,7 +493,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
   const breadcrumbItems = [
     {
       label: 'Trang chủ',
-      href: './index.html'
+      href: '/'
     },
     {
       label: category.name,
@@ -585,6 +601,19 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
                       <button
                         type="button"
                         className="rounded-full p-1.5 transition-colors bg-transparent text-gray-400 hover:bg-gray-100 hover:text-green-600"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          const sourceImage = event.currentTarget.closest('article')?.querySelector('img');
+                          openAddToCartModal({
+                            id: String(product.id),
+                            name: product.name,
+                            category: product.categoryLabel,
+                            priceText: toCurrencyTextFromLooseValue(product.price),
+                            unit: product.unit,
+                            unitPrice: toUnitPriceFromLooseValue(product.price),
+                            image: product.image,
+                          }, sourceImage);
+                        }}
                         aria-label={`Thêm ${product.name} vào giỏ`}
                       >
                         <ShoppingCart className="size-4" />
@@ -592,7 +621,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
                     </div>
                     <div className="flex flex-col gap-1">
                       <p className="text-red-500 font-bold">{product.price} đ</p>
-                      <p className="text-xs text-gray-500">({product.unit}) - Dữ liệu từ database</p>
+                      <p className="text-xs text-gray-500">({product.unit})</p>
                     </div>
                   </div>
                 </article>

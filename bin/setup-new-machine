@@ -23,22 +23,22 @@ echo "▶ [1/8] Kiểm tra cấu hình secrets..."
 if [ ! -f "env/custom.env" ]; then
     echo "   Không tìm thấy env/custom.env. Đang tạo từ template..."
     cp env/custom.env.sample env/custom.env
-    echo ""
-    echo "   ⚠️  QUAN TRỌNG: Hãy mở file env/custom.env và điền GEMINI_API_KEY trước khi tiếp tục."
-    echo "   Sau đó chạy lại: bin/setup-new-machine ${DOMAIN}"
-    echo ""
-    exit 1
 fi
 
-if grep -q "YOUR_GEMINI_API_KEY_HERE" env/custom.env; then
+# Hỏi GEMINI_API_KEY nếu chưa có hoặc còn là placeholder
+CURRENT_KEY=$(grep -E "^GEMINI_API_KEY=" env/custom.env | cut -d'=' -f2 | xargs)
+if [ -z "$CURRENT_KEY" ] || echo "$CURRENT_KEY" | grep -qi "YOUR_\|PLACEHOLDER\|example\|changeme"; then
     echo ""
-    echo "   ⚠️  env/custom.env vẫn chứa giá trị mặc định từ template."
-    echo "   Hãy điền GEMINI_API_KEY thực tế vào file env/custom.env."
-    echo "   (Bỏ qua nếu bạn không dùng Chatbot — xóa dòng đó hoặc để trống)"
-    echo ""
-    read -rp "   Tiếp tục mà không có Gemini API key? [y/N] " confirm
-    [[ ! "$confirm" =~ ^[Yy]$ ]] && echo "Đã huỷ." && exit 1
+    echo "   Chatbot AI cần GEMINI_API_KEY (Google AI Studio: aistudio.google.com)"
+    read -rp "   Nhập GEMINI_API_KEY (Enter để bỏ qua nếu không dùng chatbot): " INPUT_KEY
+    if [ -n "$INPUT_KEY" ]; then
+        sed -i "s|^GEMINI_API_KEY=.*|GEMINI_API_KEY=${INPUT_KEY}|" env/custom.env
+        echo "   ✅ Đã ghi GEMINI_API_KEY vào env/custom.env"
+    else
+        echo "   ⚠️  Bỏ qua — Chatbot sẽ không hoạt động."
+    fi
 fi
+echo "   ✅ env/custom.env OK"
 
 # ─────────────────────────────────────────────
 # BƯỚC 2: Kiểm tra file env.php
@@ -130,7 +130,7 @@ echo "   ✅ Build hoàn tất."
 # ─────────────────────────────────────────────
 # BƯỚC 8: SSL và domain
 # ─────────────────────────────────────────────
-echo "▶ [8/8] Cấu hình SSL certificate cho ${DOMAIN}..."
+echo "▶ [8/9] Cấu hình SSL certificate cho ${DOMAIN}..."
 
 # Restart với dev config để load volume mounts đúng
 bin/stop
@@ -138,6 +138,13 @@ bin/start
 bin/setup-ssl "${DOMAIN}"
 bin/fixowns
 bin/fixperms
+
+# ─────────────────────────────────────────────
+# BƯỚC 9: Build React frontend
+# ─────────────────────────────────────────────
+echo "▶ [9/9] Build React frontend..."
+bin/deploy-react
+echo "   ✅ React đã được build và nginx đã reload."
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"

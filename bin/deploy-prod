@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# bin/deploy-prod — Production deployment script
+# Run on GCP VM after every git pull to update the live site
+#
+# Usage:
+#   bin/deploy-prod              → pull from current branch
+#   bin/deploy-prod main         → pull from specific branch
+
+set -o errexit
+
+BRANCH="${1:-$(git rev-parse --abbrev-ref HEAD)}"
+
+echo "========================================"
+echo " Production Deployment"
+echo " Branch: $BRANCH"
+echo "========================================"
+
+echo ""
+echo "📥 Pulling latest code from $BRANCH..."
+git fetch origin "$BRANCH"
+git reset --hard "origin/$BRANCH"
+
+echo ""
+echo "🔑 Fixing file permissions..."
+chmod -R 777 src/app/etc/ 2>/dev/null || true
+
+echo ""
+echo "⚙️  Running Magento setup:upgrade..."
+bin/docker-compose --prod exec -T phpfpm bin/magento setup:upgrade --no-interaction
+
+echo ""
+echo "🗑️  Flushing cache..."
+bin/docker-compose --prod exec -T phpfpm bin/magento cache:flush
+
+echo ""
+echo "🔨 Building React frontend..."
+bin/deploy-react
+
+echo ""
+echo "========================================"
+echo "✅ Deployment complete!"
+echo "========================================"

@@ -1,0 +1,32 @@
+<?php
+/** @var \Magento\Framework\View\Element\Template $block */
+$reactUrl = $block->getViewFileUrl('react-home/index.html');
+$cartUrl = $reactUrl . (strpos($reactUrl, '?') === false ? '?' : '&') . 'view=cart';
+?>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #fff;
+  }
+
+  .react-cart-iframe {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    border: 0;
+    display: block;
+    background: #fff;
+  }
+</style>
+
+<iframe
+  class="react-cart-iframe"
+  src="<?= $block->escapeUrl($cartUrl) ?>"
+  title="React Shopping Cart"
+  loading="eager"
+></iframe>

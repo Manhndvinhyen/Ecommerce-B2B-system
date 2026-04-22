@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build + sync React frontend to Magento + refresh cache.
+set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FRONTEND_DIR="$ROOT_DIR/src/react-frontend"
-LIVE_DOMAIN="${LIVE_DOMAIN:-https://organica.click}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REACT_DIR="$PROJECT_ROOT/src/react-frontend"
+CUSTOM_ENV_FILE="$PROJECT_ROOT/env/custom.env"
 
-echo "🚀 Bắt đầu deploy React frontend..."
-echo "📁 Root: $ROOT_DIR"
+echo "🚀 Bắt đầu build React App..."
 
-cd "$FRONTEND_DIR"
+cd "$REACT_DIR" || { echo "❌ Không tìm thấy thư mục src/react-frontend"; exit 1; }
 
 echo "📦 Cài đặt thư viện NPM..."
 if [ -f "package-lock.json" ]; then
@@ -19,9 +19,38 @@ else
   npm install --no-audit --no-fund
 fi
 
-if [ ! -f ".env" ] && [ -f ".env.example" ]; then
-  echo "⚠️ Không tìm thấy .env, đang tạo từ .env.example..."
-  cp .env.example .env
+HOST_UID="$(id -u)"
+HOST_GID="$(id -g)"
+
+if [[ -x "$PROJECT_ROOT/bin/root" ]]; then
+  echo "🔧 Đồng bộ quyền ghi thư mục src/pub/react..."
+  (
+    cd "$PROJECT_ROOT"
+    bin/root sh -lc "mkdir -p /var/www/html/pub/react && chown -R ${HOST_UID}:${HOST_GID} /var/www/html/pub/react"
+  ) || true
+fi
+
+if [ ! -f ".env" ]; then
+    echo "⚠️ Không tìm thấy file .env, đang tự động tạo từ .env.example..."
+    cp .env.example .env
+fi
+
+if [[ -z "${VITE_GOOGLE_CLIENT_ID:-}" && -f "$CUSTOM_ENV_FILE" ]]; then
+  echo "🔐 Nạp biến môi trường local từ env/custom.env (không commit)"
+  # shellcheck disable=SC1090
+  set -a
+  source "$CUSTOM_ENV_FILE"
+  set +a
+fi
+
+if [[ -z "${VITE_GOOGLE_CLIENT_ID:-}" && -n "${GOOGLE_OAUTH_CLIENT_ID:-}" ]]; then
+  export VITE_GOOGLE_CLIENT_ID="$GOOGLE_OAUTH_CLIENT_ID"
+fi
+
+if [[ -z "${VITE_GOOGLE_CLIENT_ID:-}" ]]; then
+  echo "⚠️ Thiếu VITE_GOOGLE_CLIENT_ID (hoặc GOOGLE_OAUTH_CLIENT_ID)."
+  echo "➡️ Vẫn tiếp tục build, nhưng nút đăng nhập Google sẽ bị tắt trên frontend."
+  echo "👉 Khuyến nghị: lưu GOOGLE_OAUTH_CLIENT_ID trong env/custom.env (đã gitignore) hoặc set secret CI/CD."
 fi
 
 echo "🛠️ Build ứng dụng React..."
@@ -35,9 +64,11 @@ echo "   - Local bundle: ${LOCAL_SCRIPT:-N/A}"
 
 cd "$ROOT_DIR"
 
-echo "🧹 Làm mới cache Magento (layout/full page)..."
-if ./bin/magento cache:clean layout block_html full_page config; then
-  ./bin/magento cache:flush
+echo "🔄 Reload nginx..."
+cd "$PROJECT_ROOT"
+NGINX_CONTAINER=$(docker ps --filter "label=com.docker.compose.service=app" --format "{{.ID}}" | head -1)
+if [ -n "$NGINX_CONTAINER" ]; then
+  docker exec "$NGINX_CONTAINER" nginx -s reload
 else
   echo "⚠️ Không clear được cache qua ./bin/magento (kiểm tra Docker service)."
 fi

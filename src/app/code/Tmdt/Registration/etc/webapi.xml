@@ -6,6 +6,12 @@
             <resource ref="anonymous" />
         </resources>
     </route>
+    <route url="/V1/tmdt-registration/google-login" method="POST">
+        <service class="Tmdt\Registration\Api\GoogleLoginInterface" method="save" />
+        <resources>
+            <resource ref="anonymous" />
+        </resources>
+    </route>
     <route url="/V1/tmdt-registration/register" method="POST">
         <service class="Tmdt\Registration\Api\RegisterInterface" method="save" />
         <resources>

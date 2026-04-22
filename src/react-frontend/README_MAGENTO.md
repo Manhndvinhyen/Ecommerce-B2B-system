@@ -21,6 +21,35 @@ Tạo file `.env` từ `.env.example`:
 
 - `VITE_MAGENTO_URL`: URL Magento expose từ Docker (ví dụ `http://localhost:8080`).
 - `VITE_MAGENTO_STORE_CODE`: để trống nếu dùng default store; điền `default` nếu hệ thống yêu cầu.
+- `VITE_GOOGLE_CLIENT_ID`: Google OAuth Web Client ID để bật nút đăng nhập Google ở trang login.
+
+### Google Login (B2B)
+
+- Frontend gọi endpoint: `/rest/V1/tmdt-registration/google-login`.
+- Backend chỉ cho đăng nhập nếu:
+  - Google ID token hợp lệ.
+  - `email_verified = true`.
+  - Email Google trùng email đã đăng ký trong bảng B2B (`tmdt_customer_registration`) theo `login_code`.
+- Khi dùng Google login, người dùng vẫn cần nhập `Mã nhà hàng` trước khi bấm nút Google.
+
+Biến môi trường backend cần có (file `env/custom.env`):
+
+- `GOOGLE_OAUTH_CLIENT_ID=...apps.googleusercontent.com`
+
+### Triển khai an toàn, không lộ key khi push
+
+- Tuyệt đối không commit `VITE_GOOGLE_CLIENT_ID` vào source code hoặc file tracked.
+- File `env/custom.env` đã được gitignore ở root repo, nên có thể lưu:
+  - `GOOGLE_OAUTH_CLIENT_ID=...apps.googleusercontent.com`
+- Script `bin/deploy-react` sẽ tự động:
+  - Nạp `env/custom.env` nếu có.
+  - Map `GOOGLE_OAUTH_CLIENT_ID` -> `VITE_GOOGLE_CLIENT_ID` khi build React.
+  - Dừng build nếu thiếu key (tránh deploy lên production nhưng không hiện nút Google).
+
+Gợi ý cho CI/CD production:
+
+- Lưu secret trong hệ thống CI (GitHub Actions/GitLab/Jenkins...), không lưu trong git.
+- Inject biến `VITE_GOOGLE_CLIENT_ID` (hoặc `GOOGLE_OAUTH_CLIENT_ID`) vào bước `bin/deploy-react`.
 
 ## 4) Cấu hình Magento (Docker)
 

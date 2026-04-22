@@ -1,0 +1,48 @@
+/* Applied only to homepage to keep other Magento pages untouched */
+html,
+body.cms-index-index {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+body.cms-index-index .page-header,
+body.cms-index-index .page-footer,
+body.cms-index-index .nav-sections,
+body.cms-index-index .messages,
+body.cms-index-index .breadcrumbs {
+  display: none !important;
+}
+
+body.cms-index-index input[name="form_key"],
+body.cms-index-index #authenticationPopup,
+body.cms-index-index .authentication-wrapper,
+body.cms-index-index .modal-popup,
+body.cms-index-index .modals-overlay {
+  display: none !important;
+}
+
+body.cms-index-index .page-main,
+body.cms-index-index .columns,
+body.cms-index-index .column.main,
+body.cms-index-index .page-wrapper,
+body.cms-index-index .page-main .block {
+  max-width: none !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+body.cms-index-index #maincontent {
+  min-height: 100vh;
+}
+
+body.cms-index-index .column.main > *:not(#root) {
+  display: none !important;
+}
+
+body.cms-index-index #root {
+  width: 100%;
+}

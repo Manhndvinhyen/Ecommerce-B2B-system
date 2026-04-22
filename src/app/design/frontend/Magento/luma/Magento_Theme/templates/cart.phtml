@@ -1,7 +1,11 @@
 <?php
 /** @var \Magento\Framework\View\Element\Template $block */
 $reactUrl = $block->getViewFileUrl('react-home/index.html');
-$cartUrl = $reactUrl . (strpos($reactUrl, '?') === false ? '?' : '&') . 'view=cart';
+$reactIndexPath = rtrim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''), '/') . '/react/index.html';
+$cacheBuster = is_file($reactIndexPath) ? (string)filemtime($reactIndexPath) : (string)time();
+$cartUrl = $reactUrl
+  . (strpos($reactUrl, '?') === false ? '?' : '&')
+  . 'view=cart&v=' . rawurlencode($cacheBuster);
 ?>
 <style>
   html, body {

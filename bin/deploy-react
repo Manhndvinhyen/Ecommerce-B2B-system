@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build React frontend and serve via nginx at magento.test/
+set -euo pipefail
 
 set -euo pipefail
 
@@ -13,7 +13,11 @@ echo "🚀 Bắt đầu build React App..."
 cd "$REACT_DIR" || { echo "❌ Không tìm thấy thư mục src/react-frontend"; exit 1; }
 
 echo "📦 Cài đặt thư viện NPM..."
-npm install
+if [ -f "package-lock.json" ]; then
+  npm ci --no-audit --no-fund
+else
+  npm install --no-audit --no-fund
+fi
 
 HOST_UID="$(id -u)"
 HOST_GID="$(id -g)"
@@ -51,9 +55,14 @@ fi
 
 echo "🛠️ Build ứng dụng React..."
 npm run build
-# Vite tự build thẳng vào ../pub/react/ (cấu hình trong vite.config.ts)
 
-echo "✅ Build xong: src/pub/react/"
+echo "🔁 Đồng bộ build vào Magento theme (react-home)..."
+node scripts/magento-sync.mjs
+
+LOCAL_SCRIPT=$(sed -n 's/.*src="\(\/react\/assets\/index-[^"]*\.js\)".*/\1/p' "$ROOT_DIR/src/pub/react/index.html" | head -1)
+echo "   - Local bundle: ${LOCAL_SCRIPT:-N/A}"
+
+cd "$ROOT_DIR"
 
 echo "🔄 Reload nginx..."
 cd "$PROJECT_ROOT"
@@ -61,7 +70,37 @@ NGINX_CONTAINER=$(docker ps --filter "label=com.docker.compose.service=app" --fo
 if [ -n "$NGINX_CONTAINER" ]; then
   docker exec "$NGINX_CONTAINER" nginx -s reload
 else
-  echo "⚠️ Nginx container not found, skipping reload"
+  echo "⚠️ Không clear được cache qua ./bin/magento (kiểm tra Docker service)."
 fi
 
-echo "✅ Hoàn tất! Truy cập https://magento.test để xem React app."
+echo "🔄 Reload nginx trong container (nếu có)..."
+if command -v docker >/dev/null 2>&1; then
+  NGINX_CONTAINER=$(docker ps --filter "label=com.docker.compose.service=app" --format "{{.ID}}" | head -1 || true)
+  if [ -n "${NGINX_CONTAINER:-}" ]; then
+    docker exec "$NGINX_CONTAINER" nginx -s reload || true
+  else
+    echo "⚠️ Không tìm thấy container service=app để reload nginx."
+  fi
+fi
+
+echo "🔎 Verify nhanh trạng thái live: $LIVE_DOMAIN"
+if command -v curl >/dev/null 2>&1; then
+  LIVE_SCRIPT=$(curl -L -s "$LIVE_DOMAIN/" 2>/dev/null | sed -n 's/.*src="\(\/react\/assets\/index-[^"]*\.js\)".*/\1/p' | head -1)
+  echo "   - Live bundle: ${LIVE_SCRIPT:-N/A}"
+
+  if curl -L -s "$LIVE_DOMAIN/checkout/cart" | grep -q "view=cart"; then
+    echo "   - Cart route override: OK (/checkout/cart -> /react/index.html?view=cart)"
+  else
+    echo "   - Cart route override: CHƯA THẤY"
+  fi
+
+  if [ -n "${LOCAL_SCRIPT:-}" ] && [ -n "${LIVE_SCRIPT:-}" ] && [ "$LOCAL_SCRIPT" != "$LIVE_SCRIPT" ]; then
+    echo "❌ Live vẫn đang dùng bundle cũ."
+    echo "   Local: $LOCAL_SCRIPT"
+    echo "   Live : $LIVE_SCRIPT"
+    echo "   -> Hãy deploy trên đúng production server hoặc purge CDN (Cloudflare) cho /react/*"
+    exit 2
+  fi
+fi
+
+echo "✅ Hoàn tất deploy React cho $LIVE_DOMAIN"

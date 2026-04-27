@@ -72,7 +72,7 @@ class Session extends Action implements CsrfAwareActionInterface
             ]);
         }
 
-        $this->customerSession->setCustomerAsLoggedIn($customer);
+        $this->customerSession->setCustomerDataAsLoggedIn($customer);
 
         return $result->setData([
             'success' => true,

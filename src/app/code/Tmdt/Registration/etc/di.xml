@@ -3,4 +3,6 @@
     <preference for="Tmdt\Registration\Api\LoginInterface" type="Tmdt\Registration\Model\LoginManagement" />
     <preference for="Tmdt\Registration\Api\GoogleLoginInterface" type="Tmdt\Registration\Model\GoogleLoginManagement" />
     <preference for="Tmdt\Registration\Api\RegisterInterface" type="Tmdt\Registration\Model\RegisterManagement" />
+    <preference for="Tmdt\Registration\Api\ForgotPasswordRequestOtpInterface" type="Tmdt\Registration\Model\ForgotPasswordRequestOtpManagement" />
+    <preference for="Tmdt\Registration\Api\ForgotPasswordResetInterface" type="Tmdt\Registration\Model\ForgotPasswordResetManagement" />
 </config>

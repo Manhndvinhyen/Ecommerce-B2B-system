@@ -23,6 +23,7 @@ jobs:
             git reset --hard origin/manh
             export GOOGLE_OAUTH_CLIENT_ID='${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}'
             bin/docker-compose --prod exec -T phpfpm bin/magento setup:upgrade --no-interaction
+            bin/docker-compose --prod exec -T phpfpm bin/magento setup:static-content:deploy en_US -f
             bin/docker-compose --prod exec -T phpfpm bin/magento cache:flush
             bin/deploy-react
           command_timeout: 10m

@@ -24,7 +24,7 @@ services:
       - ./src/pub/react:/pub/react
     command: sh -c "npm run build && npm run build -- --watch"
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
 
   phpmyadmin:
     image: linuxserver/phpmyadmin

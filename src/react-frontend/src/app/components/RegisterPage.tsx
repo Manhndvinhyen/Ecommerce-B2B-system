@@ -7,17 +7,13 @@ import {
   ChevronLeft,
   Eye,
   EyeOff,
-  Facebook,
-  Instagram,
-  Mail,
-  MapPin,
-  Phone,
   ShieldCheck,
   Trash2,
   Upload,
   UserCircle,
-  Youtube,
 } from 'lucide-react';
+import { AuthPageFooter } from './auth/AuthPageFooter';
+import { AuthPageHeader } from './auth/AuthPageHeader';
 
 type FormDataState = {
   taxCode: string;
@@ -161,6 +157,19 @@ export function RegisterPage() {
     }
   };
 
+  const mapSubmitErrorToField = (message: string) => {
+    const normalized = message.toLowerCase();
+
+    if (normalized.includes('mã đăng nhập đã tồn tại')) {
+      setValidationErrors((prev) => ({ ...prev, loginCode: 'Mã đăng nhập đã tồn tại, vui lòng chọn mã khác.' }));
+      return;
+    }
+
+    if (normalized.includes('email') && (normalized.includes('already exists') || normalized.includes('đã tồn tại'))) {
+      setValidationErrors((prev) => ({ ...prev, email: 'Email đã tồn tại, vui lòng dùng email khác.' }));
+    }
+  };
+
   const handleFinalSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!validateStep2()) {
@@ -187,10 +196,20 @@ export function RegisterPage() {
       body: JSON.stringify({ payload }),
     })
       .then(async (response) => {
-        const data = await response.json().catch(() => null);
+        const bodyText = await response.text().catch(() => '');
+        let data: { success?: boolean; message?: string } | null = null;
+
+        if (bodyText.trim()) {
+          try {
+            data = JSON.parse(bodyText) as { success?: boolean; message?: string };
+          } catch {
+            data = null;
+          }
+        }
 
         if (!response.ok) {
-          throw new Error(data?.message || 'Không thể lưu đăng ký vào Magento.');
+          const errorMessage = data?.message?.trim() || bodyText.trim() || 'Không thể lưu đăng ký vào Magento.';
+          throw new Error(errorMessage);
         }
 
         if (data?.success === false) {
@@ -200,7 +219,9 @@ export function RegisterPage() {
         setIsSubmitted(true);
       })
       .catch((error: unknown) => {
-        setSubmitError(error instanceof Error ? error.message : 'Đã xảy ra lỗi khi gửi đăng ký.');
+        const errorMessage = error instanceof Error ? error.message : 'Đã xảy ra lỗi khi gửi đăng ký.';
+        mapSubmitErrorToField(errorMessage);
+        setSubmitError(errorMessage);
       })
       .finally(() => {
         setIsSubmitting(false);
@@ -242,16 +263,7 @@ export function RegisterPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-white text-[#333]">
-      <header className="w-full flex items-center justify-between px-6 py-4 lg:px-12 border-b border-gray-100 bg-white sticky top-0 z-50 shadow-sm">
-        <div className="flex items-center">
-          <span className="text-3xl font-extrabold text-[#00b14f] tracking-tight">Freso</span>
-        </div>
-        <div className="flex items-center gap-6">
-          <button type="button" className="text-[14px] lg:text-[15px] font-semibold text-[#006a4e] hover:text-[#00b14f] transition-colors">
-            Tìm hiểu <span className="font-normal text-gray-500 hidden sm:inline">trở thành người bán</span>
-          </button>
-        </div>
-      </header>
+      <AuthPageHeader />
 
       <div className="flex flex-1 flex-col lg:flex-row overflow-visible">
         <aside className="relative lg:w-[42%] bg-gradient-to-br from-[#f0f9f4] via-[#e8f6ed] to-[#d4efdf] p-8 lg:p-16 flex flex-col justify-start overflow-hidden border-r border-gray-50 min-h-[400px] lg:min-h-0">
@@ -643,85 +655,7 @@ export function RegisterPage() {
         </section>
       </div>
 
-      <footer className="w-full bg-white border-t border-gray-100 px-6 py-12 lg:px-12 xl:px-24">
-        <div className="max-w-[1440px] mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-12">
-          <div className="space-y-6">
-            <div className="flex items-center">
-              <span className="text-2xl font-extrabold text-[#00b14f]">Freso</span>
-            </div>
-            <p className="text-[14px] text-gray-500 leading-relaxed font-medium">Nền tảng giao hàng thực phẩm tươi sống hàng đầu Việt Nam</p>
-            <div className="flex items-center gap-4">
-              {[Facebook, Instagram, Youtube].map((Icon, index) => (
-                <a key={index} href="#" className="size-9 bg-gray-50 rounded-full flex items-center justify-center text-gray-400 hover:text-[#00b14f] hover:bg-green-50 transition-all border border-gray-100 shadow-sm">
-                  <Icon size={18} />
-                </a>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            <h4 className="text-[15px] font-bold text-gray-900 uppercase tracking-wider">Liên kết nhanh</h4>
-            <ul className="space-y-3">
-              {['Về chúng tôi', 'Sản phẩm', 'Liên hệ'].map((item) => (
-                <li key={item}>
-                  <a href="#" className="text-[14px] text-gray-500 hover:text-[#00b14f] font-medium transition-colors">
-                    {item}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="space-y-6">
-            <h4 className="text-[15px] font-bold text-gray-900 uppercase tracking-wider">Hỗ trợ</h4>
-            <ul className="space-y-3">
-              {['Câu hỏi thường gặp', 'Chính sách giao hàng', 'Chính sách đổi trả', 'Điều khoản sử dụng'].map((item) => (
-                <li key={item}>
-                  <a href="#" className="text-[14px] text-gray-500 hover:text-[#00b14f] font-medium transition-colors">
-                    {item}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="space-y-6">
-            <h4 className="text-[15px] font-bold text-gray-900 uppercase tracking-wider">Liên hệ</h4>
-            <ul className="space-y-4">
-              <li className="flex items-start gap-3">
-                <div className="p-1.5 bg-green-50 rounded-lg text-[#00b14f] shrink-0">
-                  <MapPin size={16} />
-                </div>
-                <span className="text-[14px] text-gray-500 leading-tight font-medium">123 Đường ABC, Quận 1, TP. Hồ Chí Minh</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <div className="p-1.5 bg-green-50 rounded-lg text-[#00b14f] shrink-0">
-                  <Phone size={16} />
-                </div>
-                <span className="text-[14px] text-gray-500 font-bold">1900 1234</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <div className="p-1.5 bg-green-50 rounded-lg text-[#00b14f] shrink-0">
-                  <Mail size={16} />
-                </div>
-                <span className="text-[14px] text-gray-500 font-medium">support@freso.vn</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <div className="max-w-[1440px] mx-auto mt-12 pt-8 border-t border-gray-50 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <p className="text-[13px] text-gray-400 font-medium">© 2026 Freso. All rights reserved.</p>
-          <div className="flex items-center gap-6">
-            <a href="#" className="text-[13px] text-gray-400 hover:text-[#00b14f] font-medium transition-colors">
-              Chính sách bảo mật
-            </a>
-            <a href="#" className="text-[13px] text-gray-400 hover:text-[#00b14f] font-medium transition-colors">
-              Điều khoản dịch vụ
-            </a>
-          </div>
-        </div>
-      </footer>
+      <AuthPageFooter />
     </div>
   );
 }

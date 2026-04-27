@@ -36,6 +36,7 @@ $rows = $block->getRows();
                 <th class="data-grid-th">Tên gợi nhớ đơn vị</th>
                 <th class="data-grid-th">Mã đăng nhập</th>
                 <th class="data-grid-th">Trạng thái</th>
+                <th class="data-grid-th">Nguồn dữ liệu</th>
                 <th class="data-grid-th">Ngày tạo</th>
             </tr>
         </thead>
@@ -43,7 +44,7 @@ $rows = $block->getRows();
             <?php if (!empty($rows)): ?>
                 <?php foreach ($rows as $row): ?>
                     <tr>
-                        <td><?= (int) $row['registration_id'] ?></td>
+                        <td><?= isset($row['registration_id']) && $row['registration_id'] !== null ? (int) $row['registration_id'] : '-' ?></td>
                         <td><?= (int) $row['customer_id'] ?></td>
                         <td class="wrap"><strong><?= $block->escapeHtml($row['business_name']) ?></strong></td>
                         <td><?= $block->escapeHtml($row['full_name']) ?></td>
@@ -58,12 +59,13 @@ $rows = $block->getRows();
                         <td><?= $block->escapeHtml($row['unit_nickname']) ?></td>
                         <td><?= $block->escapeHtml($row['login_code']) ?></td>
                         <td><?= $block->escapeHtml(ucfirst((string) $row['status'])) ?></td>
+                        <td><?= $block->escapeHtml((string) ($row['data_source'] ?? '')) ?></td>
                         <td><?= $block->escapeHtml($row['created_at']) ?></td>
                     </tr>
                 <?php endforeach; ?>
             <?php else: ?>
                 <tr>
-                    <td colspan="16">Chưa có lượt đăng ký nào.</td>
+                    <td colspan="17">Chưa có lượt đăng ký nào.</td>
                 </tr>
             <?php endif; ?>
         </tbody>

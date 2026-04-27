@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-set -euo pipefail
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 REACT_DIR="$PROJECT_ROOT/src/react-frontend"
 CUSTOM_ENV_FILE="$PROJECT_ROOT/env/custom.env"
+LIVE_DOMAIN="${LIVE_DOMAIN:-https://organica.click}"
 
 echo "🚀 Bắt đầu build React App..."
 
@@ -59,10 +58,8 @@ npm run build
 echo "🔁 Đồng bộ build vào Magento theme (react-home)..."
 node scripts/magento-sync.mjs
 
-LOCAL_SCRIPT=$(sed -n 's/.*src="\(\/react\/assets\/index-[^"]*\.js\)".*/\1/p' "$ROOT_DIR/src/pub/react/index.html" | head -1)
+LOCAL_SCRIPT=$(sed -n 's/.*src="\(\/react\/assets\/index-[^"]*\.js\)".*/\1/p' "$PROJECT_ROOT/src/pub/react/index.html" | head -1)
 echo "   - Local bundle: ${LOCAL_SCRIPT:-N/A}"
-
-cd "$ROOT_DIR"
 
 echo "🔄 Reload nginx..."
 cd "$PROJECT_ROOT"

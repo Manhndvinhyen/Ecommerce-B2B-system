@@ -17,7 +17,8 @@ jobs:
           key: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
           script: |
             cd ~/B2B
-            chmod -R 777 src/app/etc/ || true
+            bin/docker-compose --prod exec -T phpfpm sh -c "chmod -R 777 /var/www/html/app/etc/ || true"
+            bin/docker-compose --prod exec -T phpfpm sh -c "mkdir -p /var/www/html/app/design/frontend/Magento/luma && chmod -R 777 /var/www/html/app/design/ || true"
             git fetch origin manh
             git reset --hard origin/manh
             export GOOGLE_OAUTH_CLIENT_ID='${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}'

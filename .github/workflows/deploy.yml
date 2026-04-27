@@ -20,6 +20,7 @@ jobs:
             chmod -R 777 src/app/etc/ || true
             git fetch origin manh
             git reset --hard origin/manh
+            export GOOGLE_OAUTH_CLIENT_ID='${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}'
             bin/docker-compose --prod exec -T phpfpm bin/magento setup:upgrade --no-interaction
             bin/docker-compose --prod exec -T phpfpm bin/magento cache:flush
             bin/deploy-react

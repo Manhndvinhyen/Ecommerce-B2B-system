@@ -1,4 +1,5 @@
 import { ImageWithFallback } from './figma/ImageWithFallback';
+import { getCategoryPageLink } from '../data/categories';
 
 const categories = [
   {
@@ -54,8 +55,9 @@ export function Categories() {
         <div className="space-y-6">
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {categories.slice(0, 3).map((category, index) => (
-              <div
+              <a
                 key={`${category.title}-${index}`}
+                href={getCategoryPageLink(category.title)}
                 className="group relative overflow-hidden rounded-2xl cursor-pointer shadow-lg hover:shadow-2xl transition-all duration-300"
               >
                 <div className="aspect-[4/5] relative">
@@ -70,14 +72,15 @@ export function Categories() {
                   <h3 className="text-xl font-bold mb-1">{category.title}</h3>
                   <p className="text-sm text-gray-200">{category.count}</p>
                 </div>
-              </div>
+              </a>
             ))}
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {categories.slice(3, 7).map((category, index) => (
-              <div
+              <a
                 key={`${category.title}-${index}`}
+                href={getCategoryPageLink(category.title)}
                 className="group relative overflow-hidden rounded-2xl cursor-pointer shadow-lg hover:shadow-2xl transition-all duration-300"
               >
                 <div className="aspect-[4/5] relative">
@@ -92,7 +95,7 @@ export function Categories() {
                   <h3 className="text-xl font-bold mb-1">{category.title}</h3>
                   <p className="text-sm text-gray-200">{category.count}</p>
                 </div>
-              </div>
+              </a>
             ))}
           </div>
         </div>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Heart, ChevronRight, ShoppingCart } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
+import { toCurrencyTextFromLooseValue, toUnitPriceFromLooseValue, useCart } from '../cart/CartProvider';
 
 const hotProducts = [
   {
@@ -101,9 +102,9 @@ const normalize = (value: string) =>
     .toLowerCase();
 
 export function HotProducts() {
+  const { openAddToCartModal } = useCart();
   const productsPerPage = 5;
   const [page, setPage] = useState(0);
-  const [quickCartItems, setQuickCartItems] = useState<Set<string>>(new Set());
   const [selectedCategory, setSelectedCategory] = useState('');
 
   useEffect(() => {
@@ -145,18 +146,6 @@ export function HotProducts() {
     setPage((prev) => (prev + 1) % totalPages);
   };
 
-  const toggleQuickCart = (productKey: string) => {
-    setQuickCartItems((prev) => {
-      const next = new Set(prev);
-      if (next.has(productKey)) {
-        next.delete(productKey);
-      } else {
-        next.add(productKey);
-      }
-      return next;
-    });
-  };
-
   return (
     <section id="san-pham-hien-thi" className="py-8 bg-white scroll-mt-28">
       <div className="container mx-auto px-4">
@@ -191,7 +180,6 @@ export function HotProducts() {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           {visibleProducts.map((product, index) => {
             const productKey = `${product.name}-${product.category}`;
-            const isQuickAdded = quickCartItems.has(productKey);
 
             return (
               <div
@@ -229,13 +217,18 @@ export function HotProducts() {
                     <button
                       onClick={(event) => {
                         event.stopPropagation();
-                        toggleQuickCart(productKey);
+                        const sourceImage = event.currentTarget.closest('article')?.querySelector('img');
+                        openAddToCartModal({
+                          id: productKey,
+                          name: product.name,
+                          category: product.category,
+                          priceText: toCurrencyTextFromLooseValue(product.price),
+                          unit: product.unit,
+                          unitPrice: toUnitPriceFromLooseValue(product.price),
+                          image: product.image,
+                        }, sourceImage);
                       }}
-                      className={`rounded-full p-1.5 transition-colors ${
-                        isQuickAdded
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-transparent text-gray-400 hover:bg-gray-100 hover:text-green-600'
-                      }`}
+                      className="rounded-full p-1.5 transition-colors bg-transparent text-gray-400 hover:bg-gray-100 hover:text-green-600"
                       aria-label={`Thêm nhanh ${product.name} vào giỏ hàng`}
                     >
                       <ShoppingCart className="size-4" />

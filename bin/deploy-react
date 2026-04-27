@@ -1,31 +1,103 @@
 #!/usr/bin/env bash
-# Build React frontend and serve via nginx at magento.test/
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REACT_DIR="$PROJECT_ROOT/src/react-frontend"
+CUSTOM_ENV_FILE="$PROJECT_ROOT/env/custom.env"
+LIVE_DOMAIN="${LIVE_DOMAIN:-https://organica.click}"
 
 echo "🚀 Bắt đầu build React App..."
 
-cd src/react-frontend || { echo "❌ Không tìm thấy thư mục src/react-frontend"; exit 1; }
+cd "$REACT_DIR" || { echo "❌ Không tìm thấy thư mục src/react-frontend"; exit 1; }
 
 echo "📦 Cài đặt thư viện NPM..."
-npm install
+if [ -f "package-lock.json" ]; then
+  npm ci --no-audit --no-fund
+else
+  npm install --no-audit --no-fund
+fi
+
+HOST_UID="$(id -u)"
+HOST_GID="$(id -g)"
+
+if [[ -x "$PROJECT_ROOT/bin/root" ]]; then
+  echo "🔧 Đồng bộ quyền ghi thư mục src/pub/react..."
+  (
+    cd "$PROJECT_ROOT"
+    bin/root sh -lc "mkdir -p /var/www/html/pub/react && chown -R ${HOST_UID}:${HOST_GID} /var/www/html/pub/react"
+  ) || true
+fi
 
 if [ ! -f ".env" ]; then
     echo "⚠️ Không tìm thấy file .env, đang tự động tạo từ .env.example..."
     cp .env.example .env
 fi
 
+if [[ -z "${VITE_GOOGLE_CLIENT_ID:-}" && -f "$CUSTOM_ENV_FILE" ]]; then
+  echo "🔐 Nạp biến môi trường local từ env/custom.env (không commit)"
+  # shellcheck disable=SC1090
+  set -a
+  source "$CUSTOM_ENV_FILE"
+  set +a
+fi
+
+if [[ -z "${VITE_GOOGLE_CLIENT_ID:-}" && -n "${GOOGLE_OAUTH_CLIENT_ID:-}" ]]; then
+  export VITE_GOOGLE_CLIENT_ID="$GOOGLE_OAUTH_CLIENT_ID"
+fi
+
+if [[ -z "${VITE_GOOGLE_CLIENT_ID:-}" ]]; then
+  echo "⚠️ Thiếu VITE_GOOGLE_CLIENT_ID (hoặc GOOGLE_OAUTH_CLIENT_ID)."
+  echo "➡️ Vẫn tiếp tục build, nhưng nút đăng nhập Google sẽ bị tắt trên frontend."
+  echo "👉 Khuyến nghị: lưu GOOGLE_OAUTH_CLIENT_ID trong env/custom.env (đã gitignore) hoặc set secret CI/CD."
+fi
+
 echo "🛠️ Build ứng dụng React..."
 npm run build
-# Vite tự build thẳng vào ../pub/react/ (cấu hình trong vite.config.ts)
 
-echo "✅ Build xong: src/pub/react/"
+echo "🔁 Đồng bộ build vào Magento theme (react-home)..."
+node scripts/magento-sync.mjs
+
+LOCAL_SCRIPT=$(sed -n 's/.*src="\(\/react\/assets\/index-[^"]*\.js\)".*/\1/p' "$PROJECT_ROOT/src/pub/react/index.html" | head -1)
+echo "   - Local bundle: ${LOCAL_SCRIPT:-N/A}"
 
 echo "🔄 Reload nginx..."
-cd ../../
+cd "$PROJECT_ROOT"
 NGINX_CONTAINER=$(docker ps --filter "label=com.docker.compose.service=app" --format "{{.ID}}" | head -1)
 if [ -n "$NGINX_CONTAINER" ]; then
   docker exec "$NGINX_CONTAINER" nginx -s reload
 else
-  echo "⚠️ Nginx container not found, skipping reload"
+  echo "⚠️ Không clear được cache qua ./bin/magento (kiểm tra Docker service)."
 fi
 
-echo "✅ Hoàn tất! Truy cập https://magento.test để xem React app."
+echo "🔄 Reload nginx trong container (nếu có)..."
+if command -v docker >/dev/null 2>&1; then
+  NGINX_CONTAINER=$(docker ps --filter "label=com.docker.compose.service=app" --format "{{.ID}}" | head -1 || true)
+  if [ -n "${NGINX_CONTAINER:-}" ]; then
+    docker exec "$NGINX_CONTAINER" nginx -s reload || true
+  else
+    echo "⚠️ Không tìm thấy container service=app để reload nginx."
+  fi
+fi
+
+echo "🔎 Verify nhanh trạng thái live: $LIVE_DOMAIN"
+if command -v curl >/dev/null 2>&1; then
+  LIVE_SCRIPT=$(curl -L -s "$LIVE_DOMAIN/" 2>/dev/null | sed -n 's/.*src="\(\/react\/assets\/index-[^"]*\.js\)".*/\1/p' | head -1)
+  echo "   - Live bundle: ${LIVE_SCRIPT:-N/A}"
+
+  if curl -L -s "$LIVE_DOMAIN/checkout/cart" | grep -q "view=cart"; then
+    echo "   - Cart route override: OK (/checkout/cart -> /react/index.html?view=cart)"
+  else
+    echo "   - Cart route override: CHƯA THẤY"
+  fi
+
+  if [ -n "${LOCAL_SCRIPT:-}" ] && [ -n "${LIVE_SCRIPT:-}" ] && [ "$LOCAL_SCRIPT" != "$LIVE_SCRIPT" ]; then
+    echo "❌ Live vẫn đang dùng bundle cũ."
+    echo "   Local: $LOCAL_SCRIPT"
+    echo "   Live : $LIVE_SCRIPT"
+    echo "   -> Hãy deploy trên đúng production server hoặc purge CDN (Cloudflare) cho /react/*"
+    exit 2
+  fi
+fi
+
+echo "✅ Hoàn tất deploy React cho $LIVE_DOMAIN"

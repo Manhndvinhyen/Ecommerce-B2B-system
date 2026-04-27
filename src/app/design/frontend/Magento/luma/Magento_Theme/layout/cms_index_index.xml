@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  layout="empty"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceContainer name="header.container" remove="true"/>
+        <referenceContainer name="footer-container" remove="true"/>
+        <referenceContainer name="page.top" remove="true"/>
+        <referenceContainer name="columns.top" remove="true"/>
+        <referenceContainer name="columns.bottom" remove="true"/>
+        <referenceContainer name="content.top" remove="true"/>
+        <referenceContainer name="content.aside" remove="true"/>
+        <referenceBlock name="breadcrumbs" remove="true"/>
+        <referenceBlock name="cms_page" remove="true"/>
+        <referenceBlock name="authenticationPopup" remove="true"/>
+        <referenceBlock name="formkey" remove="true"/>
+        <referenceContainer name="content">
+            <block class="Magento\Framework\View\Element\Template"
+                   name="react.homepage"
+                   template="Magento_Theme::homepage.phtml"/>
+        </referenceContainer>
+    </body>
+</page>

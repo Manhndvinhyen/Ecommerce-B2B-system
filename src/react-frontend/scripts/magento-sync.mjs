@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const projectRoot = process.cwd();
-const distDir = path.join(projectRoot, 'dist');
+const buildDir = path.resolve(projectRoot, process.env.REACT_BUILD_OUTPUT_DIR || '../pub/react');
 const themeDir = process.env.MAGENTO_THEME_DIR || path.join(projectRoot, '../app/design/frontend/Magento/luma');
 const targetAssetDir = path.join(themeDir, 'web', 'react-home');
 const targetTemplateDir = path.join(themeDir, 'Magento_Theme', 'templates');
@@ -19,7 +19,7 @@ function removeDirIfExists(dirPath) {
 }
 
 function readManifest() {
-  const manifestPath = path.join(distDir, '.vite', 'manifest.json');
+  const manifestPath = path.join(buildDir, '.vite', 'manifest.json');
 
   if (!fs.existsSync(manifestPath)) {
     throw new Error(`Missing manifest: ${manifestPath}. Run npm run build first.`);
@@ -32,7 +32,7 @@ function resolveEntry(manifest) {
   const entry = manifest['index.html'] || manifest['src/main.tsx'];
 
   if (!entry || !entry.file) {
-    throw new Error('Cannot resolve entry file from dist/.vite/manifest.json');
+    throw new Error('Cannot resolve entry file from build manifest');
   }
 
   return {
@@ -165,18 +165,19 @@ body.cms-index-index #root {
 }
 
 function copyDistToTheme() {
-  if (!fs.existsSync(distDir)) {
-    throw new Error('dist directory not found. Run npm run build first.');
+  if (!fs.existsSync(buildDir)) {
+    throw new Error(`Build directory not found: ${buildDir}. Run npm run build first.`);
   }
 
   removeDirIfExists(targetAssetDir);
   ensureDir(targetAssetDir);
 
-  fs.cpSync(distDir, targetAssetDir, { recursive: true });
+  fs.cpSync(buildDir, targetAssetDir, { recursive: true });
 }
 
 function main() {
   console.log(`Using theme dir: ${themeDir}`);
+  console.log(`Using build dir: ${buildDir}`);
 
   if (!fs.existsSync(themeDir)) {
     throw new Error(`Theme directory does not exist: ${themeDir}`);

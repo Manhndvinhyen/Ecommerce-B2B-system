@@ -1,0 +1,34 @@
+<?php
+/** @var \Magento\Framework\View\Element\Template $block */
+$reactIndexPath = rtrim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''), '/') . '/react/index.html';
+$cacheBuster = is_file($reactIndexPath) ? (string)filemtime($reactIndexPath) : (string)time();
+$cartReactUrl = '/react/index.html?view=cart&v=' . rawurlencode($cacheBuster);
+?>
+<style>
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #fff;
+  }
+
+  .react-cart-iframe {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    border: 0;
+    display: block;
+    background: #fff;
+  }
+</style>
+
+<iframe
+  class="react-cart-iframe"
+  src="<?= $block->escapeUrl($cartReactUrl) ?>"
+  title="React Shopping Cart"
+  loading="eager"
+></iframe>

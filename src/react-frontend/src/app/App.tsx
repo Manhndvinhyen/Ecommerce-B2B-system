@@ -13,6 +13,7 @@ import { ProductCategoryPage } from './components/ProductCategoryPage';
 import { RegisterPage } from './components/RegisterPage';
 import { ShoppingCartPage } from './components/ShoppingCartPage';
 import { LoginPage } from './components/LoginPage';
+import { ForgotPasswordPage } from './components/ForgotPasswordPage';
 import { getCategoryNameFromQuery, getSubcategoryNameFromQuery } from './data/categories';
 import { CartProvider } from './cart/CartProvider';
 
@@ -25,6 +26,7 @@ function AppContent() {
   const isRegisterView = view === 'register';
   const isCartView = view === 'cart';
   const isLoginView = view === 'login';
+  const isForgotPasswordView = view === 'forgot-password';
 
   if (isRegisterView) {
     return <RegisterPage />;
@@ -36,6 +38,10 @@ function AppContent() {
 
   if (isLoginView) {
     return <LoginPage />;
+  }
+
+  if (isForgotPasswordView) {
+    return <ForgotPasswordPage />;
   }
 
   return (

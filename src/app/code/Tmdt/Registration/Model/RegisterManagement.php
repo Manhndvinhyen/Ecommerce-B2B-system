@@ -7,9 +7,11 @@ use Magento\Customer\Api\Data\CustomerInterfaceFactory;
 use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\DB\Adapter\DuplicateException;
 use Magento\Framework\Exception\InputException;
+use Magento\Framework\Indexer\IndexerRegistry;
 use Magento\Framework\Serialize\Serializer\Json;
 use Magento\Framework\Webapi\Rest\Request as RestRequest;
 use Magento\Store\Model\StoreManagerInterface;
+use Psr\Log\LoggerInterface;
 use Tmdt\Registration\Api\RegisterInterface;
 
 class RegisterManagement implements RegisterInterface
@@ -22,7 +24,9 @@ class RegisterManagement implements RegisterInterface
         private readonly StoreManagerInterface $storeManager,
         private readonly ResourceConnection $resourceConnection,
         private readonly Json $serializer,
-        private readonly RestRequest $request
+        private readonly RestRequest $request,
+        private readonly IndexerRegistry $indexerRegistry,
+        private readonly LoggerInterface $logger
     ) {
     }
 
@@ -101,11 +105,30 @@ class RegisterManagement implements RegisterInterface
             throw new InputException(__('Mã đăng nhập đã tồn tại. Vui lòng chọn mã khác.'));
         }
 
+        $this->syncCustomerGrid((int) $createdCustomer->getId());
+
         return [
             'success' => true,
             'message' => (string) __('Đăng ký đã được lưu vào Magento.'),
             'customer_id' => (int) $createdCustomer->getId(),
         ];
+    }
+
+    private function syncCustomerGrid(int $customerId): void
+    {
+        if ($customerId <= 0) {
+            return;
+        }
+
+        try {
+            $this->indexerRegistry->get('customer_grid')->reindexRow($customerId);
+        } catch (\Throwable $exception) {
+            // Registration succeeds even if the admin grid refresh fails.
+            $this->logger->warning('Unable to sync customer_grid for new registration.', [
+                'customer_id' => $customerId,
+                'exception' => $exception->getMessage(),
+            ]);
+        }
     }
 
     private function validatePayload(array $payload): void

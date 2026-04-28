@@ -18,4 +18,16 @@
             <resource ref="anonymous" />
         </resources>
     </route>
+    <route url="/V1/tmdt-registration/forgot-password/request-otp" method="POST">
+        <service class="Tmdt\Registration\Api\ForgotPasswordRequestOtpInterface" method="save" />
+        <resources>
+            <resource ref="anonymous" />
+        </resources>
+    </route>
+    <route url="/V1/tmdt-registration/forgot-password/reset" method="POST">
+        <service class="Tmdt\Registration\Api\ForgotPasswordResetInterface" method="save" />
+        <resources>
+            <resource ref="anonymous" />
+        </resources>
+    </route>
 </routes>

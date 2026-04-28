@@ -4,16 +4,14 @@ import {
   ChevronLeft,
   Eye,
   EyeOff,
-  Facebook,
-  Instagram,
-  Mail,
-  MapPin,
-  Phone,
   Store,
   User,
   UserCircle,
-  Youtube,
 } from 'lucide-react';
+import { AuthPageFooter } from './auth/AuthPageFooter';
+import { AuthPageHeader } from './auth/AuthPageHeader';
+
+declare const __FRESO_GOOGLE_CLIENT_ID__: string;
 
 type LoginFormData = {
   restaurantCode: string;
@@ -147,9 +145,14 @@ export function LoginPage() {
   const [formData, setFormData] = useState<LoginFormData>(defaultFormData);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
+  const [isGoogleButtonRendered, setIsGoogleButtonRendered] = useState(false);
+  const [googleSignInError, setGoogleSignInError] = useState('');
   const [submitError, setSubmitError] = useState('');
   const googleButtonRef = useRef<HTMLDivElement | null>(null);
-  const googleClientId = ((import.meta as ImportMeta & { env?: Record<string, string> }).env?.VITE_GOOGLE_CLIENT_ID ?? '').trim();
+  const restaurantCodeRef = useRef<HTMLInputElement | null>(null);
+  const googleClientIdFromEnv = ((import.meta as ImportMeta & { env?: Record<string, string> }).env?.VITE_GOOGLE_CLIENT_ID ?? '').trim();
+  const googleClientIdFromBuild = (typeof __FRESO_GOOGLE_CLIENT_ID__ === 'string' ? __FRESO_GOOGLE_CLIENT_ID__ : '').trim();
+  const googleClientId = googleClientIdFromEnv || googleClientIdFromBuild;
 
   const getPostLoginRedirect = (rawRedirectUrl?: string): string => {
     if (rawRedirectUrl && rawRedirectUrl.trim()) {
@@ -172,6 +175,14 @@ export function LoginPage() {
   const buildRegisterHref = () => {
     const params = new URLSearchParams(window.location.search);
     params.set('view', 'register');
+    params.delete('category');
+    params.delete('subcategory');
+    return `${window.location.pathname}?${params.toString()}`;
+  };
+
+  const buildForgotPasswordHref = () => {
+    const params = new URLSearchParams(window.location.search);
+    params.set('view', 'forgot-password');
     params.delete('category');
     params.delete('subcategory');
     return `${window.location.pathname}?${params.toString()}`;
@@ -259,7 +270,8 @@ export function LoginPage() {
       return;
     }
 
-    if (!formData.restaurantCode.trim()) {
+    const restaurantCode = (formData.restaurantCode || restaurantCodeRef.current?.value || '').trim();
+    if (!restaurantCode) {
       setSubmitError('Vui lòng nhập Mã nhà hàng trước khi đăng nhập Google.');
       return;
     }
@@ -274,7 +286,7 @@ export function LoginPage() {
       },
       body: JSON.stringify({
         payload: {
-          restaurantCode: formData.restaurantCode.trim(),
+          restaurantCode,
           googleIdToken: idToken,
         },
       }),
@@ -311,9 +323,18 @@ export function LoginPage() {
   };
 
   useEffect(() => {
+    setIsGoogleButtonRendered(false);
+    setGoogleSignInError('');
+
     if (!googleClientId || !googleButtonRef.current) {
       return;
     }
+
+    const renderTimeoutId = window.setTimeout(() => {
+      setGoogleSignInError(
+        `Google Sign-In chưa được cấp quyền cho domain hiện tại (${window.location.origin}). Vui lòng thêm origin này vào Authorized JavaScript origins trong Google Cloud Console.`,
+      );
+    }, 5000);
 
     const windowRef = window as GoogleWindow;
     const mountGoogleButton = () => {
@@ -337,6 +358,8 @@ export function LoginPage() {
         shape: 'pill',
         width: '360',
       });
+      window.clearTimeout(renderTimeoutId);
+      setIsGoogleButtonRendered(true);
     };
 
     if (windowRef.google?.accounts?.id) {
@@ -360,27 +383,21 @@ export function LoginPage() {
     script.defer = true;
     script.addEventListener('load', mountGoogleButton);
     script.addEventListener('error', () => {
+      window.clearTimeout(renderTimeoutId);
+      setGoogleSignInError('Không thể tải Google Sign-In. Vui lòng kiểm tra mạng hoặc CSP.');
       setSubmitError('Không thể tải Google Sign-In. Vui lòng thử lại sau.');
     });
     document.head.appendChild(script);
 
     return () => {
+      window.clearTimeout(renderTimeoutId);
       script.removeEventListener('load', mountGoogleButton);
     };
   }, [googleClientId]);
 
   return (
     <div className="flex flex-col min-h-screen bg-white text-[#333]">
-      <header className="w-full flex items-center justify-between px-6 py-4 lg:px-12 border-b border-gray-100 bg-white sticky top-0 z-50 shadow-sm">
-        <div className="flex items-center">
-          <span className="text-3xl font-extrabold text-[#00b14f] tracking-tight">Freso</span>
-        </div>
-        <div className="flex items-center gap-6">
-          <button type="button" className="text-[14px] lg:text-[15px] font-semibold text-[#006a4e] hover:text-[#00b14f] transition-colors">
-            Tìm hiểu <span className="font-normal text-gray-500 hidden sm:inline">trở thành người bán</span>
-          </button>
-        </div>
-      </header>
+      <AuthPageHeader />
 
       <div className="flex flex-1 flex-col lg:flex-row overflow-visible">
         <aside className="relative lg:w-[42%] bg-gradient-to-br from-[#f0f9f4] via-[#e8f6ed] to-[#d4efdf] p-8 lg:p-16 flex flex-col justify-start overflow-hidden border-r border-gray-50 min-h-[400px] lg:min-h-0">
@@ -436,6 +453,7 @@ export function LoginPage() {
                           placeholder="VD: freso_shop01"
                           value={formData.restaurantCode}
                           onChange={(event) => handleInputChange('restaurantCode', event.target.value)}
+                          ref={restaurantCodeRef}
                           className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:bg-white focus:border-[#00b14f] focus:ring-4 focus:ring-green-50 outline-none transition-all text-[15px] font-medium placeholder:text-gray-400"
                         />
                         <Store className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
@@ -487,9 +505,9 @@ export function LoginPage() {
                       />
                       <span className="text-[13px] text-gray-600 font-medium leading-relaxed">Ghi nhớ đăng nhập</span>
                     </label>
-                    <button type="button" className="text-[13px] font-extrabold text-[#00b14f] hover:text-[#006a4e] transition-colors underline underline-offset-4 decoration-2">
+                    <a href={buildForgotPasswordHref()} className="text-[13px] font-extrabold text-[#00b14f] hover:text-[#006a4e] transition-colors underline underline-offset-4 decoration-2">
                       Quên mật khẩu?
-                    </button>
+                    </a>
                   </div>
 
                   {submitError && <p className="text-[13px] font-bold text-red-500 text-center">{submitError}</p>}
@@ -505,24 +523,33 @@ export function LoginPage() {
                     </button>
                   </div>
 
-                  <div className="relative py-1">
-                    <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t border-gray-100" />
-                    </div>
-                    <div className="relative flex justify-center">
-                      <span className="bg-white px-4 text-[12px] font-semibold text-gray-400 uppercase tracking-wide">Hoặc</span>
-                    </div>
-                  </div>
+                  {googleClientId && (
+                    <>
+                      <div className="relative py-1">
+                        <div className="absolute inset-0 flex items-center">
+                          <span className="w-full border-t border-gray-100" />
+                        </div>
+                        <div className="relative flex justify-center">
+                          <span className="bg-white px-4 text-[12px] font-semibold text-gray-400 uppercase tracking-wide">Hoặc</span>
+                        </div>
+                      </div>
 
-                  <div className="space-y-2">
-                    {googleClientId ? (
-                      <div className="w-full flex justify-center" ref={googleButtonRef} />
-                    ) : (
-                      <p className="text-[12px] text-center text-amber-600 font-medium">Thiếu cấu hình VITE_GOOGLE_CLIENT_ID cho nút đăng nhập Google.</p>
-                    )}
-
-                    {isGoogleSubmitting && <p className="text-[12px] text-center text-gray-500 font-medium">Đang xác thực tài khoản Google...</p>}
-                  </div>
+                      <div className="space-y-2">
+                        <div className="w-full flex justify-center" ref={googleButtonRef} />
+                        {!isGoogleButtonRendered && !googleSignInError && (
+                          <button
+                            type="button"
+                            disabled
+                            className="w-full py-3 rounded-full border border-gray-200 bg-gray-50 text-gray-500 text-[14px] font-semibold"
+                          >
+                            Đang tải đăng nhập Google...
+                          </button>
+                        )}
+                        {googleSignInError && <p className="text-[12px] text-center text-amber-700 font-medium">{googleSignInError}</p>}
+                        {isGoogleSubmitting && <p className="text-[12px] text-center text-gray-500 font-medium">Đang xác thực tài khoản Google...</p>}
+                      </div>
+                    </>
+                  )}
                 </form>
 
                 <div className="mt-8 text-center border-t border-gray-50 pt-6">
@@ -537,85 +564,7 @@ export function LoginPage() {
         </section>
       </div>
 
-      <footer className="w-full bg-white border-t border-gray-100 px-6 py-12 lg:px-12 xl:px-24">
-        <div className="max-w-[1440px] mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-12">
-          <div className="space-y-6">
-            <div className="flex items-center">
-              <span className="text-2xl font-extrabold text-[#00b14f]">Freso</span>
-            </div>
-            <p className="text-[14px] text-gray-500 leading-relaxed font-medium">Nền tảng giao hàng thực phẩm tươi sống hàng đầu Việt Nam</p>
-            <div className="flex items-center gap-4">
-              {[Facebook, Instagram, Youtube].map((Icon, index) => (
-                <a key={index} href="#" className="size-9 bg-gray-50 rounded-full flex items-center justify-center text-gray-400 hover:text-[#00b14f] hover:bg-green-50 transition-all border border-gray-100 shadow-sm">
-                  <Icon size={18} />
-                </a>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            <h4 className="text-[15px] font-bold text-gray-900 uppercase tracking-wider">Liên kết nhanh</h4>
-            <ul className="space-y-3">
-              {['Về chúng tôi', 'Sản phẩm', 'Liên hệ'].map((item) => (
-                <li key={item}>
-                  <a href="#" className="text-[14px] text-gray-500 hover:text-[#00b14f] font-medium transition-colors">
-                    {item}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="space-y-6">
-            <h4 className="text-[15px] font-bold text-gray-900 uppercase tracking-wider">Hỗ trợ</h4>
-            <ul className="space-y-3">
-              {['Câu hỏi thường gặp', 'Chính sách giao hàng', 'Chính sách đổi trả', 'Điều khoản sử dụng'].map((item) => (
-                <li key={item}>
-                  <a href="#" className="text-[14px] text-gray-500 hover:text-[#00b14f] font-medium transition-colors">
-                    {item}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="space-y-6">
-            <h4 className="text-[15px] font-bold text-gray-900 uppercase tracking-wider">Liên hệ</h4>
-            <ul className="space-y-4">
-              <li className="flex items-start gap-3">
-                <div className="p-1.5 bg-green-50 rounded-lg text-[#00b14f] shrink-0">
-                  <MapPin size={16} />
-                </div>
-                <span className="text-[14px] text-gray-500 leading-tight font-medium">123 Đường ABC, Quận 1, TP. Hồ Chí Minh</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <div className="p-1.5 bg-green-50 rounded-lg text-[#00b14f] shrink-0">
-                  <Phone size={16} />
-                </div>
-                <span className="text-[14px] text-gray-500 font-bold">1900 1234</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <div className="p-1.5 bg-green-50 rounded-lg text-[#00b14f] shrink-0">
-                  <Mail size={16} />
-                </div>
-                <span className="text-[14px] text-gray-500 font-medium">support@freso.vn</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <div className="max-w-[1440px] mx-auto mt-12 pt-8 border-t border-gray-50 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <p className="text-[13px] text-gray-400 font-medium">© 2026 Freso. All rights reserved.</p>
-          <div className="flex items-center gap-6">
-            <a href="#" className="text-[13px] text-gray-400 hover:text-[#00b14f] font-medium transition-colors">
-              Chính sách bảo mật
-            </a>
-            <a href="#" className="text-[13px] text-gray-400 hover:text-[#00b14f] font-medium transition-colors">
-              Điều khoản dịch vụ
-            </a>
-          </div>
-        </div>
-      </footer>
+      <AuthPageFooter />
     </div>
   );
 }

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-set -euo pipefail
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+ROOT_DIR="$PROJECT_ROOT"
 REACT_DIR="$PROJECT_ROOT/src/react-frontend"
 CUSTOM_ENV_FILE="$PROJECT_ROOT/env/custom.env"
+LIVE_DOMAIN="${LIVE_DOMAIN:-https://organica.click}"
 
 echo "🚀 Bắt đầu build React App..."
 

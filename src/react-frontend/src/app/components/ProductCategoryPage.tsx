@@ -200,7 +200,9 @@ type ProductCategoryPageProps = {
 };
 
 let cachedCategoryLookup: Record<string, number> | null = null;
-const productsResponseCache = new Map<string, ProductItem[]>();
+const PRODUCT_CACHE_TTL_MS = 15_000;
+const PRODUCT_AUTO_REFRESH_MS = 30_000;
+const productsResponseCache = new Map<string, { items: ProductItem[]; fetchedAt: number }>();
 
 export function ProductCategoryPage({ categoryName, initialSubcategory }: ProductCategoryPageProps) {
   const { openAddToCartModal } = useCart();
@@ -214,6 +216,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [categoryIdLookup, setCategoryIdLookup] = useState<Record<string, number>>({});
+  const [refreshTick, setRefreshTick] = useState(0);
   const latestRequestRef = useRef(0);
 
   const getCategoryDisplayLabel = (product: GraphQlProductItem) => {
@@ -292,6 +295,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
       try {
         const response = await fetch('/graphql', {
           method: 'POST',
+          cache: 'no-store',
           headers: {
             'Content-Type': 'application/json'
           },
@@ -344,6 +348,28 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
   }, []);
 
   useEffect(() => {
+    const triggerRefresh = () => {
+      setRefreshTick((tick) => tick + 1);
+    };
+
+    const intervalId = window.setInterval(triggerRefresh, PRODUCT_AUTO_REFRESH_MS);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        triggerRefresh();
+      }
+    };
+
+    window.addEventListener('focus', triggerRefresh);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', triggerRefresh);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, []);
+
+  useEffect(() => {
     const requestId = ++latestRequestRef.current;
     const controller = new AbortController();
 
@@ -366,8 +392,11 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
       const cacheKey = `${toQuerySlug(category.name)}|${toQuerySlug(activeSubcategory)}|${requestCategoryIds.join(',')}|${isUsingSkuFallback ? 'fallback' : 'strict'}`;
 
       const cachedProducts = productsResponseCache.get(cacheKey);
-      if (cachedProducts) {
-        setProducts(cachedProducts);
+      const isCacheFresh =
+        cachedProducts && Date.now() - cachedProducts.fetchedAt < PRODUCT_CACHE_TTL_MS;
+
+      if (cachedProducts && isCacheFresh) {
+        setProducts(cachedProducts.items);
         setLoadError('');
         setIsLoading(false);
         return;
@@ -406,6 +435,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
         const response = await fetch('/graphql', {
           method: 'POST',
           signal: controller.signal,
+          cache: 'no-store',
           headers: {
             'Content-Type': 'application/json'
           },
@@ -464,7 +494,10 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
           return;
         }
 
-        productsResponseCache.set(cacheKey, mappedProducts);
+        productsResponseCache.set(cacheKey, {
+          items: mappedProducts,
+          fetchedAt: Date.now()
+        });
         setProducts(mappedProducts);
       } catch (error) {
         if (controller.signal.aborted || latestRequestRef.current !== requestId) {
@@ -486,7 +519,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
     return () => {
       controller.abort();
     };
-  }, [category.name, category.subcategories, activeSubcategory, categoryIdLookup]);
+  }, [category.name, category.subcategories, activeSubcategory, categoryIdLookup, refreshTick]);
 
   const productsToShow = products.slice(0, visibleCount);
   const canLoadMore = visibleCount < products.length;

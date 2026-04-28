@@ -13,6 +13,31 @@ export function ShoppingCartPage() {
   } = useCart();
   const [searchTerm, setSearchTerm] = useState('');
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
+  const isEmbeddedInIframe = window.self !== window.top;
+
+  const handleTopLevelNavigation = (event: React.MouseEvent<HTMLElement>) => {
+    if (!isEmbeddedInIframe) {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    const anchor = target?.closest('a[href]') as HTMLAnchorElement | null;
+    if (!anchor) {
+      return;
+    }
+
+    const href = anchor.getAttribute('href');
+    if (!href || href.startsWith('#') || href.startsWith('javascript:') || anchor.target === '_blank') {
+      return;
+    }
+
+    event.preventDefault();
+
+    const nextUrl = anchor.href || href;
+    if (window.top) {
+      window.top.location.href = nextUrl;
+    }
+  };
 
   const filteredItems = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -32,7 +57,7 @@ export function ShoppingCartPage() {
   const selectedTotal = selectedItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
 
   return (
-    <div className="min-h-screen bg-[#f6f8f7] pb-36 text-gray-800">
+  <div className="min-h-screen bg-[#f6f8f7] pb-36 text-gray-800" onClickCapture={handleTopLevelNavigation}>
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <nav className="mb-3 text-sm text-gray-400">
           <a href="/react/index.html" className="hover:text-green-600 transition-colors">Trang chủ</a>

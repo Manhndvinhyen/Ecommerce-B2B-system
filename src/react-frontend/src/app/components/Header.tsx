@@ -28,6 +28,31 @@ export function Header() {
 
   const currentCategory = categoryMenu.find((category) => category.name === activeCategory) ?? categoryMenu[0];
   const isLoggedIn = useMemo(() => Boolean(customerToken), [customerToken]);
+  const isEmbeddedInIframe = window.self !== window.top;
+
+  const handleTopLevelNavigation = (event: React.MouseEvent<HTMLElement>) => {
+    if (!isEmbeddedInIframe) {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    const anchor = target?.closest('a[href]') as HTMLAnchorElement | null;
+    if (!anchor) {
+      return;
+    }
+
+    const href = anchor.getAttribute('href');
+    if (!href || href.startsWith('#') || href.startsWith('javascript:') || anchor.target === '_blank') {
+      return;
+    }
+
+    event.preventDefault();
+
+    const nextUrl = anchor.href || href;
+    if (window.top) {
+      window.top.location.href = nextUrl;
+    }
+  };
 
   useEffect(() => {
     const storedToken = window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
@@ -45,14 +70,36 @@ export function Header() {
   }, []);
 
   const handleLogout = async () => {
-    window.localStorage.removeItem('freso_customer_token');
-    window.localStorage.removeItem('freso_customer_email');
-    window.localStorage.removeItem('freso_customer_name');
-    window.localStorage.removeItem('freso_branch_name');
-    window.sessionStorage.removeItem('freso_customer_token');
-    window.sessionStorage.removeItem('freso_customer_email');
-    window.sessionStorage.removeItem('freso_customer_name');
-    window.sessionStorage.removeItem('freso_branch_name');
+    // Clear any application-specific storage keys (freso_*) from both storages.
+    try {
+      const localKeys = Object.keys(window.localStorage || {}).filter((k) => k.startsWith('freso_'));
+      localKeys.forEach((k) => window.localStorage.removeItem(k));
+    } catch (_err) {
+      // ignore
+    }
+
+    try {
+      const sessionKeys = Object.keys(window.sessionStorage || {}).filter((k) => k.startsWith('freso_'));
+      sessionKeys.forEach((k) => window.sessionStorage.removeItem(k));
+    } catch (_err) {
+      // ignore
+    }
+
+    // Clear any accessible cookies to reduce chance of stale admin/session indicators
+    try {
+      document.cookie.split(';').forEach((cookie) => {
+        const eqPos = cookie.indexOf('=');
+        const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+        if (!name) return;
+        // try clearing with and without domain to increase chance of removal for accessible cookies
+        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${window.location.hostname}`;
+      });
+    } catch (_err) {
+      // ignore
+    }
+
+    // Reset local component state
     setCustomerToken('');
     setCustomerEmail('');
     setCustomerName('');
@@ -68,7 +115,14 @@ export function Header() {
     } catch (_error) {
       // Ignore network errors and continue redirecting to home.
     } finally {
-      window.location.href = reactHomePath;
+      try {
+        // notify other tabs about logout (storage events don't fire in same tab)
+        window.localStorage.setItem('freso_last_logout', String(Date.now()));
+      } catch (_e) {
+        // ignore
+      }
+      // Use replace so back doesn't go back to an authenticated page
+      window.location.replace(reactHomePath);
     }
   };
 
@@ -80,11 +134,17 @@ export function Header() {
   };
 
   useEffect(() => {
-    if (!isLoggedIn) {
-      return;
-    }
+    const syncAuthState = (ev?: StorageEvent | null) => {
+      // If storage event indicates a logout, clear local state.
+      if (ev && ev.key === 'freso_last_logout') {
+        setCustomerToken('');
+        setCustomerEmail('');
+        setCustomerName('');
+        setBranchName('Chi nhanh 1');
+        setIsUserMenuOpen(false);
+        return;
+      }
 
-    const syncAuthState = () => {
       const token = window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
       const email = window.localStorage.getItem('freso_customer_email') || window.sessionStorage.getItem('freso_customer_email') || '';
       const name = window.localStorage.getItem('freso_customer_name') || window.sessionStorage.getItem('freso_customer_name') || '';
@@ -99,13 +159,177 @@ export function Header() {
     };
 
     window.addEventListener('storage', syncAuthState);
+    // Also call once on mount to sync state
+    syncAuthState(null);
     return () => {
       window.removeEventListener('storage', syncAuthState);
     };
-  }, [isLoggedIn]);
+  }, []);
+
+  if (!isLoggedIn) {
+    return (
+  <header className="sticky top-0 z-50 bg-white shadow-sm" onClickCapture={handleTopLevelNavigation}>
+        {/* Top Bar - Auth Buttons - Tầng 1 */}
+        <div className="bg-gray-50 border-b">
+          <div className="container mx-auto px-4 py-2">
+            <div className="flex items-center justify-end gap-3">
+              <a href={loginHref} className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors">
+                Đăng nhập
+              </a>
+              <a href={registerHref} className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors">
+                Đăng ký
+              </a>
+              <a href="/contact" className="px-4 py-1.5 text-sm border-2 border-orange-500 text-orange-500 rounded-full hover:bg-orange-50 transition-colors whitespace-nowrap">
+                Đăng ký bán hàng
+              </a>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Header - Logo, Menu, Search, Cart - Tầng 2 */}
+        <div className="bg-white border-b">
+          <div className="container mx-auto px-4 py-4">
+            <div className="flex items-center justify-between gap-4">
+              {/* Logo */}
+              <div className="flex items-center gap-8">
+                <a href={reactHomePath} className="text-2xl font-bold text-green-600">
+                  Freso
+                </a>
+
+                {/* Navigation */}
+                <nav className="hidden lg:flex items-center gap-6">
+                  <div
+                    className="relative pb-3 -mb-3"
+                    onMouseEnter={() => {
+                      setIsCategoryMenuOpen(true);
+                      setActiveCategory((prev) => prev || categoryMenu[0].name);
+                    }}
+                    onMouseLeave={() => setIsCategoryMenuOpen(false)}
+                  >
+                    <span
+                      className="text-gray-700 font-medium select-none cursor-default"
+                    >
+                      Danh mục sản phẩm
+                    </span>
+
+                    {isCategoryMenuOpen && (
+                      <div className="absolute top-full left-0 w-[760px] bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden z-50">
+                        <div className="grid grid-cols-[280px_1fr] min-h-[360px]">
+                          <div className="bg-gray-50 border-r border-gray-100 p-3">
+                            {categoryMenu.map((category) => {
+                              const isActive = activeCategory === category.name;
+                              return (
+                                <a
+                                  key={category.name}
+                                  href={getCategoryPageLink(category.name)}
+                                  onMouseEnter={() => setActiveCategory(category.name)}
+                                  className={`w-full flex items-center justify-between text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
+                                    isActive
+                                      ? 'bg-green-100 text-green-700 font-semibold shadow-sm'
+                                      : 'text-gray-700 hover:bg-white hover:shadow-sm hover:text-green-700'
+                                  }`}
+                                >
+                                  <span className="pr-3">{category.name}</span>
+                                  <ChevronRight className={`size-4 transition-transform ${isActive ? 'translate-x-0.5' : ''}`} />
+                                </a>
+                              );
+                            })}
+                          </div>
+
+                          <div className="p-5">
+                            <h3 className="font-bold text-gray-900 mb-4">{currentCategory.name}</h3>
+                            <div className="grid grid-cols-2 gap-2">
+                              {currentCategory.subcategories.map((subcategory) => (
+                                <a
+                                  key={subcategory}
+                                  href={getCategoryPageLink(currentCategory.name, subcategory)}
+                                  className="text-sm text-gray-700 px-3 py-2 rounded-lg hover:bg-green-50 hover:text-green-700 transition-colors"
+                                >
+                                  {subcategory}
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                </nav>
+              </div>
+
+              {/* Search Bar */}
+              <div className="hidden lg:flex items-center flex-1 max-w-xl mx-8">
+                <div className="relative w-full">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 size-5" />
+                  <input
+                    type="text"
+                    placeholder="Tìm kiếm sản phẩm..."
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:border-green-500"
+                  />
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-3">
+                <a href="/customer/account" className="p-2 hover:bg-gray-100 rounded-full transition-colors hidden md:block">
+                  <User className="size-6 text-gray-700" />
+                </a>
+                <div
+                  className="relative hidden md:block pb-2 -mb-2"
+                  onMouseLeave={() => setIsFavoritesOpen(false)}
+                >
+                  <button
+                    onClick={() => setIsFavoritesOpen((prev) => !prev)}
+                    onMouseEnter={() => setIsFavoritesOpen(true)}
+                    className={`p-2 rounded-full transition-all duration-200 ${
+                      isFavoritesOpen
+                        ? 'bg-rose-50 text-rose-600 ring-2 ring-rose-100 shadow-sm'
+                        : 'hover:bg-gray-100 text-gray-700'
+                    }`}
+                    aria-label="Mục yêu thích"
+                  >
+                    <Heart className={`size-6 transition-all ${isFavoritesOpen ? 'fill-rose-500 text-rose-500 scale-105' : 'text-gray-700'}`} />
+                  </button>
+
+                  {isFavoritesOpen && (
+                    <div className="absolute top-full right-0 w-56 bg-white border border-rose-100 rounded-xl shadow-xl p-2 z-50">
+                      <a
+                        href="/wishlist"
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-rose-50 hover:text-rose-700 transition-colors"
+                      >
+                        <Heart className="size-4" />
+                        Sản phẩm yêu thích
+                      </a>
+                      <a
+                        href="/sales/order/history"
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-rose-50 hover:text-rose-700 transition-colors"
+                      >
+                        <Heart className="size-4" />
+                        Đơn hàng yêu thích
+                      </a>
+                    </div>
+                  )}
+                </div>
+                <a href="/checkout/cart" className="relative p-2 hover:bg-gray-100 rounded-full transition-colors">
+                  <ShoppingCart className="size-6 text-gray-700" />
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full size-5 flex items-center justify-center">
+                    0
+                  </span>
+                </a>
+                <button className="md:hidden p-2 hover:bg-gray-100 rounded-full transition-colors">
+                  <Menu className="size-6 text-gray-700" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+    );
+  }
 
   return (
-    <header className="sticky top-0 z-50 bg-white shadow-sm">
+  <header className="sticky top-0 z-50 bg-white shadow-sm" onClickCapture={handleTopLevelNavigation}>
       {/* Top Bar - Tầng 1 */}
       <div className="bg-white border-b">
         <div className="container mx-auto px-4 py-2.5">
@@ -200,83 +424,77 @@ export function Header() {
       {/* Main Header - Logo, Menu, Search, Cart - Tầng 2 */}
       <div className="bg-white border-b">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-6">
-            {/* Logo */}
-            <a href={reactHomePath} className="flex flex-col">
-              <span className="text-2xl font-bold text-green-600">Freso</span>
-            </a>
+          <div className="flex items-center justify-between gap-4">
+            {/* Logo + Navigation */}
+            <div className="flex items-center gap-8">
+              <a href={reactHomePath} className="text-2xl font-bold text-green-600">
+                Freso
+              </a>
 
-            {/* Category Menu Button */}
-            <div
-              className="relative"
-              onMouseEnter={() => {
-                setIsCategoryMenuOpen(true);
-                setActiveCategory((prev) => prev || categoryMenu[0].name);
-              }}
-              onMouseLeave={() => setIsCategoryMenuOpen(false)}
-            >
-              <button
-                type="button"
-                onClick={() => setIsCategoryMenuOpen((prev) => !prev)}
-                className="flex items-center gap-2 text-gray-700 hover:text-green-600 transition-colors"
-              >
-                <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-                <span className="font-medium">Danh mục sản phẩm</span>
-              </button>
+              <nav className="hidden lg:flex items-center gap-6">
+                <div
+                  className="relative pb-3 -mb-3"
+                  onMouseEnter={() => {
+                    setIsCategoryMenuOpen(true);
+                    setActiveCategory((prev) => prev || categoryMenu[0].name);
+                  }}
+                  onMouseLeave={() => setIsCategoryMenuOpen(false)}
+                >
+                  <span className="text-gray-700 font-medium select-none cursor-default">Danh mục sản phẩm</span>
 
-              {isCategoryMenuOpen && (
-                <div className="absolute top-full left-0 mt-2 w-[760px] bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden z-50">
-                  <div className="grid grid-cols-[280px_1fr] min-h-[360px]">
-                    <div className="bg-gray-50 border-r border-gray-100 p-3">
-                      {categoryMenu.map((category) => {
-                        const isActive = activeCategory === category.name;
-                        return (
-                          <a
-                            key={category.name}
-                            href={getCategoryPageLink(category.name)}
-                            onMouseEnter={() => setActiveCategory(category.name)}
-                            className={`w-full flex items-center justify-between text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
-                              isActive
-                                ? 'bg-green-100 text-green-700 font-semibold shadow-sm'
-                                : 'text-gray-700 hover:bg-white hover:shadow-sm hover:text-green-700'
-                            }`}
-                          >
-                            <span className="pr-3">{category.name}</span>
-                            <ChevronRight className={`size-4 transition-transform ${isActive ? 'translate-x-0.5' : ''}`} />
-                          </a>
-                        );
-                      })}
-                    </div>
+                  {isCategoryMenuOpen && (
+                    <div className="absolute top-full left-0 w-[760px] bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden z-50">
+                      <div className="grid grid-cols-[280px_1fr] min-h-[360px]">
+                        <div className="bg-gray-50 border-r border-gray-100 p-3">
+                          {categoryMenu.map((category) => {
+                            const isActive = activeCategory === category.name;
+                            return (
+                              <a
+                                key={category.name}
+                                href={getCategoryPageLink(category.name)}
+                                onMouseEnter={() => setActiveCategory(category.name)}
+                                className={`w-full flex items-center justify-between text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
+                                  isActive
+                                    ? 'bg-green-100 text-green-700 font-semibold shadow-sm'
+                                    : 'text-gray-700 hover:bg-white hover:shadow-sm hover:text-green-700'
+                                }`}
+                              >
+                                <span className="pr-3">{category.name}</span>
+                                <ChevronRight className={`size-4 transition-transform ${isActive ? 'translate-x-0.5' : ''}`} />
+                              </a>
+                            );
+                          })}
+                        </div>
 
-                    <div className="p-5">
-                      <h3 className="font-bold text-gray-900 mb-4">{currentCategory.name}</h3>
-                      <div className="grid grid-cols-2 gap-2">
-                        {currentCategory.subcategories.map((subcategory) => (
-                          <a
-                            key={subcategory}
-                            href={getCategoryPageLink(currentCategory.name, subcategory)}
-                            className="text-sm text-gray-700 px-3 py-2 rounded-lg hover:bg-green-50 hover:text-green-700 transition-colors"
-                          >
-                            {subcategory}
-                          </a>
-                        ))}
+                        <div className="p-5">
+                          <h3 className="font-bold text-gray-900 mb-4">{currentCategory.name}</h3>
+                          <div className="grid grid-cols-2 gap-2">
+                            {currentCategory.subcategories.map((subcategory) => (
+                              <a
+                                key={subcategory}
+                                href={getCategoryPageLink(currentCategory.name, subcategory)}
+                                className="text-sm text-gray-700 px-3 py-2 rounded-lg hover:bg-green-50 hover:text-green-700 transition-colors"
+                              >
+                                {subcategory}
+                              </a>
+                            ))}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
-              )}
+              </nav>
             </div>
 
             {/* Search Bar */}
-            <div className="flex items-center flex-1">
+            <div className="hidden lg:flex items-center flex-1 max-w-xl mx-8">
               <div className="relative w-full">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 size-5" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 size-5" />
                 <input
                   type="text"
-                  placeholder="Tìm kiếm sản phẩm, nhà cung cấp"
-                  className="w-full pl-12 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-green-500"
+                  placeholder="Tìm kiếm sản phẩm..."
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:border-green-500"
                 />
               </div>
             </div>
@@ -305,16 +523,11 @@ export function Header() {
                 </a>
               )}
 
-              <a id="header-cart-icon" href="/checkout/cart" className="flex items-center gap-2 text-gray-700 hover:text-green-600 transition-colors">
-                <div className="relative">
-                  <ShoppingCart className="size-6" />
-                  {cartItemCount > 0 && (
-                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full size-5 flex items-center justify-center">
-                      {cartItemCount}
-                    </span>
-                  )}
-                </div>
-                <span>Giỏ hàng</span>
+              <a id="header-cart-icon" href="/checkout/cart" className="relative p-2 hover:bg-gray-100 rounded-full transition-colors">
+                <ShoppingCart className="size-6 text-gray-700" />
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full size-5 flex items-center justify-center">
+                  {cartItemCount}
+                </span>
               </a>
 
               <button className="md:hidden p-2 hover:bg-gray-100 rounded-full transition-colors">

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+MODE="${1:-}"
+shift || true
+
+case "${MODE}" in
+  push|export)
+    ./bin/db-dump "$@"
+    ;;
+  pull|import)
+    ./bin/db-import "$@"
+    ./bin/magento cache:flush
+    ;;
+  "")
+    echo "Usage: ./bin/db-sync {push|pull} [dump-name.sql]"
+    echo "  push  -> export current DB to dump/magento.sql.gz"
+    echo "  pull  -> import dump from dump/ and flush cache"
+    exit 1
+    ;;
+  *)
+    echo "Unknown mode: ${MODE}"
+    echo "Usage: ./bin/db-sync {push|pull} [dump-name.sql]"
+    exit 1
+    ;;
+esac

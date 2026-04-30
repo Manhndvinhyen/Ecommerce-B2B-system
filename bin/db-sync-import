@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# shellcheck source=../env/db.env
+source env/db.env
+
+./bin/db-import "$@"
+./bin/magento cache:flush

@@ -61,6 +61,32 @@ const pickSubcategoryFromText = (
 const inferCategoryFromSku = (sku: string): InferredCategory | null => {
   const normalized = toQuerySlug(sku);
 
+  // New professional SKU scheme: <CATEGORY_INITIALS>_<NNN>
+  // Examples: RCQ_001 (Rau củ quả), TC_001 (Trái cây), TPTS_001 (Thực phẩm tươi sống)
+  const normalizedUpper = String(sku || '').toUpperCase();
+
+  if (/^RCQ_\d{3,}$/.test(normalizedUpper)) {
+    return { category: 'Rau củ quả', subcategory: 'Rau phổ thông' };
+  }
+  if (/^TC_\d{3,}$/.test(normalizedUpper)) {
+    return { category: 'Trái cây', subcategory: 'Trái cây phổ thông' };
+  }
+  if (/^TPTS_\d{3,}$/.test(normalizedUpper)) {
+    return { category: 'Thực phẩm tươi sống', subcategory: 'Giò-chả-nem' };
+  }
+  if (/^THS_\d{3,}$/.test(normalizedUpper)) {
+    return { category: 'Thuỷ hải sản', subcategory: 'Hải sản chế biến' };
+  }
+  if (/^TPDL_\d{3,}$/.test(normalizedUpper)) {
+    return { category: 'Thực phẩm đông lạnh', subcategory: 'Giò-chả-nem' };
+  }
+  if (/^TPK_\d{3,}$/.test(normalizedUpper)) {
+    return { category: 'Thực phẩm khô', subcategory: 'Thực phẩm khô khác' };
+  }
+  if (/^TIB_\d{3,}$/.test(normalizedUpper)) {
+    return { category: 'Tiện ích bếp', subcategory: 'Sản phẩm khác' };
+  }
+
   if (normalized.startsWith('rau-cu-qua-')) {
     return {
       category: 'Rau củ quả',
@@ -608,6 +634,19 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
                 <article
                   key={product.id}
                   className="bg-white rounded-2xl border border-gray-200 hover:shadow-lg transition-all duration-300 overflow-hidden group cursor-pointer"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    const targetUrl = `/react/index.html?view=product&id=${encodeURIComponent(String(product.id))}&sku=${encodeURIComponent(product.sku)}`;
+                    window.location.href = targetUrl;
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      const targetUrl = `/react/index.html?view=product&id=${encodeURIComponent(String(product.id))}&sku=${encodeURIComponent(product.sku)}`;
+                      window.location.href = targetUrl;
+                    }
+                  }}
                 >
                   <div className="relative aspect-square overflow-hidden bg-gray-50">
                     <ImageWithFallback
@@ -619,6 +658,8 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
                     />
                     <button
                       type="button"
+                      onClick={(event) => event.stopPropagation()}
+                      onKeyDown={(event) => event.stopPropagation()}
                       className="absolute top-2 right-2 bg-white rounded-full p-2 hover:bg-red-50 transition-colors shadow-sm"
                       aria-label={`Yêu thích ${product.name}`}
                     >

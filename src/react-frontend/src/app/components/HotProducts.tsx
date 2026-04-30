@@ -185,6 +185,19 @@ export function HotProducts() {
               <div
                 key={`${product.name}-${index}`}
                 className="bg-white rounded-2xl border border-gray-200 hover:shadow-lg transition-all duration-300 overflow-hidden group cursor-pointer"
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  const targetUrl = `/react/index.html?view=product&name=${encodeURIComponent(product.name)}`;
+                  window.location.href = targetUrl;
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    const targetUrl = `/react/index.html?view=product&name=${encodeURIComponent(product.name)}`;
+                    window.location.href = targetUrl;
+                  }
+                }}
               >
                 {/* Product Image */}
                 <div className="relative aspect-square overflow-hidden bg-gray-50">
@@ -202,7 +215,11 @@ export function HotProducts() {
                   )}
 
                   {/* Favorite Button */}
-                  <button className="absolute top-2 right-2 bg-white rounded-full p-2 hover:bg-red-50 transition-colors shadow-sm">
+                  <button
+                    className="absolute top-2 right-2 bg-white rounded-full p-2 hover:bg-red-50 transition-colors shadow-sm"
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                  >
                     <Heart className="size-4 text-gray-400 hover:text-red-500" />
                   </button>
                 </div>

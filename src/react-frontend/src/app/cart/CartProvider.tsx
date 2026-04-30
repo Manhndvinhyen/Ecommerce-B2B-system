@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useMemo, useRef, useState } fro
 import type { PropsWithChildren } from 'react';
 import { CheckCircle2, Minus, Plus, X } from 'lucide-react';
 
-type AddToCartProduct = {
+export type AddToCartProduct = {
   id: string;
   name: string;
   category: string;
@@ -29,6 +29,7 @@ type CartContextValue = {
   cartItems: CartLineItem[];
   cartItemCount: number;
   openAddToCartModal: (product: AddToCartProduct, sourceImageElement?: Element | null) => void;
+  quickAddToCart: (product: AddToCartProduct, quantity: number, sourceImageElement?: Element | null) => Promise<void>;
   setCartItemQuantity: (itemId: string, quantity: number) => void;
   setCartItemSelected: (itemId: string, selected: boolean) => void;
   setCartItemNote: (itemId: string, note: string) => void;
@@ -192,6 +193,26 @@ export function CartProvider({ children }: PropsWithChildren) {
     }, 2400);
   }, [addToCart, closeModal, modalProduct, modalQuantity, runFlyToCartAnimation]);
 
+  const quickAddToCart = useCallback(
+    async (product: AddToCartProduct, quantity: number, sourceImageElement?: Element | null) => {
+      sourceRectRef.current = sourceImageElement?.getBoundingClientRect() ?? null;
+      const targetQuantity = clampQuantity(quantity);
+
+      await runFlyToCartAnimation(product.image);
+      addToCart(product, targetQuantity);
+
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+
+      setToastMessage('Đã thêm sản phẩm vào giỏ hàng');
+      toastTimerRef.current = window.setTimeout(() => {
+        setToastMessage('');
+      }, 2400);
+    },
+    [addToCart, runFlyToCartAnimation]
+  );
+
   const setCartItemQuantity = useCallback((itemId: string, quantity: number) => {
     setCartItems((prev) => prev.map((item) => (item.id === itemId ? { ...item, quantity: clampQuantity(quantity) } : item)));
   }, []);
@@ -217,6 +238,7 @@ export function CartProvider({ children }: PropsWithChildren) {
       cartItems,
       cartItemCount,
       openAddToCartModal,
+      quickAddToCart,
       setCartItemQuantity,
       setCartItemSelected,
       setCartItemNote,
@@ -227,6 +249,7 @@ export function CartProvider({ children }: PropsWithChildren) {
       cartItems,
       cartItemCount,
       openAddToCartModal,
+      quickAddToCart,
       removeCartItem,
       setCartItemNote,
       setCartItemQuantity,

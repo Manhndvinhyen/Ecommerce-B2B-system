@@ -14,6 +14,15 @@ export function ShoppingCartPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
   const isEmbeddedInIframe = window.self !== window.top;
+  const reactHomePath = '/react/index.html';
+
+  const handleGoHome = () => {
+    window.location.href = reactHomePath;
+  };
+
+  const handleGoToWishlist = () => {
+    window.location.href = `${reactHomePath}?view=wishlist`;
+  };
 
   const handleTopLevelNavigation = (event: React.MouseEvent<HTMLElement>) => {
     if (!isEmbeddedInIframe) {
@@ -72,6 +81,7 @@ export function ShoppingCartPage() {
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
+              onClick={handleGoHome}
               className="inline-flex items-center gap-2 rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:border-green-300 hover:bg-green-50 hover:text-green-700 transition-colors"
             >
               <span className="text-lg leading-none">+</span>
@@ -79,6 +89,7 @@ export function ShoppingCartPage() {
             </button>
             <button
               type="button"
+              onClick={handleGoToWishlist}
               className="inline-flex items-center gap-2 rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600 transition-colors"
             >
               <Heart className="size-4" />

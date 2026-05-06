@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Heart, ShoppingCart } from 'lucide-react';
+import { WishlistAddModal, WishlistModalProduct } from './WishlistAddModal';
 import { useCart, toCurrencyTextFromNumber, toUnitPriceFromLooseValue } from '../cart/CartProvider';
 import { toQuerySlug } from '../data/categories';
 
@@ -108,11 +109,11 @@ const pickCategoryName = (categories?: Array<{ name?: string | null }>) => {
 export function ProductDetailPage() {
   const { quickAddToCart } = useCart();
   const [quantity, setQuantity] = useState(1);
-  const [isAdding, setIsAdding] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
   const [product, setProduct] = useState<MagentoProduct | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [wishlistProduct, setWishlistProduct] = useState<WishlistModalProduct | null>(null);
   const holdTimerRef = useRef<number | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
 
@@ -298,14 +299,13 @@ export function ProductDetailPage() {
     if (!product) {
       return;
     }
-    if (isAdding) {
-      return;
-    }
-
-    setIsAdding(true);
+    // Add straight to cart (no modal).
+    // Quantity should be added to cart, but cart badge should count distinct items.
+    const sourceElement = imageRef.current ?? document.getElementById('pdp-product-image');
     await quickAddToCart(
       {
         id: product.id,
+        sku: product.sku,
         name: product.name,
         category: product.category,
         priceText: toCurrencyTextFromNumber(product.price),
@@ -314,9 +314,22 @@ export function ProductDetailPage() {
         image: product.image
       },
       quantity,
-      imageRef.current
+      sourceElement
     );
-    window.setTimeout(() => setIsAdding(false), 450);
+  };
+
+  const openWishlistModal = () => {
+    if (!product) return;
+    setWishlistProduct({
+      sku: product.sku,
+      name: product.name,
+      priceText: toCurrencyTextFromNumber(product.price),
+      priceValue: product.price,
+      unit: product.unit,
+      image: product.image,
+      category: product.category
+    });
+    setIsFavorite(true);
   };
 
   return (
@@ -361,6 +374,7 @@ export function ProductDetailPage() {
           <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
             <div className="group relative overflow-hidden rounded-2xl bg-gray-50">
               <img
+                id="pdp-product-image"
                 ref={imageRef}
                 src={product.image}
                 alt={product.name}
@@ -379,7 +393,7 @@ export function ProductDetailPage() {
               </div>
               <button
                 type="button"
-                onClick={() => setIsFavorite((prev) => !prev)}
+                onClick={openWishlistModal}
                 className={`group relative flex h-10 w-10 items-center justify-center rounded-full border transition-all ${
                   isFavorite
                     ? 'border-rose-200 bg-rose-50 text-rose-500'
@@ -463,14 +477,9 @@ export function ProductDetailPage() {
               <button
                 type="button"
                 onClick={handleAddToCart}
-                disabled={isAdding}
                 className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-green-600 px-6 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {isAdding ? (
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                ) : (
-                  <ShoppingCart className="size-5" />
-                )}
+                <ShoppingCart className="size-5" />
                 Thêm vào giỏ hàng
               </button>
             </div>
@@ -504,5 +513,10 @@ export function ProductDetailPage() {
         )}
       </div>
     </div>
+    <WishlistAddModal
+      isOpen={Boolean(wishlistProduct)}
+      product={wishlistProduct}
+      onClose={() => setWishlistProduct(null)}
+    />
   );
 }

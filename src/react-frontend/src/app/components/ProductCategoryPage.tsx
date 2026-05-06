@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, ShoppingCart, Heart } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
+import { WishlistAddModal, WishlistModalProduct } from './WishlistAddModal';
 import {
   categoryMenu,
   getCategoryPageLink,
@@ -244,6 +245,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
   const [categoryIdLookup, setCategoryIdLookup] = useState<Record<string, number>>({});
   const [refreshTick, setRefreshTick] = useState(0);
   const latestRequestRef = useRef(0);
+  const [wishlistProduct, setWishlistProduct] = useState<WishlistModalProduct | null>(null);
 
   const getCategoryDisplayLabel = (product: GraphQlProductItem) => {
     const inferred = inferCategoryFromSku(product.sku);
@@ -269,6 +271,18 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
     }
 
     return inferred?.category ?? rawNames[rawNames.length - 1] ?? (activeSubcategory === 'Tất cả' ? category.name : activeSubcategory);
+  };
+
+  const openWishlistModal = (product: ProductItem) => {
+    setWishlistProduct({
+      sku: product.sku,
+      name: product.name,
+      priceText: toCurrencyTextFromLooseValue(product.price),
+      priceValue: toUnitPriceFromLooseValue(product.price),
+      unit: product.unit,
+      image: product.image,
+      category: product.categoryLabel
+    });
   };
 
   useEffect(() => {
@@ -569,6 +583,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
   ];
 
   return (
+    <>
     <section className="bg-gray-50 min-h-[70vh] py-8">
       <div className="container mx-auto px-4">
         <nav className="mb-4 flex flex-wrap items-center gap-2 text-sm text-gray-400">
@@ -658,8 +673,16 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
                     />
                     <button
                       type="button"
-                      onClick={(event) => event.stopPropagation()}
-                      onKeyDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openWishlistModal(product);
+                      }}
+                      onKeyDown={(event) => {
+                        event.stopPropagation();
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          openWishlistModal(product);
+                        }
+                      }}
                       className="absolute top-2 right-2 bg-white rounded-full p-2 hover:bg-red-50 transition-colors shadow-sm"
                       aria-label={`Yêu thích ${product.name}`}
                     >
@@ -680,6 +703,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
                           const sourceImage = event.currentTarget.closest('article')?.querySelector('img');
                           openAddToCartModal({
                             id: String(product.id),
+                            sku: product.sku,
                             name: product.name,
                             category: product.categoryLabel,
                             priceText: toCurrencyTextFromLooseValue(product.price),
@@ -729,5 +753,12 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
         </div>
       </div>
     </section>
+
+    <WishlistAddModal
+      isOpen={Boolean(wishlistProduct)}
+      product={wishlistProduct}
+      onClose={() => setWishlistProduct(null)}
+    />
+    </>
   );
 }

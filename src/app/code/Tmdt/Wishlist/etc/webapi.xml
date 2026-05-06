@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Webapi:etc/webapi.xsd">
+    <route url="/V1/tmdt/wishlist" method="GET">
+        <service class="Tmdt\Wishlist\Api\WishlistManagementInterface" method="getLists" />
+        <resources>
+            <resource ref="Magento_Customer::customer" />
+        </resources>
+    </route>
+    <route url="/V1/tmdt/wishlist/:listId" method="GET">
+        <service class="Tmdt\Wishlist\Api\WishlistManagementInterface" method="getListItems" />
+        <resources>
+            <resource ref="Magento_Customer::customer" />
+        </resources>
+    </route>
+    <route url="/V1/tmdt/wishlist" method="POST">
+        <service class="Tmdt\Wishlist\Api\WishlistManagementInterface" method="createList" />
+        <resources>
+            <resource ref="Magento_Customer::customer" />
+        </resources>
+    </route>
+    <route url="/V1/tmdt/wishlist/item/:itemId" method="DELETE">
+        <service class="Tmdt\Wishlist\Api\WishlistManagementInterface" method="removeItem" />
+        <resources>
+            <resource ref="Magento_Customer::customer" />
+        </resources>
+    </route>
+    <route url="/V1/tmdt/wishlist/item" method="POST">
+        <service class="Tmdt\Wishlist\Api\WishlistManagementInterface" method="addItem" />
+        <resources>
+            <resource ref="Magento_Customer::customer" />
+        </resources>
+    </route>
+</routes>

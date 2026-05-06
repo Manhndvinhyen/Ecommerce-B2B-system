@@ -5,6 +5,7 @@ import { toCurrencyTextFromLooseValue, toUnitPriceFromLooseValue, useCart } from
 
 const hotProducts = [
   {
+    sku: '',
     name: 'Cà chua',
     category: 'Củ quả',
     price: '12,000 - 64,800',
@@ -13,6 +14,7 @@ const hotProducts = [
     hot: true
   },
   {
+    sku: '',
     name: 'Thịt heo',
     category: 'Thịt Heo',
     price: '140,000 - 180,000',
@@ -21,6 +23,7 @@ const hotProducts = [
     hot: true
   },
   {
+    sku: '',
     name: 'Tía tô',
     category: 'Rau gia vị',
     price: '25,000 - 83,200',
@@ -29,6 +32,7 @@ const hotProducts = [
     hot: true
   },
   {
+    sku: '',
     name: 'Bắp cải trắng',
     category: 'Rau phổ thông',
     price: '8,000 - 38,670',
@@ -37,6 +41,7 @@ const hotProducts = [
     hot: true
   },
   {
+    sku: '',
     name: 'Dưa chuột',
     category: 'Củ quả',
     price: '15,000 - 60,740',
@@ -45,6 +50,7 @@ const hotProducts = [
     hot: true
   },
   {
+    sku: '',
     name: 'Khoai tây',
     category: 'Củ quả',
     price: '18,000 - 44,000',
@@ -53,6 +59,7 @@ const hotProducts = [
     hot: true
   },
   {
+    sku: '',
     name: 'Cà rốt',
     category: 'Rau củ',
     price: '20,000 - 55,000',
@@ -61,6 +68,7 @@ const hotProducts = [
     hot: true
   },
   {
+    sku: '',
     name: 'Xà lách',
     category: 'Rau lá',
     price: '22,000 - 68,000',
@@ -69,6 +77,7 @@ const hotProducts = [
     hot: true
   },
   {
+    sku: '',
     name: 'Ớt chuông',
     category: 'Rau củ',
     price: '40,000 - 120,000',
@@ -77,6 +86,7 @@ const hotProducts = [
     hot: true
   },
   {
+    sku: '',
     name: 'Hành lá',
     category: 'Rau gia vị',
     price: '28,000 - 76,000',
@@ -145,6 +155,7 @@ export function HotProducts() {
   const handleNext = () => {
     setPage((prev) => (prev + 1) % totalPages);
   };
+
 
   return (
     <section id="san-pham-hien-thi" className="py-8 bg-white scroll-mt-28">
@@ -237,6 +248,7 @@ export function HotProducts() {
                         const sourceImage = event.currentTarget.closest('article')?.querySelector('img');
                         openAddToCartModal({
                           id: productKey,
+                          sku: product.sku,
                           name: product.name,
                           category: product.category,
                           priceText: toCurrencyTextFromLooseValue(product.price),

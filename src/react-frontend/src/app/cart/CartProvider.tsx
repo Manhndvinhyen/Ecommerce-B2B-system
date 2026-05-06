@@ -1,9 +1,10 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { PropsWithChildren } from 'react';
 import { CheckCircle2, Minus, Plus, X } from 'lucide-react';
 
 export type AddToCartProduct = {
   id: string;
+  sku: string;
   name: string;
   category: string;
   priceText: string;
@@ -14,6 +15,8 @@ export type AddToCartProduct = {
 
 export type CartLineItem = {
   id: string;
+  cartItemId: string;
+  sku: string;
   name: string;
   category: string;
   unit: string;
@@ -53,6 +56,7 @@ export function CartProvider({ children }: PropsWithChildren) {
   const [modalProduct, setModalProduct] = useState<AddToCartProduct | null>(null);
   const [modalQuantity, setModalQuantity] = useState(1);
   const [toastMessage, setToastMessage] = useState('');
+  const [isLoginPromptOpen, setIsLoginPromptOpen] = useState(false);
   const toastTimerRef = useRef<number | null>(null);
   const modalImageRef = useRef<HTMLImageElement | null>(null);
   const sourceRectRef = useRef<DOMRect | null>(null);
@@ -60,6 +64,7 @@ export function CartProvider({ children }: PropsWithChildren) {
   const cartItemCount = useMemo(() => cartItems.length, [cartItems]);
 
   const runFlyToCartAnimation = useCallback((imageUrl: string) => {
+    document.querySelectorAll('img[alt="flying-product"]').forEach((node) => node.remove());
     const cartTarget = document.getElementById('header-cart-icon');
     const sourceRect = sourceRectRef.current ?? modalImageRef.current?.getBoundingClientRect() ?? null;
 
@@ -85,6 +90,11 @@ export function CartProvider({ children }: PropsWithChildren) {
 
     document.body.appendChild(flyNode);
 
+    window.setTimeout(() => {
+      flyNode.remove();
+      sourceRectRef.current = null;
+    }, 1200);
+
     const deltaX = targetRect.left + targetRect.width / 2 - (sourceRect.left + sourceRect.width / 2);
     const deltaY = targetRect.top + targetRect.height / 2 - (sourceRect.top + sourceRect.height / 2);
     const scale = Math.max(0.2, targetRect.width / Math.max(sourceRect.width, 1));
@@ -104,38 +114,333 @@ export function CartProvider({ children }: PropsWithChildren) {
       }
     );
 
-    const animation = flyNode.animate(
-      [
-        { transform: 'translate(0px, 0px) scale(1)', opacity: 0.95 },
-        { transform: `translate(${midX}px, ${midY}px) scale(0.72)`, opacity: 0.9, offset: 0.55 },
-        { transform: `translate(${deltaX}px, ${deltaY}px) scale(${scale})`, opacity: 0.12 }
-      ],
-      {
-        duration: 650,
-        easing: 'cubic-bezier(0.42, 0, 0.2, 1)',
-        fill: 'forwards'
-      }
-    );
+    const cleanup = (resolve: () => void) => {
+      flyNode.remove();
+      sourceRectRef.current = null;
+      resolve();
+    };
 
     return new Promise<void>((resolve) => {
-      animation.onfinish = () => {
-        flyNode.remove();
-        sourceRectRef.current = null;
-        resolve();
+      let fallbackTimer: number | null = null;
+
+      const finish = () => {
+        if (fallbackTimer) {
+          window.clearTimeout(fallbackTimer);
+        }
+        cleanup(resolve);
       };
-      animation.oncancel = () => {
-        flyNode.remove();
-        sourceRectRef.current = null;
-        resolve();
+
+      fallbackTimer = window.setTimeout(() => {
+        cleanup(resolve);
+      }, 900);
+
+      if (typeof flyNode.animate !== 'function') {
+        return;
+      }
+
+      const animation = flyNode.animate(
+        [
+          { transform: 'translate(0px, 0px) scale(1)', opacity: 0.95 },
+          { transform: `translate(${midX}px, ${midY}px) scale(0.72)`, opacity: 0.9, offset: 0.55 },
+          { transform: `translate(${deltaX}px, ${deltaY}px) scale(${scale})`, opacity: 0.12 }
+        ],
+        {
+          duration: 650,
+          easing: 'cubic-bezier(0.42, 0, 0.2, 1)',
+          fill: 'forwards'
+        }
+      );
+
+      animation.onfinish = finish;
+      animation.oncancel = finish;
+    });
+  }, []);
+
+  const isAuthenticated = useCallback(() => {
+    if (typeof window === 'undefined') return false;
+    return Boolean(
+      window.localStorage.getItem('freso_customer_token') ||
+        window.sessionStorage.getItem('freso_customer_token')
+    );
+  }, []);
+
+  const getAuthToken = useCallback(() => {
+    if (typeof window === 'undefined') return '';
+    return (
+      window.localStorage.getItem('freso_customer_token') ||
+      window.sessionStorage.getItem('freso_customer_token') ||
+      ''
+    );
+  }, []);
+
+  const graphqlRequest = useCallback(
+    async (query: string, variables?: Record<string, unknown>) => {
+      const token = getAuthToken();
+      if (!token) {
+        throw new Error('Chưa đăng nhập.');
+      }
+
+      const response = await fetch('/graphql', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ query, variables })
+      });
+
+      if (!response.ok) {
+        const responseText = await response.text().catch(() => '');
+        throw new Error(`GraphQL request failed: ${response.status} ${response.statusText} ${responseText}`);
+      }
+
+      const json = await response.json();
+      if (json?.errors?.length) {
+        throw new Error(json.errors[0]?.message ?? 'GraphQL error');
+      }
+
+      return json?.data;
+    },
+    [getAuthToken]
+  );
+
+  const getCustomerCartId = useCallback(async () => {
+    const cached = window.localStorage.getItem('freso_customer_cart_id');
+    if (cached) {
+      return cached;
+    }
+
+    const data = await graphqlRequest(`query CustomerCart { customerCart { id } }`);
+    const cartId = data?.customerCart?.id;
+    if (!cartId) {
+      throw new Error('Không lấy được mã giỏ hàng.');
+    }
+
+    window.localStorage.setItem('freso_customer_cart_id', cartId);
+    return cartId;
+  }, [graphqlRequest]);
+
+  type MagentoCartItem = {
+    id: number | string;
+    quantity?: number;
+    product?: {
+      sku?: string | null;
+      name?: string | null;
+      categories?: Array<{ name?: string | null }> | null;
+      small_image?: { url?: string | null } | null;
+      thumbnail?: { url?: string | null } | null;
+      price_range?: {
+        minimum_price?: {
+          final_price?: { value?: number | null } | null;
+        } | null;
+      } | null;
+    } | null;
+  };
+
+  const mapMagentoCartItems = useCallback((items: MagentoCartItem[] = []): CartLineItem[] => {
+    return items.map((item) => {
+      const product = item.product ?? {};
+      const unitPrice = Number(product.price_range?.minimum_price?.final_price?.value ?? 0);
+      const category = product.categories?.find((cat) => cat?.name)?.name ?? '';
+
+      return {
+        id: String(item.id),
+        cartItemId: String(item.id),
+        sku: product.sku ?? '',
+        name: product.name ?? 'Sản phẩm',
+        category,
+        unit: 'SP',
+        unitPrice,
+        image: product.small_image?.url || product.thumbnail?.url || '',
+        priceText: formatCurrency(unitPrice),
+        quantity: clampQuantity(item.quantity ?? 1),
+        selected: true,
+        note: '',
       };
     });
   }, []);
 
+  const loadCustomerCart = useCallback(async () => {
+    if (!isAuthenticated()) {
+      setCartItems([]);
+      return;
+    }
+
+    const data = await graphqlRequest(`
+      query CustomerCartItems {
+        customerCart {
+          id
+          items {
+            id
+            quantity
+            product {
+              sku
+              name
+              categories { name }
+              small_image { url }
+              thumbnail { url }
+              price_range { minimum_price { final_price { value } } }
+            }
+          }
+        }
+      }
+    `);
+
+    const items: MagentoCartItem[] = data?.customerCart?.items ?? [];
+    const cartId = data?.customerCart?.id;
+    if (cartId) {
+      window.localStorage.setItem('freso_customer_cart_id', cartId);
+    }
+    setCartItems(mapMagentoCartItems(items));
+  }, [graphqlRequest, isAuthenticated, mapMagentoCartItems]);
+
+  useEffect(() => {
+    loadCustomerCart().catch(() => {
+      // ignore initial load errors, toast will be handled on add/update actions
+    });
+  }, [loadCustomerCart]);
+
+  const addProductToMagentoCart = useCallback(
+    async (product: AddToCartProduct, quantity: number) => {
+      const targetQuantity = clampQuantity(quantity);
+      if (!product.sku) {
+        throw new Error('Thiếu SKU để thêm vào giỏ hàng.');
+      }
+
+      const mutation = `
+        mutation AddProductsToCart($cartId: String!, $items: [CartItemInput!]!) {
+          addProductsToCart(cartId: $cartId, cartItems: $items) {
+            cart {
+              id
+              items {
+                id
+                quantity
+                product {
+                  sku
+                  name
+                  categories { name }
+                  small_image { url }
+                  thumbnail { url }
+                  price_range { minimum_price { final_price { value } } }
+                }
+              }
+            }
+          }
+        }
+      `;
+
+      const cartItems = [{ sku: product.sku, quantity: targetQuantity }];
+
+      try {
+        const cartId = await getCustomerCartId();
+        const data = await graphqlRequest(mutation, { cartId, items: cartItems });
+        return data?.addProductsToCart?.cart?.items ?? [];
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const normalized = message.toLowerCase();
+        if (
+          normalized.includes('could not find a cart') ||
+          normalized.includes("cart isn't active") ||
+          normalized.includes('cart')
+        ) {
+          window.localStorage.removeItem('freso_customer_cart_id');
+          const cartId = await getCustomerCartId();
+          const data = await graphqlRequest(mutation, { cartId, items: cartItems });
+          return data?.addProductsToCart?.cart?.items ?? [];
+        }
+        throw error;
+      }
+    },
+    [getCustomerCartId, graphqlRequest]
+  );
+
+  const updateMagentoCartItemQuantity = useCallback(
+    async (cartItemId: string, quantity: number) => {
+      const cartId = await getCustomerCartId();
+      const mutation = `
+        mutation UpdateCartItems($cartId: String!, $items: [CartItemUpdateInput!]!) {
+          updateCartItems(input: { cart_id: $cartId, cart_items: $items }) {
+            cart {
+              id
+              items {
+                id
+                quantity
+                product {
+                  sku
+                  name
+                  categories { name }
+                  small_image { url }
+                  thumbnail { url }
+                  price_range { minimum_price { final_price { value } } }
+                }
+              }
+            }
+          }
+        }
+      `;
+      const data = await graphqlRequest(mutation, {
+        cartId,
+        items: [{ cart_item_id: Number(cartItemId), quantity: clampQuantity(quantity) }]
+      });
+      return data?.updateCartItems?.cart?.items ?? [];
+    },
+    [getCustomerCartId, graphqlRequest]
+  );
+
+  const removeMagentoCartItem = useCallback(
+    async (cartItemId: string) => {
+      const cartId = await getCustomerCartId();
+      const mutation = `
+        mutation RemoveItemFromCart($cartId: String!, $cartItemId: Int!) {
+          removeItemFromCart(input: { cart_id: $cartId, cart_item_id: $cartItemId }) {
+            cart {
+              id
+              items {
+                id
+                quantity
+                product {
+                  sku
+                  name
+                  categories { name }
+                  small_image { url }
+                  thumbnail { url }
+                  price_range { minimum_price { final_price { value } } }
+                }
+              }
+            }
+          }
+        }
+      `;
+      const data = await graphqlRequest(mutation, {
+        cartId,
+        cartItemId: Number(cartItemId)
+      });
+      return data?.removeItemFromCart?.cart?.items ?? [];
+    },
+    [getCustomerCartId, graphqlRequest]
+  );
+
+  const ensureAuthenticated = useCallback(() => {
+    if (!isAuthenticated()) {
+      setIsLoginPromptOpen(true);
+      return false;
+    }
+    return true;
+  }, [isAuthenticated]);
+
+  const handleLoginRedirect = useCallback(() => {
+    setIsLoginPromptOpen(false);
+    window.location.href = '/react/index.html?view=login';
+  }, []);
+
   const openAddToCartModal = useCallback((product: AddToCartProduct, sourceImageElement?: Element | null) => {
+    if (!ensureAuthenticated()) {
+      return;
+    }
     sourceRectRef.current = sourceImageElement?.getBoundingClientRect() ?? null;
     setModalProduct(product);
     setModalQuantity(1);
-  }, []);
+  }, [ensureAuthenticated]);
 
   const closeModal = useCallback(() => {
     setModalProduct(null);
@@ -156,6 +461,8 @@ export function CartProvider({ children }: PropsWithChildren) {
       return [
         {
           id: product.id,
+          cartItemId: '',
+          sku: product.sku,
           name: product.name,
           category: product.category,
           unit: product.unit,
@@ -172,6 +479,9 @@ export function CartProvider({ children }: PropsWithChildren) {
   }, []);
 
   const confirmAddToCart = useCallback(async () => {
+    if (!ensureAuthenticated()) {
+      return;
+    }
     if (!modalProduct) {
       return;
     }
@@ -180,8 +490,19 @@ export function CartProvider({ children }: PropsWithChildren) {
     const selectedProduct = modalProduct;
 
     closeModal();
-    await runFlyToCartAnimation(selectedProduct.image);
-    addToCart(selectedProduct, quantity);
+    try {
+      const items = await addProductToMagentoCart(selectedProduct, quantity);
+      setCartItems(mapMagentoCartItems(items));
+      await runFlyToCartAnimation(selectedProduct.image);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setToastMessage('Không thể thêm sản phẩm vào giỏ hàng. Vui lòng thử lại.');
+      if (message.toLowerCase().includes('authorization') || message.toLowerCase().includes('current customer')) {
+        setIsLoginPromptOpen(true);
+      }
+      toastTimerRef.current = window.setTimeout(() => setToastMessage(''), 2400);
+      return;
+    }
 
     if (toastTimerRef.current) {
       window.clearTimeout(toastTimerRef.current);
@@ -191,15 +512,29 @@ export function CartProvider({ children }: PropsWithChildren) {
     toastTimerRef.current = window.setTimeout(() => {
       setToastMessage('');
     }, 2400);
-  }, [addToCart, closeModal, modalProduct, modalQuantity, runFlyToCartAnimation]);
+  }, [addProductToMagentoCart, closeModal, ensureAuthenticated, mapMagentoCartItems, modalProduct, modalQuantity, runFlyToCartAnimation]);
 
   const quickAddToCart = useCallback(
     async (product: AddToCartProduct, quantity: number, sourceImageElement?: Element | null) => {
+      if (!ensureAuthenticated()) {
+        return;
+      }
       sourceRectRef.current = sourceImageElement?.getBoundingClientRect() ?? null;
       const targetQuantity = clampQuantity(quantity);
 
-      await runFlyToCartAnimation(product.image);
-      addToCart(product, targetQuantity);
+      try {
+        const items = await addProductToMagentoCart(product, targetQuantity);
+        setCartItems(mapMagentoCartItems(items));
+        await runFlyToCartAnimation(product.image);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setToastMessage('Không thể thêm sản phẩm vào giỏ hàng. Vui lòng thử lại.');
+        if (message.toLowerCase().includes('authorization') || message.toLowerCase().includes('current customer')) {
+          setIsLoginPromptOpen(true);
+        }
+        toastTimerRef.current = window.setTimeout(() => setToastMessage(''), 2400);
+        return;
+      }
 
       if (toastTimerRef.current) {
         window.clearTimeout(toastTimerRef.current);
@@ -210,12 +545,22 @@ export function CartProvider({ children }: PropsWithChildren) {
         setToastMessage('');
       }, 2400);
     },
-    [addToCart, runFlyToCartAnimation]
+    [addProductToMagentoCart, ensureAuthenticated, mapMagentoCartItems, runFlyToCartAnimation]
   );
 
-  const setCartItemQuantity = useCallback((itemId: string, quantity: number) => {
-    setCartItems((prev) => prev.map((item) => (item.id === itemId ? { ...item, quantity: clampQuantity(quantity) } : item)));
-  }, []);
+  const setCartItemQuantity = useCallback(async (itemId: string, quantity: number) => {
+    if (!ensureAuthenticated()) {
+      return;
+    }
+
+    try {
+      const items = await updateMagentoCartItemQuantity(itemId, quantity);
+      setCartItems(mapMagentoCartItems(items));
+    } catch (_error) {
+      setToastMessage('Không thể cập nhật số lượng. Vui lòng thử lại.');
+      toastTimerRef.current = window.setTimeout(() => setToastMessage(''), 2400);
+    }
+  }, [ensureAuthenticated, mapMagentoCartItems, updateMagentoCartItemQuantity]);
 
   const setCartItemSelected = useCallback((itemId: string, selected: boolean) => {
     setCartItems((prev) => prev.map((item) => (item.id === itemId ? { ...item, selected } : item)));
@@ -225,9 +570,19 @@ export function CartProvider({ children }: PropsWithChildren) {
     setCartItems((prev) => prev.map((item) => (item.id === itemId ? { ...item, note } : item)));
   }, []);
 
-  const removeCartItem = useCallback((itemId: string) => {
-    setCartItems((prev) => prev.filter((item) => item.id !== itemId));
-  }, []);
+  const removeCartItem = useCallback(async (itemId: string) => {
+    if (!ensureAuthenticated()) {
+      return;
+    }
+
+    try {
+      const items = await removeMagentoCartItem(itemId);
+      setCartItems(mapMagentoCartItems(items));
+    } catch (_error) {
+      setToastMessage('Không thể xóa sản phẩm. Vui lòng thử lại.');
+      toastTimerRef.current = window.setTimeout(() => setToastMessage(''), 2400);
+    }
+  }, [ensureAuthenticated, mapMagentoCartItems, removeMagentoCartItem]);
 
   const toggleAllCartItems = useCallback((selected: boolean) => {
     setCartItems((prev) => prev.map((item) => ({ ...item, selected })));
@@ -261,6 +616,31 @@ export function CartProvider({ children }: PropsWithChildren) {
   return (
     <CartContext.Provider value={contextValue}>
       {children}
+
+      {isLoginPromptOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 text-gray-800 shadow-2xl">
+            <h3 className="text-lg font-semibold">Yêu cầu đăng nhập</h3>
+            <p className="mt-2 text-sm text-gray-600">Vui lòng đăng nhập để thêm sản phẩm vào giỏ hàng.</p>
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsLoginPromptOpen(false)}
+                className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleLoginRedirect}
+                className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700"
+              >
+                Đăng nhập
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {modalProduct && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/35 p-4">

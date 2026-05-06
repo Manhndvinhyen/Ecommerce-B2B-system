@@ -4,7 +4,7 @@ import { categoryMenu, getCategoryPageLink } from '../data/categories';
 import { useCart } from '../cart/CartProvider';
 
 export function Header() {
-  const { cartItemCount } = useCart();
+  const { cartItems } = useCart();
   const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState(categoryMenu[0].name);
   const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
@@ -295,7 +295,7 @@ export function Header() {
                   {isFavoritesOpen && (
                     <div className="absolute top-full right-0 w-56 bg-white border border-rose-100 rounded-xl shadow-xl p-2 z-50">
                       <a
-                        href="/wishlist"
+                        href={`${reactHomePath}?view=wishlist`}
                         className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-rose-50 hover:text-rose-700 transition-colors"
                       >
                         <Heart className="size-4" />
@@ -311,7 +311,7 @@ export function Header() {
                     </div>
                   )}
                 </div>
-                <a href="/checkout/cart" className="relative p-2 hover:bg-gray-100 rounded-full transition-colors">
+                <a href={`${reactHomePath}?view=cart`} className="relative p-2 hover:bg-gray-100 rounded-full transition-colors">
                   <ShoppingCart className="size-6 text-gray-700" />
                   <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full size-5 flex items-center justify-center">
                     0
@@ -384,7 +384,7 @@ export function Header() {
                         <a href="/sales/order/history" className="px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
                           Quan ly don hang
                         </a>
-                        <a href="/wishlist" className="px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
+                        <a href={`${reactHomePath}?view=wishlist`} className="px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
                           San pham yeu thich
                         </a>
                         <a href="/sales/order/history" className="px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
@@ -523,10 +523,10 @@ export function Header() {
                 </a>
               )}
 
-              <a id="header-cart-icon" href="/checkout/cart" className="relative p-2 hover:bg-gray-100 rounded-full transition-colors">
+              <a id="header-cart-icon" href={`${reactHomePath}?view=cart`} className="relative p-2 hover:bg-gray-100 rounded-full transition-colors">
                 <ShoppingCart className="size-6 text-gray-700" />
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full size-5 flex items-center justify-center">
-                  {cartItemCount}
+                  {cartItems.length}
                 </span>
               </a>
 

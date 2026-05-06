@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <preference for="Tmdt\Wishlist\Api\WishlistManagementInterface" type="Tmdt\Wishlist\Model\WishlistManagement" />
+    <preference for="Tmdt\Wishlist\Api\Data\WishlistListInterface" type="Tmdt\Wishlist\Model\Data\WishlistList" />
+    <preference for="Tmdt\Wishlist\Api\Data\WishlistItemInterface" type="Tmdt\Wishlist\Model\Data\WishlistItem" />
+</config>

@@ -13,15 +13,63 @@ export function ShoppingCartPage() {
   } = useCart();
   const [searchTerm, setSearchTerm] = useState('');
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
-  const isEmbeddedInIframe = window.self !== window.top;
-  const reactHomePath = '/react/index.html';
+  const isEmbeddedInIframe = (() => {
+    try {
+      return window.self !== window.top;
+    } catch (error) {
+      return true;
+    }
+  })();
+  const baseOrigin = window.location.origin;
+  const reactHomeUrl = `${baseOrigin}/react/index.html`;
+  const checkoutPayloadKey = 'freso_checkout_payload';
+
+  const safeNavigate = (url: string) => {
+    if (isEmbeddedInIframe && window.top) {
+      try {
+        window.top.location.href = url;
+        return;
+      } catch (error) {
+        // Fall back to current frame navigation when cross-origin protection blocks top access.
+      }
+    }
+
+    window.location.href = url;
+  };
 
   const handleGoHome = () => {
-    window.location.href = reactHomePath;
+    safeNavigate(reactHomeUrl);
   };
 
   const handleGoToWishlist = () => {
-    window.location.href = `${reactHomePath}?view=wishlist`;
+    safeNavigate(`${reactHomeUrl}?view=wishlist`);
+  };
+
+  const handleCheckout = () => {
+    if (selectedCount === 0) return;
+    const suppliers = Array.from(
+      new Set(selectedItems.map((item) => item.category).filter(Boolean))
+    );
+
+    const payload = {
+      items: selectedItems.map((item) => ({
+        id: item.id,
+        sku: item.sku,
+        name: item.name,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        unit: item.unit,
+        image: item.image,
+        category: item.category
+      })),
+      subtotal: selectedTotal,
+      suppliers,
+      supplier: suppliers[0] || ''
+    };
+
+    window.sessionStorage.setItem(checkoutPayloadKey, JSON.stringify(payload));
+    const checkoutUrl = 'https://magento.test/react/index.html?view=checkout';
+    safeNavigate(checkoutUrl);
   };
 
   const handleTopLevelNavigation = (event: React.MouseEvent<HTMLElement>) => {
@@ -43,9 +91,7 @@ export function ShoppingCartPage() {
     event.preventDefault();
 
     const nextUrl = anchor.href || href;
-    if (window.top) {
-      window.top.location.href = nextUrl;
-    }
+    safeNavigate(nextUrl);
   };
 
   const filteredItems = useMemo(() => {
@@ -243,6 +289,7 @@ export function ShoppingCartPage() {
 
           <button
             type="button"
+            onClick={handleCheckout}
             className="rounded-xl bg-[#9ceac4] px-8 py-3 text-base font-semibold text-green-900 transition-colors hover:bg-[#81e1b4] disabled:cursor-not-allowed disabled:opacity-50"
             disabled={selectedCount === 0}
           >

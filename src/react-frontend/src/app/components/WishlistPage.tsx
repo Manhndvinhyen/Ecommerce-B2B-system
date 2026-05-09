@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Heart, Plus, ShoppingCart, Trash2 } from 'lucide-react';
 import { toCurrencyTextFromNumber, toUnitPriceFromLooseValue, useCart } from '../cart/CartProvider';
-import { getWishlistItems, getWishlistLists, removeWishlistItem } from '../utils/wishlistApi';
+import { createWishlistList, getWishlistItems, getWishlistLists, removeWishlistItem } from '../utils/wishlistApi';
 
 const reactHomePath = '/react/index.html';
 
@@ -23,43 +23,6 @@ type WishlistItem = {
 
 const getAuthToken = () =>
   window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
-
-type WishlistListResponse = {
-  id: string | number;
-  name: string;
-  item_count?: number;
-  itemCount?: number;
-};
-
-type WishlistItemResponse = {
-  id: string | number;
-  list_id?: string | number;
-  sku?: string;
-  name?: string;
-  price?: number;
-  unit?: string;
-  image?: string;
-  category?: string;
-};
-
-async function wishlistRequest<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const token = getAuthToken();
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-      Authorization: `Bearer ${token}`
-    }
-  });
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(`${response.status} ${response.statusText} ${text}`);
-  }
-
-  return response.json() as Promise<T>;
-}
 
 export function WishlistPage() {
   const { quickAddToCart } = useCart();
@@ -141,15 +104,7 @@ export function WishlistPage() {
     if (!name) return;
 
     try {
-      const data = await wishlistRequest<WishlistListResponse>('/rest/V1/tmdt/wishlist', {
-        method: 'POST',
-        body: JSON.stringify({ name })
-      });
-      const newList = {
-        id: String(data.id),
-        name: data.name,
-        itemCount: data.itemCount ?? data.item_count ?? 0
-      };
+      const newList = await createWishlistList(name);
       setLists((prev) => [newList, ...prev]);
       setActiveListId(newList.id);
       setItemsByList((prev) => ({ ...prev, [newList.id]: [] }));

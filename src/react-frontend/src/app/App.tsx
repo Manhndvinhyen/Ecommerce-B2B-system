@@ -16,6 +16,7 @@ import { LoginPage } from './components/LoginPage';
 import { ForgotPasswordPage } from './components/ForgotPasswordPage';
 import { ProductDetailPage } from './components/ProductDetailPage';
 import { WishlistPage } from './components/WishlistPage';
+import { CheckoutPage } from './components/CheckoutPage';
 import { getCategoryNameFromQuery, getSubcategoryNameFromQuery } from './data/categories';
 import { CartProvider } from './cart/CartProvider';
 
@@ -31,6 +32,10 @@ function AppContent() {
   const isForgotPasswordView = view === 'forgot-password';
   const isProductView = view === 'product';
   const isWishlistView = view === 'wishlist';
+  const isCheckoutView =
+    view === 'checkout' ||
+    window.location.pathname.endsWith('/react/checkout') ||
+    window.location.pathname.endsWith('/checkout');
 
   if (isRegisterView) {
     return <RegisterPage />;
@@ -67,6 +72,19 @@ function AppContent() {
         <Header />
         <main>
           <WishlistPage />
+        </main>
+        <Footer />
+        <ChatbotWidget />
+      </div>
+    );
+  }
+
+  if (isCheckoutView) {
+    return (
+      <div className="min-h-screen bg-white">
+        <Header />
+        <main>
+          <CheckoutPage />
         </main>
         <Footer />
         <ChatbotWidget />

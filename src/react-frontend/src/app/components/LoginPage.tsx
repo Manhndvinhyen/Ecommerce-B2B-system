@@ -158,7 +158,7 @@ export function LoginPage() {
     if (rawRedirectUrl && rawRedirectUrl.trim()) {
       return rawRedirectUrl;
     }
-    return '/react/index.html';
+    return '/react/index.html?view=dashboard';
   };
 
   const navigateHome = () => {

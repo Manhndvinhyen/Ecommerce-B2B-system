@@ -30,4 +30,10 @@
             <resource ref="anonymous" />
         </resources>
     </route>
+    <route url="/V1/tmdt-registration/profile" method="PUT">
+        <service class="Tmdt\Registration\Api\ProfileUpdateInterface" method="save" />
+        <resources>
+            <resource ref="self" />
+        </resources>
+    </route>
 </routes>

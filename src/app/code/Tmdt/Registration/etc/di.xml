@@ -5,4 +5,5 @@
     <preference for="Tmdt\Registration\Api\RegisterInterface" type="Tmdt\Registration\Model\RegisterManagement" />
     <preference for="Tmdt\Registration\Api\ForgotPasswordRequestOtpInterface" type="Tmdt\Registration\Model\ForgotPasswordRequestOtpManagement" />
     <preference for="Tmdt\Registration\Api\ForgotPasswordResetInterface" type="Tmdt\Registration\Model\ForgotPasswordResetManagement" />
+    <preference for="Tmdt\Registration\Api\ProfileUpdateInterface" type="Tmdt\Registration\Model\ProfileUpdateManagement" />
 </config>

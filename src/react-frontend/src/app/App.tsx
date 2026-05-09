@@ -15,11 +15,7 @@ import { ShoppingCartPage } from './components/ShoppingCartPage';
 import { LoginPage } from './components/LoginPage';
 import { ForgotPasswordPage } from './components/ForgotPasswordPage';
 import { ProductDetailPage } from './components/ProductDetailPage';
-<<<<<<< HEAD
-import { WishlistPage } from './components/WishlistPage';
-=======
 import { UserDashboardPage } from './components/UserDashboardPage';
->>>>>>> 52367fa (Implement user dashboard with profile management and admin sidebar)
 import { getCategoryNameFromQuery, getSubcategoryNameFromQuery } from './data/categories';
 import { CartProvider } from './cart/CartProvider';
 
@@ -34,15 +30,11 @@ function AppContent() {
   const isLoginView = view === 'login';
   const isForgotPasswordView = view === 'forgot-password';
   const isProductView = view === 'product';
-<<<<<<< HEAD
-  const isWishlistView = view === 'wishlist';
-=======
   const isDashboardView = view === 'dashboard';
 
   if (isDashboardView) {
     return <UserDashboardPage />;
   }
->>>>>>> 52367fa (Implement user dashboard with profile management and admin sidebar)
 
   if (isRegisterView) {
     return <RegisterPage />;
@@ -66,19 +58,6 @@ function AppContent() {
         <Header />
         <main>
           <ProductDetailPage />
-        </main>
-        <Footer />
-        <ChatbotWidget />
-      </div>
-    );
-  }
-
-  if (isWishlistView) {
-    return (
-      <div className="min-h-screen bg-white">
-        <Header />
-        <main>
-          <WishlistPage />
         </main>
         <Footer />
         <ChatbotWidget />

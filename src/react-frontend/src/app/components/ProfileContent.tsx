@@ -1,24 +1,34 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { User } from 'lucide-react';
 
 type Profile = {
   name: string;
   phone: string;
   email: string;
-  birthdate?: string | null;
   branch?: string;
   role?: string;
 };
 
 export const ProfileContent = () => {
-  const [profile, setProfile] = useState<Profile>({
-    name: 'Mai',
-    phone: '0389960144',
-    email: 'abcd@gmail.com',
-    birthdate: null,
-    branch: 'Chi nhánh 1',
-    role: 'Chủ sở hữu',
-  });
+  const readStorageValue = (key: string) =>
+    window.localStorage.getItem(key) || window.sessionStorage.getItem(key) || '';
+
+  const getAuthToken = () => readStorageValue('freso_customer_token');
+
+  const getStoredProfile = (): Profile => {
+    const name = readStorageValue('freso_customer_name') || 'Khách hàng';
+    const email = readStorageValue('freso_customer_email') || 'chua-cap-nhat@freso.vn';
+    const branch = readStorageValue('freso_branch_name') || 'Chưa cập nhật';
+    return {
+      name,
+      phone: '',
+      email,
+      branch,
+      role: 'Khách hàng',
+    };
+  };
+
+  const [profile, setProfile] = useState<Profile>(() => getStoredProfile());
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -30,21 +40,93 @@ export const ProfileContent = () => {
   const [pwConfirm, setPwConfirm] = useState('');
   const [pwSaving, setPwSaving] = useState(false);
 
+  useEffect(() => {
+    const stored = getStoredProfile();
+    setProfile(stored);
+    setForm(stored);
+
+    const token = getAuthToken();
+    if (!token) return;
+
+    fetch(`${window.location.origin}/rest/V1/customers/me`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data || typeof data !== 'object') return;
+        const email = typeof data.email === 'string' ? data.email : '';
+        const firstname = typeof data.firstname === 'string' ? data.firstname : '';
+        const lastname = typeof data.lastname === 'string' ? data.lastname : '';
+        const name = [firstname, lastname].filter(Boolean).join(' ').trim();
+
+        setProfile((prev) => ({
+          ...prev,
+          name: name || prev.name,
+          email: email || prev.email,
+        }));
+        setForm((prev) => ({
+          ...prev,
+          name: name || prev.name,
+          email: email || prev.email,
+        }));
+
+        if (email) {
+          window.localStorage.setItem('freso_customer_email', email);
+          window.sessionStorage.setItem('freso_customer_email', email);
+        }
+        if (name) {
+          window.localStorage.setItem('freso_customer_name', name);
+          window.sessionStorage.setItem('freso_customer_name', name);
+        }
+      })
+      .catch((err) => {
+        console.error('[ProfileContent] load profile failed', err);
+      });
+  }, []);
+
   function startEdit() {
     setForm(profile);
     setEditing(true);
   }
 
   async function saveProfile() {
+    if (!form.email.trim()) {
+      alert('Email không được để trống');
+      return;
+    }
     setSaving(true);
     try {
-      // Try to send to backend; endpoint may vary in your setup
-      await fetch('/api/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
+      const token = getAuthToken();
+      if (token) {
+        await fetch(`${window.location.origin}/rest/V1/tmdt-registration/profile`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            payload: {
+              fullName: form.name.trim(),
+              phoneNumber: form.phone.trim(),
+              email: form.email.trim(),
+              unitNickname: form.branch?.trim() || undefined,
+            },
+          }),
+        });
+      }
       setProfile(form);
+      if (form.email) {
+        window.localStorage.setItem('freso_customer_email', form.email);
+        window.sessionStorage.setItem('freso_customer_email', form.email);
+      }
+      if (form.name) {
+        window.localStorage.setItem('freso_customer_name', form.name);
+        window.sessionStorage.setItem('freso_customer_name', form.name);
+      }
       setEditing(false);
       alert('Cập nhật thông tin thành công');
     } catch (err) {
@@ -61,6 +143,11 @@ export const ProfileContent = () => {
   }
 
   async function changePassword() {
+    const token = getAuthToken();
+    if (!token) {
+      alert('Bạn cần đăng nhập để đổi mật khẩu');
+      return;
+    }
     if (pwNew !== pwConfirm) {
       alert('Mật khẩu mới không khớp');
       return;
@@ -71,10 +158,16 @@ export const ProfileContent = () => {
     }
     setPwSaving(true);
     try {
-      await fetch('/api/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ current: pwCurrent, password: pwNew }),
+      await fetch(`${window.location.origin}/rest/V1/customers/me/password`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          currentPassword: pwCurrent,
+          newPassword: pwNew,
+        }),
       });
       setShowPasswordModal(false);
       setPwCurrent('');
@@ -160,19 +253,6 @@ export const ProfileContent = () => {
               <p className="text-[14.5px] font-bold text-gray-800 tracking-tight">{profile.phone}</p>
             )}
           </div>
-          <div>
-            <p className="text-[12.5px] text-black mb-0.5 font-light tracking-tight">Ngày sinh</p>
-            {editing ? (
-              <input
-                type="date"
-                className="text-[14.5px] font-normal text-black tracking-tight border-b focus:outline-none"
-                value={form.birthdate || ''}
-                onChange={(e) => setForm({ ...form, birthdate: e.target.value })}
-              />
-            ) : (
-              <p className="text-[14.5px] font-normal text-black tracking-tight">{profile.birthdate || '-'}</p>
-            )}
-          </div>
           <div className="col-span-2">
             <p className="text-[12.5px] text-black mb-0.5 font-light tracking-tight">Email</p>
             {editing ? (
@@ -219,20 +299,22 @@ export const ProfileContent = () => {
             <div className="flex flex-col gap-3">
               <input
                 type="password"
-                placeholder="  Mật khẩu hiện tại"
-                className="border p-2.5 rounded-full focus:outline-none focus:border-[#00b14f]" // Bo tròn ô input                value={pwCurrent}
+                placeholder="Mật khẩu hiện tại"
+                className="border p-2.5 rounded-full focus:outline-none focus:border-[#00b14f]"
+                value={pwCurrent}
                 onChange={(e) => setPwCurrent(e.target.value)}
               />
               <input
                 type="password"
-                placeholder="  Mật khẩu mới"
-                className="border p-2.5 rounded-full focus:outline-none focus:border-[#00b14f]" // Bo tròn ô input                value={pwNew}
+                placeholder="Mật khẩu mới"
+                className="border p-2.5 rounded-full focus:outline-none focus:border-[#00b14f]"
+                value={pwNew}
                 onChange={(e) => setPwNew(e.target.value)}
               />
               <input
                 type="password"
-                placeholder="  Xác nhận mật khẩu mới"
-                className="border p-2.5 rounded-full focus:outline-none focus:border-[#00b14f]" // Bo tròn ô input                value={pwNew}
+                placeholder="Xác nhận mật khẩu mới"
+                className="border p-2.5 rounded-full focus:outline-none focus:border-[#00b14f]"
                 value={pwConfirm}
                 onChange={(e) => setPwConfirm(e.target.value)}
               />

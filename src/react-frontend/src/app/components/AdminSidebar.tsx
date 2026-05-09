@@ -16,22 +16,28 @@ const SidebarItem = ({ icon: Icon, label, isActive, hasSubmenu, isOpen, onClick,
     <div className="mb-3">
       <button
         onClick={onClick}
-className={`w-full flex items-center gap-3.5 px-4 py-4 rounded-xl transition-all duration-200 group ${          isActive 
-            ? 'bg-[#f2f9f4] text-[#007038] border border-[#b2d4c6]' 
-            : 'bg-[#f8f9fa] text-[#4e4e4e] border border-transparent hover:bg-gray-100'
+        className={`w-full flex items-center gap-3.5 px-4 py-4 rounded-xl transition-all duration-200 group ${
+          isActive
+            ? 'bg-[#E9F8EF] text-[#00b14f] border border-[#CDEEDB] shadow-sm'
+            : 'bg-[#F8F9FA] text-[#4e4e4e] border border-transparent hover:bg-white hover:shadow-sm'
         }`}
       >
-        <div className={`shrink-0 ${isActive ? 'text-[#007038]' : 'text-[#4e4e4e]'}`}>
+        <div className={`shrink-0 ${isActive ? 'text-[#00b14f]' : 'text-[#4e4e4e]'}`}>
           <Icon size={22} strokeWidth={isActive ? 2.5 : 2.2} />
         </div>
-<span className={`text-[14.5px] tracking-tight font-bold flex-1 text-left truncate ${          isActive ? 'text-[#007038]' : 'text-[#475569]'
-        }`}>
+        <span
+          className={`text-[14.5px] tracking-tight font-bold flex-1 text-left truncate ${
+            isActive ? 'text-[#00b14f]' : 'text-[#475569]'
+          }`}
+        >
           {label}
         </span>
         {hasSubmenu && (
           <ChevronDown 
             size={13} 
-            className={`transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-180' : ''} ${isActive ? 'text-[#147358]' : 'text-gray-300'}`} 
+            className={`transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-180' : ''} ${
+              isActive ? 'text-[#00b14f]' : 'text-gray-300'
+            }`} 
           />
         )}
       </button>
@@ -42,7 +48,7 @@ className={`w-full flex items-center gap-3.5 px-4 py-4 rounded-xl transition-all
           {subItems.map((sub, idx) => (
             <div 
               key={idx} 
-              className="text-[14px] font-medium text-gray-500 hover:text-[#147358] cursor-pointer transition-colors whitespace-nowrap"
+              className="text-[14px] font-medium text-gray-500 hover:text-[#00b14f] cursor-pointer transition-colors whitespace-nowrap"
             >
               {sub}
             </div>

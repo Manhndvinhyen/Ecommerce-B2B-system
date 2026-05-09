@@ -333,8 +333,9 @@ export function ProductDetailPage() {
   };
 
   return (
-    <div className="bg-[#f6f8f7] pb-20 text-gray-800">
-  <div className="container mx-auto px-4 pb-12 pt-8">
+    <>
+      <div className="bg-[#f6f8f7] pb-20 text-gray-800">
+        <div className="container mx-auto px-4 pb-12 pt-8">
         {!hasQuery ? (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800 text-sm">
             Thiếu thông tin sản phẩm để hiển thị.
@@ -353,8 +354,8 @@ export function ProductDetailPage() {
           </div>
         ) : (
           <>
-        {/* Breadcrumb */}
-  <nav className="mb-6 flex flex-wrap items-center gap-2 text-sm text-gray-400">
+            {/* Breadcrumb */}
+            <nav className="mb-6 flex flex-wrap items-center gap-2 text-sm text-gray-400">
           <a href="/react/index.html" className="hover:text-green-600 transition-colors">
             Trang chủ
           </a>
@@ -367,46 +368,46 @@ export function ProductDetailPage() {
           </a>
           <ChevronRight className="size-3" />
           <span className="text-gray-500">{product.name}</span>
-        </nav>
+            </nav>
 
-        <div className="grid gap-10 lg:grid-cols-[1.1fr_1fr]">
-          {/* Product Image Section */}
-          <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="group relative overflow-hidden rounded-2xl bg-gray-50">
-              <img
-                id="pdp-product-image"
-                ref={imageRef}
-                src={product.image}
-                alt={product.name}
-                className="h-[420px] w-full object-cover transition-transform duration-300 group-hover:scale-105"
-              />
-            </div>
-            <p className="mt-4 text-sm text-gray-500">* Hình ảnh mang tính minh hoạ</p>
-          </div>
-
-          {/* Product Information Section */}
-          <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">{product.name}</h1>
-                <p className="mt-2 text-sm text-gray-500">Sản phẩm tươi sạch dành cho doanh nghiệp B2B</p>
+            <div className="grid gap-10 lg:grid-cols-[1.1fr_1fr]">
+              {/* Product Image Section */}
+              <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
+                <div className="group relative overflow-hidden rounded-2xl bg-gray-50">
+                  <img
+                    id="pdp-product-image"
+                    ref={imageRef}
+                    src={product.image}
+                    alt={product.name}
+                    className="h-[420px] w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
+                </div>
+                <p className="mt-4 text-sm text-gray-500">* Hình ảnh mang tính minh hoạ</p>
               </div>
-              <button
-                type="button"
-                onClick={openWishlistModal}
-                className={`group relative flex h-10 w-10 items-center justify-center rounded-full border transition-all ${
-                  isFavorite
-                    ? 'border-rose-200 bg-rose-50 text-rose-500'
-                    : 'border-gray-200 bg-white text-gray-400 hover:text-rose-500'
-                }`}
-                title="Thêm vào danh sách yêu thích"
-                aria-label="Thêm vào danh sách yêu thích"
-              >
-                <Heart className={`size-5 ${isFavorite ? 'fill-rose-400' : ''}`} />
-              </button>
-            </div>
 
-            <dl className="mt-6 grid gap-3 text-sm">
+              {/* Product Information Section */}
+              <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h1 className="text-3xl font-bold text-gray-900">{product.name}</h1>
+                    <p className="mt-2 text-sm text-gray-500">Sản phẩm tươi sạch dành cho doanh nghiệp B2B</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openWishlistModal}
+                    className={`group relative flex h-10 w-10 items-center justify-center rounded-full border transition-all ${
+                      isFavorite
+                        ? 'border-rose-200 bg-rose-50 text-rose-500'
+                        : 'border-gray-200 bg-white text-gray-400 hover:text-rose-500'
+                    }`}
+                    title="Thêm vào danh sách yêu thích"
+                    aria-label="Thêm vào danh sách yêu thích"
+                  >
+                    <Heart className={`size-5 ${isFavorite ? 'fill-rose-400' : ''}`} />
+                  </button>
+                </div>
+
+                <dl className="mt-6 grid gap-3 text-sm">
               <div className="flex justify-between border-b border-dashed border-gray-200 pb-2">
                 <dt className="text-gray-500">Mã SKU</dt>
                 <dd className="font-semibold text-gray-800">{product.sku}</dd>
@@ -511,12 +512,13 @@ export function ProductDetailPage() {
 
           </>
         )}
+        </div>
       </div>
-    </div>
-    <WishlistAddModal
-      isOpen={Boolean(wishlistProduct)}
-      product={wishlistProduct}
-      onClose={() => setWishlistProduct(null)}
-    />
+      <WishlistAddModal
+        isOpen={Boolean(wishlistProduct)}
+        product={wishlistProduct}
+        onClose={() => setWishlistProduct(null)}
+      />
+    </>
   );
 }

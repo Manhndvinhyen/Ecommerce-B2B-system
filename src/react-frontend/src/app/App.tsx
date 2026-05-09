@@ -15,6 +15,7 @@ import { ShoppingCartPage } from './components/ShoppingCartPage';
 import { LoginPage } from './components/LoginPage';
 import { ForgotPasswordPage } from './components/ForgotPasswordPage';
 import { ProductDetailPage } from './components/ProductDetailPage';
+import { UserDashboardPage } from './components/UserDashboardPage';
 import { WishlistPage } from './components/WishlistPage';
 import { getCategoryNameFromQuery, getSubcategoryNameFromQuery } from './data/categories';
 import { CartProvider } from './cart/CartProvider';
@@ -22,6 +23,7 @@ import { CartProvider } from './cart/CartProvider';
 function AppContent() {
   const params = new URLSearchParams(window.location.search);
   const view = params.get('view');
+  const isWishlistView = view === 'wishlist';
   const category = getCategoryNameFromQuery(params.get('category'));
   const subcategory = getSubcategoryNameFromQuery(category, params.get('subcategory'));
   const isCategoryView = view === 'category';
@@ -30,7 +32,11 @@ function AppContent() {
   const isLoginView = view === 'login';
   const isForgotPasswordView = view === 'forgot-password';
   const isProductView = view === 'product';
-  const isWishlistView = view === 'wishlist';
+  const isDashboardView = view === 'dashboard';
+
+  if (isDashboardView) {
+    return <UserDashboardPage />;
+  }
 
   if (isRegisterView) {
     return <RegisterPage />;
@@ -60,7 +66,6 @@ function AppContent() {
       </div>
     );
   }
-
   if (isWishlistView) {
     return (
       <div className="min-h-screen bg-white">
@@ -73,7 +78,6 @@ function AppContent() {
       </div>
     );
   }
-
   return (
     <div className="min-h-screen bg-white">
       <Header />

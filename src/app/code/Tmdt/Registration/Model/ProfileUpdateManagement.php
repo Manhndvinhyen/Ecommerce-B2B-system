@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tmdt\Registration\Model;
 
-use Magento\Authorization\Model\UserContextInterface;
 use Magento\Customer\Api\CustomerRepositoryInterface;
 use Magento\Customer\Api\Data\CustomerInterface;
 use Magento\Framework\App\ResourceConnection;
@@ -12,26 +11,25 @@ use Magento\Framework\Exception\AuthorizationException;
 use Magento\Framework\Exception\InputException;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Webapi\Rest\Request as RestRequest;
+use Magento\Integration\Model\Oauth\TokenFactory;
 use Tmdt\Registration\Api\ProfileUpdateInterface;
 
 class ProfileUpdateManagement implements ProfileUpdateInterface
 {
     private const TABLE_NAME = 'tmdt_customer_registration';
+    private const AUTH_HEADER = 'Authorization';
 
     public function __construct(
         private readonly ResourceConnection $resourceConnection,
         private readonly RestRequest $request,
         private readonly CustomerRepositoryInterface $customerRepository,
-        private readonly UserContextInterface $userContext
+        private readonly TokenFactory $tokenFactory
     ) {
     }
 
     public function save(): array
     {
-        $customerId = (int) $this->userContext->getUserId();
-        if ($customerId <= 0 || $this->userContext->getUserType() !== UserContextInterface::USER_TYPE_CUSTOMER) {
-            throw new AuthorizationException(__('Ban can dang nhap de cap nhat thong tin.'));
-        }
+        $customerId = $this->getCustomerIdFromRequest();
 
         $bodyParams = $this->request->getBodyParams();
         $payload = is_array($bodyParams) && isset($bodyParams['payload']) ? $bodyParams['payload'] : $bodyParams;
@@ -172,6 +170,50 @@ class ProfileUpdateManagement implements ProfileUpdateInterface
             'success' => true,
             'message' => (string) __('Cap nhat thong tin thanh cong.'),
         ];
+    }
+
+    private function getCustomerIdFromRequest(): int
+    {
+        $token = $this->extractToken();
+        if ($token === '') {
+            throw new AuthorizationException(__('Ban can dang nhap de cap nhat thong tin.'));
+        }
+
+        $tokenModel = $this->tokenFactory->create()->loadByToken($token);
+        $customerId = (int) $tokenModel->getCustomerId();
+        if ($customerId <= 0) {
+            throw new AuthorizationException(__('Token khong hop le hoac da het han.'));
+        }
+
+        return $customerId;
+    }
+
+    private function extractToken(): string
+    {
+        $header = trim((string) ($this->request->getHeader(self::AUTH_HEADER) ?? ''));
+        if ($header !== '' && preg_match('/^Bearer\s+(.+)$/i', $header, $matches)) {
+            return trim((string) ($matches[1] ?? ''));
+        }
+
+        $token = trim((string) $this->request->getParam('token'));
+        if ($token !== '') {
+            return $token;
+        }
+
+        $payload = $this->getJsonPayload();
+        $token = trim((string) ($payload['token'] ?? ($payload['payload']['token'] ?? '')));
+        return $token;
+    }
+
+    private function getJsonPayload(): array
+    {
+        $content = (string) $this->request->getContent();
+        if ($content === '') {
+            return [];
+        }
+
+        $data = json_decode($content, true);
+        return is_array($data) ? $data : [];
     }
 
     private function normalize(string $value): string

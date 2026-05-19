@@ -101,6 +101,12 @@ const defaultFormData: LoginFormData = {
   rememberMe: false,
 };
 
+const syncAuthStorage = (key: string, value: string) => {
+  if (!value) return;
+  window.localStorage.setItem(key, value);
+  window.sessionStorage.setItem(key, value);
+};
+
 const startCustomerSession = async (token: string, storage: Storage): Promise<string | null> => {
   if (!token) {
     return null;
@@ -240,15 +246,15 @@ export function LoginPage() {
 
         const storage = formData.rememberMe ? window.localStorage : window.sessionStorage;
         const fallbackEmail = data.email || formData.identifier.trim();
-        storage.setItem('freso_customer_token', data.token);
-        storage.setItem('freso_customer_email', fallbackEmail);
+        syncAuthStorage('freso_customer_token', data.token);
+        syncAuthStorage('freso_customer_email', fallbackEmail);
 
         if (data.full_name?.trim()) {
-          storage.setItem('freso_customer_name', data.full_name.trim());
+          syncAuthStorage('freso_customer_name', data.full_name.trim());
         }
 
         if (data.branch_name?.trim()) {
-          storage.setItem('freso_branch_name', data.branch_name.trim());
+          syncAuthStorage('freso_branch_name', data.branch_name.trim());
         }
 
         const sessionRedirect = await startCustomerSession(data.token, storage);
@@ -300,15 +306,15 @@ export function LoginPage() {
         }
 
         const storage = formData.rememberMe ? window.localStorage : window.sessionStorage;
-        storage.setItem('freso_customer_token', data.token);
-        storage.setItem('freso_customer_email', data.email || '');
+        syncAuthStorage('freso_customer_token', data.token);
+        syncAuthStorage('freso_customer_email', data.email || '');
 
         if (data.full_name?.trim()) {
-          storage.setItem('freso_customer_name', data.full_name.trim());
+          syncAuthStorage('freso_customer_name', data.full_name.trim());
         }
 
         if (data.branch_name?.trim()) {
-          storage.setItem('freso_branch_name', data.branch_name.trim());
+          syncAuthStorage('freso_branch_name', data.branch_name.trim());
         }
 
         const sessionRedirect = await startCustomerSession(data.token, storage);

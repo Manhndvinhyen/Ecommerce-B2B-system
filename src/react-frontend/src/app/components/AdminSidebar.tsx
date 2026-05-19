@@ -11,6 +11,25 @@ import {
   ChevronDown
 } from 'lucide-react';
 
+export const adminMenuItems = [
+  { id: 'tai-khoan', label: 'Tài khoản của tôi', icon: CircleUserRound },
+  { id: 'thong-tin', label: 'Thông tin chung', icon: LayoutDashboard },
+  { id: 'don-hang', label: 'Quản lý đơn hàng', icon: FileText },
+  { id: 'bao-gia', label: 'Đàm phán giá', icon: Handshake },
+  {
+    id: 'nhan-vien',
+    label: 'Quản lý nhân viên',
+    icon: UserRoundSearch,
+    subItems: ['Danh sách nhân viên', 'Tạo mới nhân viên'],
+  },
+  {
+    id: 'bao-cao',
+    label: 'Báo cáo',
+    icon: PieChart,
+    subItems: ['Đối soát hoá đơn điện tử', 'Hoàn tiền đơn hàng'],
+  },
+];
+
 const SidebarItem = ({ icon: Icon, label, isActive, hasSubmenu, isOpen, onClick, subItems }) => {
   return (
     <div className="mb-3">
@@ -88,24 +107,7 @@ export function AdminSidebar(props){
     setOpenMenus(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const menuItems = [
-    { id: 'tai-khoan', label: 'Tài khoản của tôi', icon: CircleUserRound },
-    { id: 'thong-tin', label: 'Thông tin chung', icon: LayoutDashboard },
-    { id: 'don-hang', label: 'Quản lý đơn hàng', icon: FileText },
-    { id: 'bao-gia', label: 'Đàm phán giá', icon: Handshake },
-    { 
-      id: 'nhan-vien', 
-      label: 'Quản lý nhân viên', 
-      icon: UserRoundSearch, 
-      subItems: ['Danh sách nhân viên', 'Tạo mới nhân viên'] 
-    },
-    { 
-      id: 'bao-cao', 
-      label: 'Báo cáo', 
-      icon: PieChart,
-      subItems: ['Đối soát hoá đơn điện tử', 'Hoàn tiền đơn hàng']
-    },
-  ];
+  const menuItems = adminMenuItems;
 
   return (
     <div style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }} className="w-full">

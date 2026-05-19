@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ShoppingCart, User, Menu, Search, ChevronRight, Heart } from 'lucide-react';
 import { categoryMenu, getCategoryPageLink } from '../data/categories';
+import { adminMenuItems } from './AdminSidebar';
 import { useCart } from '../cart/CartProvider';
 
 export function Header() {
@@ -126,7 +127,10 @@ export function Header() {
     }
   };
 
-  const displayedUserName = customerName || customerEmail;
+  const displayedUserName = customerName || customerEmail || 'Tài khoản';
+  const dashboardBase = `${reactHomePath}?view=dashboard`;
+  const getDashboardHref = (tabLabel: string) => `${dashboardBase}&tab=${encodeURIComponent(tabLabel)}`;
+  const activeDashboardTab = new URLSearchParams(window.location.search).get('tab');
 
   const logoutAndBackHome = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -145,6 +149,10 @@ export function Header() {
         return;
       }
 
+      if (ev && ev.key === 'freso_last_profile_update') {
+        // Fall through to re-sync state from storage.
+      }
+
       const token = window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
       const email = window.localStorage.getItem('freso_customer_email') || window.sessionStorage.getItem('freso_customer_email') || '';
       const name = window.localStorage.getItem('freso_customer_name') || window.sessionStorage.getItem('freso_customer_name') || '';
@@ -158,11 +166,15 @@ export function Header() {
       }
     };
 
+    const handleProfileUpdated = () => syncAuthState(null);
+
     window.addEventListener('storage', syncAuthState);
+    window.addEventListener('freso:profile-updated', handleProfileUpdated as EventListener);
     // Also call once on mount to sync state
     syncAuthState(null);
     return () => {
       window.removeEventListener('storage', syncAuthState);
+      window.removeEventListener('freso:profile-updated', handleProfileUpdated as EventListener);
     };
   }, []);
 
@@ -356,18 +368,16 @@ export function Header() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
-                  <span>Vuachaca</span>
+                  <span>{branchName}</span>
                 </div>
-                <span className="text-gray-300">|</span>
-                <span className="text-sm text-gray-700">{branchName}</span>
                 <span className="text-gray-300">|</span>
                 <div
                   className="relative"
+                  onMouseEnter={() => setIsUserMenuOpen(true)}
                   onMouseLeave={() => setIsUserMenuOpen(false)}
                 >
                   <button
                     type="button"
-                    onMouseEnter={() => setIsUserMenuOpen(true)}
                     onClick={() => setIsUserMenuOpen((prev) => !prev)}
                     className="flex items-center gap-1.5 text-sm text-gray-700 hover:text-green-600"
                   >
@@ -375,33 +385,25 @@ export function Header() {
                     {displayedUserName}
                   </button>
                   {isUserMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-[320px] bg-white border border-gray-200 rounded-2xl shadow-xl p-4 z-50">
-                      <div className="text-sm font-semibold text-gray-900 mb-3">{displayedUserName}</div>
-                      <div className="grid grid-cols-1 gap-2 text-sm">
-                        <a href="/customer/account" className="px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
-                          Thong tin chung
-                        </a>
-                        <a href="/sales/order/history" className="px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
-                          Quan ly don hang
-                        </a>
-                        <a href={`${reactHomePath}?view=wishlist`} className="px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
-                          San pham yeu thich
-                        </a>
-                        <a href="/sales/order/history" className="px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
-                          Don hang yeu thich
-                        </a>
-                        <a href="/tmdt/branch" className="px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
-                          Quan ly chi nhanh
-                        </a>
-                        <a href="/tmdt/staff" className="px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
-                          Nhan vien
-                        </a>
-                        <a href="/tmdt/supplier" className="px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
-                          Nha cung cap
-                        </a>
-                        <a href="/tmdt/report" className="px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
-                          Bao cao
-                        </a>
+                    <div className="absolute right-0 mt-2 w-[280px] bg-white border border-gray-200 rounded-2xl shadow-xl p-2 z-50">
+                      <div className="px-3 py-2 text-sm font-semibold text-gray-900">{displayedUserName}</div>
+                      <div className="grid grid-cols-1 gap-1 text-sm">
+                        {adminMenuItems.map((item) => {
+                          const isActive = activeDashboardTab === item.label;
+                          return (
+                            <a
+                              key={item.id}
+                              href={getDashboardHref(item.label)}
+                              className={`w-full rounded-xl px-4 py-2.5 text-[14px] font-semibold transition-colors ${
+                                isActive
+                                  ? 'bg-green-50 text-green-700'
+                                  : 'text-gray-700 hover:bg-green-50 hover:text-green-700'
+                              }`}
+                            >
+                              {item.label}
+                            </a>
+                          );
+                        })}
                       </div>
                       <div className="mt-4">
                         <button

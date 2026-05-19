@@ -33,7 +33,13 @@
     <route url="/V1/tmdt-registration/profile" method="PUT">
         <service class="Tmdt\Registration\Api\ProfileUpdateInterface" method="save" />
         <resources>
-            <resource ref="self" />
+            <resource ref="anonymous" />
+        </resources>
+    </route>
+    <route url="/V1/tmdt-registration/profile" method="GET">
+        <service class="Tmdt\Registration\Api\ProfileViewInterface" method="get" />
+        <resources>
+            <resource ref="anonymous" />
         </resources>
     </route>
 </routes>

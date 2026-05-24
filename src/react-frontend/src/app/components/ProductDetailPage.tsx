@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Heart, ShoppingCart } from 'lucide-react';
 import { WishlistAddModal, WishlistModalProduct } from './WishlistAddModal';
+import { hasWishlistAuth, getWishlistItemsMap, removeWishlistItem, WishlistItem } from '../utils/wishlistApi';
 import { useCart, toCurrencyTextFromNumber, toUnitPriceFromLooseValue } from '../cart/CartProvider';
 import { toQuerySlug } from '../data/categories';
 
@@ -62,12 +63,6 @@ const normalizeHeadingKey = (value: string) =>
 const parseDescriptionSections = (html?: string | null): Partial<ProductDescriptionSections> => {
   if (!html) return {};
 
-  // Our seed data uses <p><strong>Heading:</strong> content</p> blocks.
-  // We'll parse by paragraphs and detect these Vietnamese headings:
-  // - Đặc điểm
-  // - Công dụng
-  // - Cách bảo quản
-  // - Thời hạn sử dụng
   const tmp = document.createElement('div');
   tmp.innerHTML = html;
   const paragraphs = Array.from(tmp.querySelectorAll('p'));
@@ -79,7 +74,6 @@ const parseDescriptionSections = (html?: string | null): Partial<ProductDescript
     if (!strong) continue;
 
     const heading = normalizeHeadingKey(strong.textContent ?? '');
-    // Clone paragraph to strip out the heading node while keeping the rest as text.
     const clone = p.cloneNode(true) as HTMLParagraphElement;
     const cloneStrong = clone.querySelector('strong');
     if (cloneStrong) cloneStrong.remove();
@@ -113,6 +107,7 @@ export function ProductDetailPage() {
   const [product, setProduct] = useState<MagentoProduct | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [wishlistItemId, setWishlistItemId] = useState('');
   const [wishlistProduct, setWishlistProduct] = useState<WishlistModalProduct | null>(null);
   const holdTimerRef = useRef<number | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
@@ -162,8 +157,8 @@ export function ProductDetailPage() {
       setLoadError('');
       setProduct(null);
 
-        const query = querySku
-          ? `
+      const query = querySku
+        ? `
         query ProductDetail($sku: String!) {
           products(filter: { sku: { eq: $sku } }, pageSize: 1) {
             items {
@@ -184,7 +179,7 @@ export function ProductDetailPage() {
           }
         }
         `
-          : `
+        : `
         query ProductDetail($name: String!) {
           products(filter: { name: { match: $name } }, pageSize: 1) {
             items {
@@ -236,13 +231,13 @@ export function ProductDetailPage() {
           throw new Error('Không tìm thấy sản phẩm.');
         }
 
-  const price = Number(item.price_range?.minimum_price?.final_price?.value ?? fallbackProduct.price);
-  const imageUrl = item.small_image?.url || fallbackProduct.image;
-  const descriptionHtml = item.description?.html;
-  const descriptionText = stripHtml(descriptionHtml);
-  const shortDescriptionText = stripHtml(item.short_description?.html);
-  const parsed = parseDescriptionSections(descriptionHtml);
-  const combinedDescription = descriptionText || shortDescriptionText || fallbackProduct.description.features;
+        const price = Number(item.price_range?.minimum_price?.final_price?.value ?? fallbackProduct.price);
+        const imageUrl = item.small_image?.url || fallbackProduct.image;
+        const descriptionHtml = item.description?.html;
+        const descriptionText = stripHtml(descriptionHtml);
+        const shortDescriptionText = stripHtml(item.short_description?.html);
+        const parsed = parseDescriptionSections(descriptionHtml);
+        const combinedDescription = descriptionText || shortDescriptionText || fallbackProduct.description.features;
 
         setProduct({
           id: String(item.id ?? fallbackProduct.id),
@@ -299,8 +294,6 @@ export function ProductDetailPage() {
     if (!product) {
       return;
     }
-    // Add straight to cart (no modal).
-    // Quantity should be added to cart, but cart badge should count distinct items.
     const sourceElement = imageRef.current ?? document.getElementById('pdp-product-image');
     await quickAddToCart(
       {
@@ -318,8 +311,40 @@ export function ProductDetailPage() {
     );
   };
 
-  const openWishlistModal = () => {
+  useEffect(() => {
+    const loadWishlist = async () => {
+      if (!hasWishlistAuth() || !product) {
+        return;
+      }
+
+      const { itemsMap } = await getWishlistItemsMap();
+      const matched = itemsMap[product.sku];
+      if (matched) {
+        setWishlistItemId(matched.itemId);
+        setIsFavorite(true);
+      } else {
+        setWishlistItemId('');
+        setIsFavorite(false);
+      }
+    };
+
+    loadWishlist();
+  }, [product]);
+
+  const toggleWishlist = async () => {
     if (!product) return;
+    if (!hasWishlistAuth()) {
+      window.location.href = '/react/index.html?view=login';
+      return;
+    }
+
+    if (wishlistItemId) {
+      await removeWishlistItem(wishlistItemId);
+      setWishlistItemId('');
+      setIsFavorite(false);
+      return;
+    }
+
     setWishlistProduct({
       sku: product.sku,
       name: product.name,
@@ -329,7 +354,6 @@ export function ProductDetailPage() {
       image: product.image,
       category: product.category
     });
-    setIsFavorite(true);
   };
 
   return (
@@ -421,10 +445,23 @@ export function ProductDetailPage() {
                     <dd className="font-semibold text-gray-800">{product.origin}</dd>
                   </div>
                   <div className="flex items-start justify-between gap-4">
-                    <dt className="text-gray-500">Ghi chú</dt>
-                    <dd className="flex-1 text-right font-semibold text-gray-800">
-                      {product.note || 'Không có ghi chú'}
-                    </dd>
+                    <div>
+                      <h1 className="text-3xl font-bold text-gray-900">{product.name}</h1>
+                      <p className="mt-2 text-sm text-gray-500">Sản phẩm tươi sạch dành cho doanh nghiệp B2B</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={toggleWishlist}
+                      className={`group relative flex h-10 w-10 items-center justify-center rounded-full border transition-all ${
+                        isFavorite
+                          ? 'border-rose-200 bg-rose-50 text-rose-500'
+                          : 'border-gray-200 bg-white text-gray-400 hover:text-rose-500'
+                      }`}
+                      title="Thêm vào danh sách yêu thích"
+                      aria-label="Thêm vào danh sách yêu thích"
+                    >
+                      <Heart className={`size-5 ${isFavorite ? 'fill-rose-400' : ''}`} />
+                    </button>
                   </div>
                 </dl>
 
@@ -521,6 +558,11 @@ export function ProductDetailPage() {
         isOpen={Boolean(wishlistProduct)}
         product={wishlistProduct}
         onClose={() => setWishlistProduct(null)}
+        onAdded={(item: WishlistItem) => {
+          if (!item.sku) return;
+          setWishlistItemId(item.id);
+          setIsFavorite(true);
+        }}
       />
     </>
   );

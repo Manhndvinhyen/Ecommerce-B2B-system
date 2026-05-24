@@ -28,6 +28,7 @@ export function WishlistPage() {
   const { quickAddToCart } = useCart();
   const [lists, setLists] = useState<WishlistList[]>([]);
   const [activeListId, setActiveListId] = useState<string>('');
+  const [isDetailView, setIsDetailView] = useState(false);
   const [items, setItems] = useState<WishlistItem[]>([]);
   const [itemsByList, setItemsByList] = useState<Record<string, WishlistItem[]>>({});
   const [isLoadingLists, setIsLoadingLists] = useState(true);
@@ -35,8 +36,18 @@ export function WishlistPage() {
   const [toastMessage, setToastMessage] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newListName, setNewListName] = useState('');
+  const [createError, setCreateError] = useState('');
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const detailListId = params.get('listId') ?? '';
+    if (detailListId) {
+      setActiveListId(detailListId);
+      setIsDetailView(true);
+    } else {
+      setIsDetailView(false);
+    }
+
     const token = getAuthToken();
     if (!token) {
       window.location.href = `${reactHomePath}?view=login`;
@@ -49,7 +60,7 @@ export function WishlistPage() {
         const normalized = await getWishlistLists();
 
         setLists(normalized);
-        setActiveListId((prev) => prev || normalized[0]?.id || '');
+  setActiveListId((prev) => prev || detailListId || normalized[0]?.id || '');
         setItemsByList({});
       } catch (_error) {
         setLists([]);
@@ -101,7 +112,10 @@ export function WishlistPage() {
 
   const handleCreateList = async () => {
     const name = newListName.trim();
-    if (!name) return;
+    if (!name) {
+      setCreateError('Vui lòng nhập tên danh sách yêu thích mới.');
+      return;
+    }
 
     try {
       const newList = await createWishlistList(name);
@@ -110,6 +124,7 @@ export function WishlistPage() {
       setItemsByList((prev) => ({ ...prev, [newList.id]: [] }));
       setIsCreateOpen(false);
       setNewListName('');
+      setCreateError('');
       showToast('Đã tạo danh sách yêu thích');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -229,7 +244,17 @@ export function WishlistPage() {
 
           <section className="space-y-4">
             <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <h2 className="text-xl font-semibold text-gray-900">{activeList?.name ?? 'Danh sách'}</h2>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-xl font-semibold text-gray-900">{activeList?.name ?? 'Danh sách'}</h2>
+                {activeList && !isDetailView && (
+                  <a
+                    href={`${reactHomePath}?view=wishlist&listId=${encodeURIComponent(activeList.id)}`}
+                    className="rounded-full border border-green-600 px-4 py-2 text-sm font-semibold text-green-700 hover:bg-green-50"
+                  >
+                    Xem chi tiết
+                  </a>
+                )}
+              </div>
             </div>
 
             {isLoadingItems && (
@@ -251,13 +276,15 @@ export function WishlistPage() {
                 <p className="mt-2 text-sm text-gray-500">
                   Hãy khám phá ngay những sản phẩm mới nhất và thêm vào danh sách yêu thích nhé!
                 </p>
-                <button
-                  type="button"
-                  onClick={() => (window.location.href = reactHomePath)}
-                  className="mt-5 rounded-full bg-green-600 px-6 py-2 text-sm font-semibold text-white hover:bg-green-700"
-                >
-                  Khám phá ngay
-                </button>
+                {!isDetailView && (
+                  <button
+                    type="button"
+                    onClick={() => (window.location.href = reactHomePath)}
+                    className="mt-5 rounded-full bg-green-600 px-6 py-2 text-sm font-semibold text-white hover:bg-green-700"
+                  >
+                    Khám phá ngay
+                  </button>
+                )}
               </div>
             )}
 
@@ -311,16 +338,21 @@ export function WishlistPage() {
             <p className="mt-2 text-sm text-gray-500">Nhập tên danh sách bạn muốn tạo.</p>
             <input
               value={newListName}
-              onChange={(event) => setNewListName(event.target.value)}
+              onChange={(event) => {
+                setNewListName(event.target.value);
+                if (createError) setCreateError('');
+              }}
               placeholder="Ví dụ: Rau, Hoa quả"
               className="mt-4 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-green-500"
             />
+            {createError && <p className="mt-2 text-xs text-red-500">{createError}</p>}
             <div className="mt-5 flex justify-end gap-3">
               <button
                 type="button"
                 onClick={() => {
                   setIsCreateOpen(false);
                   setNewListName('');
+                  setCreateError('');
                 }}
                 className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
@@ -329,7 +361,10 @@ export function WishlistPage() {
               <button
                 type="button"
                 onClick={handleCreateList}
-                className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700"
+                disabled={!newListName.trim()}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold text-white ${
+                  newListName.trim() ? 'bg-green-600 hover:bg-green-700' : 'bg-[#C7DCD1]'
+                }`}
               >
                 Tạo mới
               </button>

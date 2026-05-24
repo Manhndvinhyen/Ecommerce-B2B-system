@@ -5,6 +5,7 @@ import {
   createWishlistList,
   getWishlistLists,
   hasWishlistAuth,
+  WishlistItem,
   WishlistList
 } from '../utils/wishlistApi';
 
@@ -22,16 +23,24 @@ type WishlistAddModalProps = {
   isOpen: boolean;
   product: WishlistModalProduct | null;
   onClose: () => void;
+  onAdded?: (item: WishlistItem, listId: string) => void;
   loginRedirectUrl?: string;
 };
 
-export function WishlistAddModal({ isOpen, product, onClose, loginRedirectUrl = '/react/index.html?view=login' }: WishlistAddModalProps) {
+export function WishlistAddModal({
+  isOpen,
+  product,
+  onClose,
+  onAdded,
+  loginRedirectUrl = '/react/index.html?view=login'
+}: WishlistAddModalProps) {
   const [isMounted, setIsMounted] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [lists, setLists] = useState<WishlistList[]>([]);
   const [selectedListId, setSelectedListId] = useState('');
   const [newListName, setNewListName] = useState('');
   const [error, setError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -75,7 +84,7 @@ export function WishlistAddModal({ isOpen, product, onClose, loginRedirectUrl = 
     if (!product.sku) return;
 
     setSelectedListId(listId);
-    await addWishlistItem({
+    const item = await addWishlistItem({
       listId,
       sku: product.sku,
       name: product.name,
@@ -84,6 +93,7 @@ export function WishlistAddModal({ isOpen, product, onClose, loginRedirectUrl = 
       image: product.image,
       category: product.category
     });
+    onAdded?.(item, listId);
     handleClose();
   };
 
@@ -91,14 +101,24 @@ export function WishlistAddModal({ isOpen, product, onClose, loginRedirectUrl = 
     const name = newListName.trim();
     if (!name) {
       setError(true);
+      setErrorMessage('Vui lòng nhập tên danh sách yêu thích mới');
       return;
     }
-
-    const list = await createWishlistList(name);
-    setLists((prev) => [list, ...prev]);
-    setNewListName('');
-    setError(false);
-    await handleSelectList(list.id);
+    try {
+      setIsLoading(true);
+      const list = await createWishlistList(name);
+      setLists((prev) => [list, ...prev]);
+      setNewListName('');
+      setError(false);
+      setErrorMessage('');
+      await handleSelectList(list.id);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Không thể tạo danh sách.';
+      setError(true);
+      setErrorMessage(message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (!isMounted || !product) return null;
@@ -180,6 +200,7 @@ export function WishlistAddModal({ isOpen, product, onClose, loginRedirectUrl = 
               onChange={(event) => {
                 setNewListName(event.target.value);
                 if (error) setError(false);
+                if (errorMessage) setErrorMessage('');
               }}
               placeholder="Vui lòng nhập tên danh sách yêu thích mới"
               className={`w-full rounded-xl border px-4 py-2.5 text-sm outline-none transition-colors ${
@@ -189,7 +210,7 @@ export function WishlistAddModal({ isOpen, product, onClose, loginRedirectUrl = 
             {error && (
               <div className="mt-2 flex items-center gap-2 text-xs text-red-500">
                 <AlertTriangle className="size-4" />
-                Vui lòng nhập tên danh sách yêu thích mới
+                {errorMessage || 'Vui lòng nhập tên danh sách yêu thích mới'}
               </div>
             )}
           </div>

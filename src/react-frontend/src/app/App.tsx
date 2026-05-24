@@ -24,7 +24,6 @@ import { CartProvider } from './cart/CartProvider';
 function AppContent() {
   const params = new URLSearchParams(window.location.search);
   const view = params.get('view');
-  const isWishlistView = view === 'wishlist';
   const category = getCategoryNameFromQuery(params.get('category'));
   const subcategory = getSubcategoryNameFromQuery(category, params.get('subcategory'));
   const isCategoryView = view === 'category';
@@ -84,6 +83,7 @@ function AppContent() {
       </div>
     );
   }
+
 
   if (isCheckoutView) {
     return (

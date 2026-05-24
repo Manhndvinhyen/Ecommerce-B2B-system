@@ -140,6 +140,63 @@ const startCustomerSession = async (token: string, storage: Storage): Promise<st
   return redirectUrl || null;
 };
 
+const fetchMagentoCustomerToken = async (identifier: string, password: string): Promise<string | null> => {
+  if (!identifier || !password) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(`${window.location.origin}/rest/V1/integration/customer/token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ username: identifier, password }),
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const token = await response.json().catch(() => null);
+    return typeof token === 'string' ? token.trim() : null;
+  } catch (_error) {
+    return null;
+  }
+};
+
+const verifyMagentoCustomerToken = async (token: string): Promise<boolean> => {
+  if (!token) {
+    return false;
+  }
+
+  try {
+    const response = await fetch(`${window.location.origin}/rest/V1/customers/me`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store',
+    });
+
+    return response.ok;
+  } catch (_error) {
+    return false;
+  }
+};
+
+const persistAuthDebug = (payload: Record<string, unknown>) => {
+  try {
+    window.localStorage.setItem('freso_auth_debug', JSON.stringify({
+      ...payload,
+      timestamp: new Date().toISOString(),
+    }));
+  } catch (_error) {
+    // ignore storage errors
+  }
+};
+
 export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState<LoginFormData>(defaultFormData);
@@ -238,20 +295,47 @@ export function LoginPage() {
           throw new Error(data?.message || 'Thông tin đăng nhập không hợp lệ.');
         }
 
-        const storage = formData.rememberMe ? window.localStorage : window.sessionStorage;
+        const primaryStorage = formData.rememberMe ? window.localStorage : window.sessionStorage;
+        const secondaryStorage = formData.rememberMe ? window.sessionStorage : window.localStorage;
         const fallbackEmail = data.email || formData.identifier.trim();
-        storage.setItem('freso_customer_token', data.token);
-        storage.setItem('freso_customer_email', fallbackEmail);
+        const magentoUsername = (data.email || formData.identifier).trim();
+        const magentoToken = await fetchMagentoCustomerToken(magentoUsername, formData.password);
+        if (!magentoToken) {
+          persistAuthDebug({
+            flow: 'password',
+            hasCustomToken: Boolean(data.token),
+            hasMagentoToken: false,
+            isMagentoTokenValid: false,
+            tokenStored: false,
+            magentoUsername,
+            error: 'missing_magento_token'
+          });
+          throw new Error('Không thể lấy token Magento từ /rest/V1/integration/customer/token.');
+        }
+        const customerToken = magentoToken;
+        const isMagentoTokenValid = await verifyMagentoCustomerToken(customerToken);
+        persistAuthDebug({
+          flow: 'password',
+          hasCustomToken: Boolean(data.token),
+          hasMagentoToken: true,
+          isMagentoTokenValid,
+          tokenStored: Boolean(customerToken),
+          tokenPreview: customerToken.slice(0, 8)
+        });
+        primaryStorage.setItem('freso_customer_token', customerToken);
+        primaryStorage.setItem('freso_login_token', data.token);
+        secondaryStorage.setItem('freso_customer_token', customerToken);
+        primaryStorage.setItem('freso_customer_email', fallbackEmail);
 
         if (data.full_name?.trim()) {
-          storage.setItem('freso_customer_name', data.full_name.trim());
+          primaryStorage.setItem('freso_customer_name', data.full_name.trim());
         }
 
         if (data.branch_name?.trim()) {
-          storage.setItem('freso_branch_name', data.branch_name.trim());
+          primaryStorage.setItem('freso_branch_name', data.branch_name.trim());
         }
 
-        const sessionRedirect = await startCustomerSession(data.token, storage);
+    const sessionRedirect = await startCustomerSession(data.token, primaryStorage);
         window.location.href = sessionRedirect || getPostLoginRedirect(data.redirect_url);
       })
       .catch((error: unknown) => {
@@ -299,19 +383,30 @@ export function LoginPage() {
           throw new Error(data?.message || 'Đăng nhập Google không thành công.');
         }
 
-        const storage = formData.rememberMe ? window.localStorage : window.sessionStorage;
-        storage.setItem('freso_customer_token', data.token);
-        storage.setItem('freso_customer_email', data.email || '');
+        const primaryStorage = formData.rememberMe ? window.localStorage : window.sessionStorage;
+        const secondaryStorage = formData.rememberMe ? window.sessionStorage : window.localStorage;
+        const isMagentoTokenValid = await verifyMagentoCustomerToken(data.token);
+        persistAuthDebug({
+          flow: 'google',
+          hasCustomToken: Boolean(data.token),
+          hasMagentoToken: Boolean(data.token),
+          isMagentoTokenValid,
+          tokenStored: Boolean(data.token),
+          tokenPreview: data.token.slice(0, 8)
+        });
+        primaryStorage.setItem('freso_customer_token', data.token);
+        secondaryStorage.setItem('freso_customer_token', data.token);
+        primaryStorage.setItem('freso_customer_email', data.email || '');
 
         if (data.full_name?.trim()) {
-          storage.setItem('freso_customer_name', data.full_name.trim());
+          primaryStorage.setItem('freso_customer_name', data.full_name.trim());
         }
 
         if (data.branch_name?.trim()) {
-          storage.setItem('freso_branch_name', data.branch_name.trim());
+          primaryStorage.setItem('freso_branch_name', data.branch_name.trim());
         }
 
-        const sessionRedirect = await startCustomerSession(data.token, storage);
+  const sessionRedirect = await startCustomerSession(data.token, primaryStorage);
         window.location.href = sessionRedirect || getPostLoginRedirect(data.redirect_url);
       })
       .catch((error: unknown) => {

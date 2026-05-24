@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Heart, ShoppingCart } from 'lucide-react';
 import { WishlistAddModal, WishlistModalProduct } from './WishlistAddModal';
+import { hasWishlistAuth, getWishlistItemsMap, removeWishlistItem, WishlistItem } from '../utils/wishlistApi';
 import { useCart, toCurrencyTextFromNumber, toUnitPriceFromLooseValue } from '../cart/CartProvider';
 import { toQuerySlug } from '../data/categories';
 
@@ -62,12 +63,6 @@ const normalizeHeadingKey = (value: string) =>
 const parseDescriptionSections = (html?: string | null): Partial<ProductDescriptionSections> => {
   if (!html) return {};
 
-  // Our seed data uses <p><strong>Heading:</strong> content</p> blocks.
-  // We'll parse by paragraphs and detect these Vietnamese headings:
-  // - Đặc điểm
-  // - Công dụng
-  // - Cách bảo quản
-  // - Thời hạn sử dụng
   const tmp = document.createElement('div');
   tmp.innerHTML = html;
   const paragraphs = Array.from(tmp.querySelectorAll('p'));
@@ -79,7 +74,6 @@ const parseDescriptionSections = (html?: string | null): Partial<ProductDescript
     if (!strong) continue;
 
     const heading = normalizeHeadingKey(strong.textContent ?? '');
-    // Clone paragraph to strip out the heading node while keeping the rest as text.
     const clone = p.cloneNode(true) as HTMLParagraphElement;
     const cloneStrong = clone.querySelector('strong');
     if (cloneStrong) cloneStrong.remove();
@@ -113,6 +107,7 @@ export function ProductDetailPage() {
   const [product, setProduct] = useState<MagentoProduct | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [wishlistItemId, setWishlistItemId] = useState('');
   const [wishlistProduct, setWishlistProduct] = useState<WishlistModalProduct | null>(null);
   const holdTimerRef = useRef<number | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
@@ -162,8 +157,8 @@ export function ProductDetailPage() {
       setLoadError('');
       setProduct(null);
 
-        const query = querySku
-          ? `
+      const query = querySku
+        ? `
         query ProductDetail($sku: String!) {
           products(filter: { sku: { eq: $sku } }, pageSize: 1) {
             items {
@@ -184,7 +179,7 @@ export function ProductDetailPage() {
           }
         }
         `
-          : `
+        : `
         query ProductDetail($name: String!) {
           products(filter: { name: { match: $name } }, pageSize: 1) {
             items {
@@ -236,13 +231,13 @@ export function ProductDetailPage() {
           throw new Error('Không tìm thấy sản phẩm.');
         }
 
-  const price = Number(item.price_range?.minimum_price?.final_price?.value ?? fallbackProduct.price);
-  const imageUrl = item.small_image?.url || fallbackProduct.image;
-  const descriptionHtml = item.description?.html;
-  const descriptionText = stripHtml(descriptionHtml);
-  const shortDescriptionText = stripHtml(item.short_description?.html);
-  const parsed = parseDescriptionSections(descriptionHtml);
-  const combinedDescription = descriptionText || shortDescriptionText || fallbackProduct.description.features;
+        const price = Number(item.price_range?.minimum_price?.final_price?.value ?? fallbackProduct.price);
+        const imageUrl = item.small_image?.url || fallbackProduct.image;
+        const descriptionHtml = item.description?.html;
+        const descriptionText = stripHtml(descriptionHtml);
+        const shortDescriptionText = stripHtml(item.short_description?.html);
+        const parsed = parseDescriptionSections(descriptionHtml);
+        const combinedDescription = descriptionText || shortDescriptionText || fallbackProduct.description.features;
 
         setProduct({
           id: String(item.id ?? fallbackProduct.id),
@@ -299,8 +294,6 @@ export function ProductDetailPage() {
     if (!product) {
       return;
     }
-    // Add straight to cart (no modal).
-    // Quantity should be added to cart, but cart badge should count distinct items.
     const sourceElement = imageRef.current ?? document.getElementById('pdp-product-image');
     await quickAddToCart(
       {
@@ -318,8 +311,40 @@ export function ProductDetailPage() {
     );
   };
 
-  const openWishlistModal = () => {
+  useEffect(() => {
+    const loadWishlist = async () => {
+      if (!hasWishlistAuth() || !product) {
+        return;
+      }
+
+      const { itemsMap } = await getWishlistItemsMap();
+      const matched = itemsMap[product.sku];
+      if (matched) {
+        setWishlistItemId(matched.itemId);
+        setIsFavorite(true);
+      } else {
+        setWishlistItemId('');
+        setIsFavorite(false);
+      }
+    };
+
+    loadWishlist();
+  }, [product]);
+
+  const toggleWishlist = async () => {
     if (!product) return;
+    if (!hasWishlistAuth()) {
+      window.location.href = '/react/index.html?view=login';
+      return;
+    }
+
+    if (wishlistItemId) {
+      await removeWishlistItem(wishlistItemId);
+      setWishlistItemId('');
+      setIsFavorite(false);
+      return;
+    }
+
     setWishlistProduct({
       sku: product.sku,
       name: product.name,
@@ -329,121 +354,23 @@ export function ProductDetailPage() {
       image: product.image,
       category: product.category
     });
-    setIsFavorite(true);
   };
 
   return (
     <>
       <div className="bg-[#f6f8f7] pb-20 text-gray-800">
         <div className="container mx-auto px-4 pb-12 pt-8">
-        {!hasQuery ? (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800 text-sm">
-            Thiếu thông tin sản phẩm để hiển thị.
-          </div>
-        ) : isLoading ? (
-          <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-blue-800 text-sm">
-            Đang tải dữ liệu sản phẩm...
-          </div>
-        ) : loadError ? (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800 text-sm">
-            {loadError}
-          </div>
-        ) : !product ? (
-          <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-700 text-sm">
-            Không có dữ liệu sản phẩm.
-          </div>
-        ) : (
-          <>
-            {/* Breadcrumb */}
-            <nav className="mb-6 flex flex-wrap items-center gap-2 text-sm text-gray-400">
-          <a href="/react/index.html" className="hover:text-green-600 transition-colors">
-            Trang chủ
-          </a>
-          <ChevronRight className="size-3" />
-          <a
-            href={`/react/index.html?view=category&category=${toQuerySlug(product.category)}`}
-            className="hover:text-green-600 transition-colors"
-          >
-            {product.category}
-          </a>
-          <ChevronRight className="size-3" />
-          <span className="text-gray-500">{product.name}</span>
-            </nav>
-
-            <div className="grid gap-10 lg:grid-cols-[1.1fr_1fr]">
-              {/* Product Image Section */}
-              <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
-                <div className="group relative overflow-hidden rounded-2xl bg-gray-50">
-                  <img
-                    id="pdp-product-image"
-                    ref={imageRef}
-                    src={product.image}
-                    alt={product.name}
-                    className="h-[420px] w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  />
-                </div>
-                <p className="mt-4 text-sm text-gray-500">* Hình ảnh mang tính minh hoạ</p>
-              </div>
-
-              {/* Product Information Section */}
-              <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h1 className="text-3xl font-bold text-gray-900">{product.name}</h1>
-                    <p className="mt-2 text-sm text-gray-500">Sản phẩm tươi sạch dành cho doanh nghiệp B2B</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={openWishlistModal}
-                    className={`group relative flex h-10 w-10 items-center justify-center rounded-full border transition-all ${
-                      isFavorite
-                        ? 'border-rose-200 bg-rose-50 text-rose-500'
-                        : 'border-gray-200 bg-white text-gray-400 hover:text-rose-500'
-                    }`}
-                    title="Thêm vào danh sách yêu thích"
-                    aria-label="Thêm vào danh sách yêu thích"
-                  >
-                    <Heart className={`size-5 ${isFavorite ? 'fill-rose-400' : ''}`} />
-                  </button>
-                </div>
-
-                <dl className="mt-6 grid gap-3 text-sm">
-              <div className="flex justify-between border-b border-dashed border-gray-200 pb-2">
-                <dt className="text-gray-500">Mã SKU</dt>
-                <dd className="font-semibold text-gray-800">{product.sku}</dd>
-              </div>
-              <div className="flex justify-between border-b border-dashed border-gray-200 pb-2">
-                <dt className="text-gray-500">Đơn vị tính</dt>
-                <dd className="font-semibold text-gray-800">{product.unit}</dd>
-              </div>
-              <div className="flex justify-between border-b border-dashed border-gray-200 pb-2">
-                <dt className="text-gray-500">Xuất xứ</dt>
-                <dd className="font-semibold text-gray-800">{product.origin}</dd>
-              </div>
-              <div className="flex items-start justify-between gap-4">
-                <dt className="text-gray-500">Ghi chú</dt>
-                <dd className="flex-1 text-right font-semibold text-gray-800">{product.note || 'Không có ghi chú'}</dd>
-              </div>
-            </dl>
-
-            <div className="mt-6 rounded-2xl bg-green-50/60 p-4">
-              <div className="flex items-end gap-3">
-                <span className="text-3xl font-bold text-green-700">
-                  {toCurrencyTextFromNumber(product.price)}
-                </span>
-                <span className="text-sm text-gray-500">/{product.unit}</span>
-              </div>
-              {!isLoggedIn && (
-                <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-gray-500">
-                  <span>Vui lòng đăng nhập/đăng ký để đặt hàng ngay</span>
-                  <a
-                    href="/react/index.html?view=login"
-                    className="rounded-full border border-green-600 px-4 py-1.5 text-sm font-semibold text-green-600 hover:bg-green-600 hover:text-white transition-colors"
-                  >
-                    Đăng nhập
-                  </a>
-                </div>
-              )}
+          {!hasQuery ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800 text-sm">
+              Thiếu thông tin sản phẩm để hiển thị.
+            </div>
+          ) : isLoading ? (
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-blue-800 text-sm">
+              Đang tải dữ liệu sản phẩm...
+            </div>
+          ) : loadError ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800 text-sm">
+              {loadError}
             </div>
           ) : !product ? (
             <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-700 text-sm">
@@ -491,7 +418,7 @@ export function ProductDetailPage() {
                     </div>
                     <button
                       type="button"
-                      onClick={openWishlistModal}
+                      onClick={toggleWishlist}
                       className={`group relative flex h-10 w-10 items-center justify-center rounded-full border transition-all ${
                         isFavorite
                           ? 'border-rose-200 bg-rose-50 text-rose-500'
@@ -613,38 +540,16 @@ export function ProductDetailPage() {
             </>
           )}
         </div>
-
-        {/* Product Description Section */}
-        <section className="mt-10 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-bold text-gray-900">Mô tả sản phẩm</h2>
-          <div className="mt-4 space-y-4 text-sm text-gray-600">
-            <div>
-              <h3 className="font-semibold text-gray-800">Đặc điểm</h3>
-              <p>{product.description.features}</p>
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-800">Công dụng</h3>
-              <p>{product.description.benefits}</p>
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-800">Cách bảo quản</h3>
-              <p>{product.description.storage}</p>
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-800">Thời hạn sử dụng</h3>
-              <p>{product.description.expiry}</p>
-            </div>
-          </div>
-        </section>
-
-          </>
-        )}
-        </div>
       </div>
       <WishlistAddModal
         isOpen={Boolean(wishlistProduct)}
         product={wishlistProduct}
         onClose={() => setWishlistProduct(null)}
+        onAdded={(item: WishlistItem) => {
+          if (!item.sku) return;
+          setWishlistItemId(item.id);
+          setIsFavorite(true);
+        }}
       />
     </>
   );

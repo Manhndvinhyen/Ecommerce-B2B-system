@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ShoppingCart, User, Menu, Search, ChevronRight, Heart } from 'lucide-react';
 import { categoryMenu, getCategoryPageLink } from '../data/categories';
+import { getDefaultWishlistList, hasWishlistAuth } from '../utils/wishlistApi';
 import { useCart } from '../cart/CartProvider';
 
 export function Header() {
@@ -14,6 +15,7 @@ export function Header() {
   const [customerToken, setCustomerToken] = useState('');
   const [branchName, setBranchName] = useState('Chi nhanh 1');
   const reactHomePath = '/react/index.html';
+  const [wishlistDetailHref, setWishlistDetailHref] = useState(`${reactHomePath}?view=wishlist`);
   const registerParams = new URLSearchParams(window.location.search);
   registerParams.set('view', 'register');
   registerParams.delete('category');
@@ -68,6 +70,25 @@ export function Header() {
       setBranchName(storedBranch.trim());
     }
   }, []);
+
+  useEffect(() => {
+    const loadWishlistLink = async () => {
+      if (!hasWishlistAuth()) {
+        setWishlistDetailHref(`${reactHomePath}?view=wishlist`);
+        return;
+      }
+
+      const list = await getDefaultWishlistList();
+      if (!list) {
+        setWishlistDetailHref(`${reactHomePath}?view=wishlist`);
+        return;
+      }
+
+      setWishlistDetailHref(`${reactHomePath}?view=wishlist&listId=${encodeURIComponent(list.id)}`);
+    };
+
+    loadWishlistLink();
+  }, [customerToken]);
 
   const handleLogout = async () => {
     // Clear any application-specific storage keys (freso_*) from both storages.

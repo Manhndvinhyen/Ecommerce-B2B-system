@@ -4,6 +4,7 @@ namespace Tmdt\Registration\Model;
 
 use Magento\Customer\Api\AccountManagementInterface;
 use Magento\Customer\Api\Data\CustomerInterfaceFactory;
+use Magento\Customer\Model\ResourceModel\Customer\CollectionFactory as CustomerCollectionFactory;
 use Magento\Framework\App\Filesystem\DirectoryList;
 use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\DB\Adapter\DuplicateException;
@@ -26,6 +27,7 @@ class RegisterManagement implements RegisterInterface
         private readonly AccountManagementInterface $accountManagement,
         private readonly StoreManagerInterface $storeManager,
         private readonly ResourceConnection $resourceConnection,
+        private readonly CustomerCollectionFactory $customerCollectionFactory,
         private readonly Json $serializer,
         private readonly RestRequest $request,
         private readonly Filesystem $filesystem
@@ -79,6 +81,7 @@ class RegisterManagement implements RegisterInterface
         $customer->setCustomAttribute('tmdt_login_code', $loginCode);
         $customer->setCustomAttribute('tmdt_registration_type', $registrationType);
         $customer->setCustomAttribute('tmdt_unit_nickname', $unitNickname);
+        $customer->setCustomAttribute('is_owner', $this->shouldAssignOwnerFlag() ? 1 : 0);
 
         $createdCustomer = $this->accountManagement->createAccount($customer, $password);
 
@@ -114,6 +117,19 @@ class RegisterManagement implements RegisterInterface
             'message' => (string) __('Đăng ký đã được lưu vào Magento.'),
             'customer_id' => (int) $createdCustomer->getId(),
         ];
+    }
+
+    private function shouldAssignOwnerFlag(): bool
+    {
+        try {
+            $collection = $this->customerCollectionFactory->create();
+            $collection->addAttributeToSelect('entity_id');
+            $collection->addAttributeToFilter('is_owner', 1);
+            $collection->setPageSize(1);
+            return $collection->getSize() === 0;
+        } catch (\Throwable $exception) {
+            return false;
+        }
     }
 
     private function validatePayload(array $payload): void

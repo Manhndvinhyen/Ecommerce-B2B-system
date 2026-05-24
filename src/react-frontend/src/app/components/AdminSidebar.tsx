@@ -30,7 +30,16 @@ export const adminMenuItems = [
   },
 ];
 
-const SidebarItem = ({ icon: Icon, label, isActive, hasSubmenu, isOpen, onClick, subItems }) => {
+const SidebarItem = ({
+  icon: Icon,
+  label,
+  isActive,
+  hasSubmenu,
+  isOpen,
+  onClick,
+  subItems,
+  onSubItemClick,
+}) => {
   return (
     <div className="mb-3">
       <button
@@ -65,12 +74,14 @@ const SidebarItem = ({ icon: Icon, label, isActive, hasSubmenu, isOpen, onClick,
       {hasSubmenu && isOpen && (
         <div className="mt-2 mb-4 ml-12 space-y-3.5 py-1">
           {subItems.map((sub, idx) => (
-            <div 
-              key={idx} 
-              className="text-[14px] font-medium text-gray-500 hover:text-[#00b14f] cursor-pointer transition-colors whitespace-nowrap"
+            <button
+              type="button"
+              key={idx}
+              onClick={() => onSubItemClick?.(sub)}
+              className="text-[14px] font-medium text-gray-500 hover:text-[#00b14f] transition-colors whitespace-nowrap text-left"
             >
               {sub}
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -83,7 +94,8 @@ export function AdminSidebar(props){
     activeTab: propActiveTab,
     setActiveTab: propSetActiveTab,
     openMenus: propOpenMenus,
-    setOpenMenus: propSetOpenMenus
+    setOpenMenus: propSetOpenMenus,
+    menuItems: propMenuItems,
   } = props || {};
 
   // internal state used when parent doesn't control the component
@@ -107,7 +119,7 @@ export function AdminSidebar(props){
     setOpenMenus(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const menuItems = adminMenuItems;
+  const menuItems = propMenuItems ?? adminMenuItems;
 
   return (
     <div style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }} className="w-full">
@@ -136,6 +148,10 @@ export function AdminSidebar(props){
                 } else {
                   setActiveTab(item.label);
                 }
+              }}
+              onSubItemClick={(subLabel) => {
+                setActiveTab(subLabel);
+                setOpenMenus((prev) => ({ ...prev, [item.id]: true }));
               }}
             />
           ))}

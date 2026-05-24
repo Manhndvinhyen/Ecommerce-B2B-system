@@ -257,6 +257,16 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
     return new URLSearchParams(window.location.search).get('q')?.trim() ?? '';
   }, []);
   const isSearchMode = searchQuery.length > 0;
+  const categoryLookupDependency = useMemo(() => {
+    if (isSearchMode) {
+      return 'search-mode';
+    }
+
+    return Object.entries(categoryIdLookup)
+      .map(([key, value]) => `${key}:${value}`)
+      .sort()
+      .join('|');
+  }, [categoryIdLookup, isSearchMode]);
 
   const getCategoryDisplayLabel = (product: GraphQlProductItem) => {
     const inferred = inferCategoryFromSku(product.sku);
@@ -400,6 +410,10 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
   }, []);
 
   useEffect(() => {
+    if (isSearchMode) {
+      return;
+    }
+
     const triggerRefresh = () => {
       setRefreshTick((tick) => tick + 1);
     };
@@ -419,7 +433,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
       window.removeEventListener('focus', triggerRefresh);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, []);
+  }, [isSearchMode]);
 
   useEffect(() => {
     const requestId = ++latestRequestRef.current;
@@ -481,8 +495,10 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
             method: 'POST',
             signal: controller.signal,
             cache: 'no-store',
+            credentials: 'omit',
             headers: {
-              'Content-Type': 'application/json'
+              'Content-Type': 'application/json',
+              Accept: 'application/json'
             },
             body: JSON.stringify({
               query,
@@ -724,7 +740,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
     return () => {
       controller.abort();
     };
-  }, [category.name, category.subcategories, activeSubcategory, categoryIdLookup, refreshTick, isSearchMode, searchQuery]);
+  }, [category.name, category.subcategories, activeSubcategory, categoryLookupDependency, refreshTick, isSearchMode, searchQuery]);
 
   const productsToShow = products.slice(0, visibleCount);
   const canLoadMore = visibleCount < products.length;

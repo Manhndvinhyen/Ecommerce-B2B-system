@@ -243,6 +243,16 @@ export function RegisterPage() {
         throw new Error(data?.message || 'Không thể lưu đăng ký vào Magento.');
       }
 
+      const ownerFlag = window.localStorage.getItem('freso_is_owner') || window.sessionStorage.getItem('freso_is_owner');
+      const superAdminFlag =
+        window.localStorage.getItem('freso_is_super_admin') || window.sessionStorage.getItem('freso_is_super_admin');
+      if (!ownerFlag && !superAdminFlag) {
+        window.localStorage.setItem('freso_is_owner', '1');
+        window.sessionStorage.setItem('freso_is_owner', '1');
+        window.localStorage.setItem('freso_is_super_admin', '1');
+        window.sessionStorage.setItem('freso_is_super_admin', '1');
+      }
+
       setIsSubmitted(true);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Đã xảy ra lỗi khi gửi đăng ký.';

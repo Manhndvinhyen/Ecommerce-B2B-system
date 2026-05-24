@@ -55,62 +55,116 @@ export const ProfileContent = () => {
     const token = getAuthToken();
     if (!token) return;
 
-    // Nếu endpoint này là API trả về mảng thông tin giống trang trước,
-    // hãy đổi endpoint thành `${window.location.origin}/rest/V1/tmdt-registration/profile` để đồng bộ dữ liệu.
-    fetch(`${window.location.origin}/rest/V1/customers/me`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (!data || typeof data !== 'object') return;
-
-        // Xử lý bóc tách mảng nếu API trả về mảng dữ liệu
-        let info: any = data;
-        if (Array.isArray(data)) {
-          if (data[0] === true && data[1] && typeof data[1] === 'object') {
-            info = data[1];
-          }
-        }
-
-        const email = typeof info.email === 'string' ? info.email : '';
-        const firstname = typeof info.firstname === 'string' ? info.firstname : '';
-        const lastname = typeof info.lastname === 'string' ? info.lastname : '';
-        const name = [firstname, lastname].filter(Boolean).join(' ').trim() || typeof info.full_name === 'string' ? info.full_name : '';
-        
-        // Lấy phone_number từ API trả về
-        const phone = typeof info.phone_number === 'string' ? info.phone_number : (typeof info.phone === 'string' ? info.phone : '');
-
-        const customAttributes = Array.isArray(info.custom_attributes) ? info.custom_attributes : [];
-        const unitNickname = customAttributes.find((attr) => attr?.attribute_code === 'tmdt_unit_nickname')?.value || info.unit_nickname;
-        const branch = typeof unitNickname === 'string' && unitNickname.trim() ? unitNickname.trim() : '';
-
-        setProfile((prev) => ({
-          ...prev,
-          name: name || prev.name,
-          email: email || prev.email,
-          branch: branch || prev.branch,
-          phone: phone || prev.phone,
-        }));
-        setForm((prev) => ({
-          ...prev,
-          name: name || prev.name,
-          email: email || prev.email,
-          branch: branch || prev.branch,
-          phone: phone || prev.phone,
-        }));
-
-        writeStorageValue('freso_customer_email', email);
-        writeStorageValue('freso_customer_name', name);
-        writeStorageValue('freso_branch_name', branch);
-        writeStorageValue('freso_customer_phone', phone);
-      })
-      .catch((err) => {
-        console.error('[ProfileContent] load profile failed', err);
+    const loadCustomerMe = async () => {
+      const res = await fetch(`${window.location.origin}/rest/V1/customers/me`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
       });
+
+      const data = await res.json().catch(() => null);
+      if (!data || typeof data !== 'object') return;
+
+      // Xử lý bóc tách mảng nếu API trả về mảng dữ liệu
+      let info: any = data;
+      if (Array.isArray(data)) {
+        if (data[0] === true && data[1] && typeof data[1] === 'object') {
+          info = data[1];
+        }
+      }
+
+      const email = typeof info.email === 'string' ? info.email : '';
+      const firstname = typeof info.firstname === 'string' ? info.firstname : '';
+      const lastname = typeof info.lastname === 'string' ? info.lastname : '';
+      const name = [firstname, lastname].filter(Boolean).join(' ').trim() || typeof info.full_name === 'string' ? info.full_name : '';
+
+      const phone = typeof info.phone_number === 'string' ? info.phone_number : typeof info.phone === 'string' ? info.phone : '';
+
+      const customAttributes = Array.isArray(info.custom_attributes) ? info.custom_attributes : [];
+      const unitNickname = customAttributes.find((attr) => attr?.attribute_code === 'tmdt_unit_nickname')?.value || info.unit_nickname;
+      const branch = typeof unitNickname === 'string' && unitNickname.trim() ? unitNickname.trim() : '';
+
+      setProfile((prev) => ({
+        ...prev,
+        name: name || prev.name,
+        email: email || prev.email,
+        branch: branch || prev.branch,
+        phone: phone || prev.phone,
+      }));
+      setForm((prev) => ({
+        ...prev,
+        name: name || prev.name,
+        email: email || prev.email,
+        branch: branch || prev.branch,
+        phone: phone || prev.phone,
+      }));
+
+      writeStorageValue('freso_customer_email', email);
+      writeStorageValue('freso_customer_name', name);
+      writeStorageValue('freso_branch_name', branch);
+      writeStorageValue('freso_customer_phone', phone);
+    };
+
+    const loadRegistrationProfile = async () => {
+      const res = await fetch(`${window.location.origin}/rest/V1/tmdt-registration/profile`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (res.status === 401) {
+        window.localStorage.removeItem('freso_customer_token');
+        window.sessionStorage.removeItem('freso_customer_token');
+        return;
+      }
+
+      const bodyText = await res.text().catch(() => '');
+      let payload: Record<string, unknown> | unknown[] = {};
+      if (bodyText.trim()) {
+        try {
+          payload = JSON.parse(bodyText) as Record<string, unknown> | unknown[];
+        } catch {
+          payload = {};
+        }
+      }
+
+      let info: Record<string, unknown> = {};
+      if (Array.isArray(payload)) {
+        if (payload[0] === true && payload[1] && typeof payload[1] === 'object') {
+          info = payload[1] as Record<string, unknown>;
+        }
+      } else if (payload && typeof payload === 'object') {
+        info = (payload as { data?: Record<string, unknown> }).data || (payload as Record<string, unknown>);
+      }
+
+      const phone =
+        typeof (info as { phone_number?: unknown }).phone_number === 'string'
+          ? String((info as { phone_number?: unknown }).phone_number)
+          : typeof (info as { phone?: unknown }).phone === 'string'
+            ? String((info as { phone?: unknown }).phone)
+            : '';
+
+      if (!phone.trim()) return;
+
+      setProfile((prev) => ({
+        ...prev,
+        phone: phone || prev.phone,
+      }));
+      setForm((prev) => ({
+        ...prev,
+        phone: phone || prev.phone,
+      }));
+
+      writeStorageValue('freso_customer_phone', phone);
+    };
+
+    Promise.allSettled([loadCustomerMe(), loadRegistrationProfile()]).catch((err) => {
+      console.error('[ProfileContent] load profile failed', err);
+    });
   }, []);
 
   function startEdit() {

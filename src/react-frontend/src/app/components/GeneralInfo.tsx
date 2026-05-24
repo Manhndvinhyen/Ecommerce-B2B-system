@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Image as ImageIcon, FileBadge } from 'lucide-react';
 
 const readStorageValue = (key: string) =>
@@ -99,6 +99,7 @@ export const GeneralInfo = () => {
   }));
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const loadInFlightRef = useRef(false);
 
   const loadCustomerMe = async (token: string): Promise<GeneralInfoData> => {
     const res = await fetch(`${window.location.origin}/rest/V1/customers/me`, {
@@ -145,15 +146,18 @@ export const GeneralInfo = () => {
   };
 
   const loadProfile = async () => {
+    if (loadInFlightRef.current) return;
+    loadInFlightRef.current = true;
     const token = readStorageValue('freso_customer_token');
     if (!token) {
       setIsLoading(false);
       setErrorMessage('Bạn cần đăng nhập để xem thông tin doanh nghiệp.');
+      loadInFlightRef.current = false;
       return;
     }
 
     const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), 12000);
+    const timeoutId = window.setTimeout(() => controller.abort(), 30000);
 
     setIsLoading(true);
     setErrorMessage('');
@@ -239,24 +243,27 @@ export const GeneralInfo = () => {
       writeStorageValue('freso_license_url', nextData.licenseUrl || '');
     } catch (err) {
       console.error('[GeneralInfo] load profile failed', err);
-      if (err instanceof DOMException && err.name === 'AbortError') {
+      const isAbort = err instanceof DOMException && err.name === 'AbortError';
+      if (isAbort) {
         setErrorMessage('Không thể kết nối tới máy chủ. Vui lòng thử lại.');
-      } else {
-        try {
-          const fallbackData = await loadCustomerMe(token);
-          setData(fallbackData);
-          setErrorMessage('');
+      }
 
-          writeStorageValue('freso_branch_name', fallbackData.displayName);
-          writeStorageValue('freso_login_code', fallbackData.loginCode);
-          writeStorageValue('freso_tax_code', fallbackData.taxCode);
-          writeStorageValue('freso_registration_type', fallbackData.registrationType);
-          writeStorageValue('freso_business_name', fallbackData.businessName);
-          writeStorageValue('freso_business_address', fallbackData.address);
-          writeStorageValue('freso_status_label', fallbackData.statusLabel);
-          writeStorageValue('freso_license_name', fallbackData.licenseName);
-          writeStorageValue('freso_license_url', fallbackData.licenseUrl || '');
-        } catch (fallbackErr) {
+      try {
+        const fallbackData = await loadCustomerMe(token);
+        setData(fallbackData);
+        setErrorMessage('');
+
+        writeStorageValue('freso_branch_name', fallbackData.displayName);
+        writeStorageValue('freso_login_code', fallbackData.loginCode);
+        writeStorageValue('freso_tax_code', fallbackData.taxCode);
+        writeStorageValue('freso_registration_type', fallbackData.registrationType);
+        writeStorageValue('freso_business_name', fallbackData.businessName);
+        writeStorageValue('freso_business_address', fallbackData.address);
+        writeStorageValue('freso_status_label', fallbackData.statusLabel);
+        writeStorageValue('freso_license_name', fallbackData.licenseName);
+        writeStorageValue('freso_license_url', fallbackData.licenseUrl || '');
+      } catch (fallbackErr) {
+        if (!isAbort) {
           setErrorMessage(
             fallbackErr instanceof Error
               ? fallbackErr.message
@@ -269,6 +276,7 @@ export const GeneralInfo = () => {
     } finally {
       window.clearTimeout(timeoutId);
       setIsLoading(false);
+      loadInFlightRef.current = false;
     }
   };
 
@@ -344,12 +352,6 @@ export const GeneralInfo = () => {
           <div className="col-span-2">
             <p className="text-[12.5px] text-black mb-0.5 font-light tracking-tight">Địa chỉ</p>
             <p className="text-[15px] font-bold text-gray-800 tracking-tight leading-snug">{data.address}</p>
-          </div>
-          <div>
-            <p className="text-[12.5px] text-black mb-1.5 font-light tracking-tight">Trạng thái</p>
-            <span className={`inline-flex items-center px-3 py-1 text-[12.5px] font-bold rounded-md tracking-tight ${statusTone}`}>
-              {isLoading ? 'Đang tải...' : data.statusLabel}
-            </span>
           </div>
         </div>
       </section>

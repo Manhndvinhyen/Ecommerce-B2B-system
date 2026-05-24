@@ -7,4 +7,5 @@
     <preference for="Tmdt\Registration\Api\ForgotPasswordResetInterface" type="Tmdt\Registration\Model\ForgotPasswordResetManagement" />
     <preference for="Tmdt\Registration\Api\ProfileUpdateInterface" type="Tmdt\Registration\Model\ProfileUpdateManagement" />
     <preference for="Tmdt\Registration\Api\ProfileViewInterface" type="Tmdt\Registration\Model\ProfileViewManagement" />
+    <preference for="Tmdt\Registration\Api\AddUsersInterface" type="Tmdt\Registration\Model\AddUsersManagement" />
 </config>

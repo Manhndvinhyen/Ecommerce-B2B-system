@@ -114,6 +114,7 @@ const startCustomerSession = async (token: string, storage: Storage): Promise<st
 
   const response = await fetch(`${window.location.origin}/tmdt/registration/session`, {
     method: 'POST',
+    keepalive: true,
     headers: {
       'Content-Type': 'application/json',
     },
@@ -257,8 +258,8 @@ export function LoginPage() {
           syncAuthStorage('freso_branch_name', data.branch_name.trim());
         }
 
-        const sessionRedirect = await startCustomerSession(data.token, storage);
-        window.location.href = sessionRedirect || getPostLoginRedirect(data.redirect_url);
+        void startCustomerSession(data.token, storage).catch(() => null);
+        window.location.href = getPostLoginRedirect(data.redirect_url);
       })
       .catch((error: unknown) => {
         setSubmitError(error instanceof Error ? error.message : 'Không thể đăng nhập vào hệ thống.');
@@ -317,8 +318,8 @@ export function LoginPage() {
           syncAuthStorage('freso_branch_name', data.branch_name.trim());
         }
 
-        const sessionRedirect = await startCustomerSession(data.token, storage);
-        window.location.href = sessionRedirect || getPostLoginRedirect(data.redirect_url);
+        void startCustomerSession(data.token, storage).catch(() => null);
+        window.location.href = getPostLoginRedirect(data.redirect_url);
       })
       .catch((error: unknown) => {
         setSubmitError(error instanceof Error ? error.message : 'Không thể đăng nhập bằng Google.');

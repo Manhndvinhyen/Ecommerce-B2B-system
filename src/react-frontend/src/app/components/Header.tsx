@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ShoppingCart, User, Menu, Search, ChevronRight, Heart } from 'lucide-react';
 import { categoryMenu, getCategoryPageLink } from '../data/categories';
 import { adminMenuItems } from './AdminSidebar';
@@ -14,6 +14,8 @@ export function Header() {
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerToken, setCustomerToken] = useState('');
   const [branchName, setBranchName] = useState('Chi nhanh 1');
+  const [searchTerm, setSearchTerm] = useState('');
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
   const reactHomePath = '/react/index.html';
   const registerParams = new URLSearchParams(window.location.search);
   registerParams.set('view', 'register');
@@ -53,6 +55,29 @@ export function Header() {
     if (window.top) {
       window.top.location.href = nextUrl;
     }
+  };
+
+  const handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const keyword = searchTerm.trim();
+    if (!keyword) {
+      console.info('[FresoSearch][Header] submit ignored because keyword is empty');
+      return;
+    }
+
+    const params = new URLSearchParams({
+      view: 'search',
+      q: keyword
+    });
+
+    const nextUrl = `${reactHomePath}?${params.toString()}`;
+    console.info('[FresoSearch][Header] submit accepted, navigating to search page', {
+      keyword,
+      nextUrl
+    });
+
+    window.location.href = nextUrl;
   };
 
   useEffect(() => {
@@ -178,6 +203,26 @@ export function Header() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isUserMenuOpen) {
+      return;
+    }
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (target && userMenuRef.current?.contains(target)) {
+        return;
+      }
+
+      setIsUserMenuOpen(false);
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isUserMenuOpen]);
+
   if (!isLoggedIn) {
     return (
   <header className="sticky top-0 z-50 bg-white shadow-sm" onClickCapture={handleTopLevelNavigation}>
@@ -271,16 +316,18 @@ export function Header() {
               </div>
 
               {/* Search Bar */}
-              <div className="hidden lg:flex items-center flex-1 max-w-xl mx-8">
+              <form onSubmit={handleSearchSubmit} className="hidden lg:flex items-center flex-1 max-w-xl mx-8">
                 <div className="relative w-full">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 size-5" />
                   <input
                     type="text"
                     placeholder="Tìm kiếm sản phẩm..."
+                    value={searchTerm}
+                    onChange={(event) => setSearchTerm(event.target.value)}
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:border-green-500"
                   />
                 </div>
-              </div>
+              </form>
 
               {/* Actions */}
               <div className="flex items-center gap-3">
@@ -371,11 +418,7 @@ export function Header() {
                   <span>{branchName}</span>
                 </div>
                 <span className="text-gray-300">|</span>
-                <div
-                  className="relative"
-                  onMouseEnter={() => setIsUserMenuOpen(true)}
-                  onMouseLeave={() => setIsUserMenuOpen(false)}
-                >
+                <div className="relative" ref={userMenuRef}>
                   <button
                     type="button"
                     onClick={() => setIsUserMenuOpen((prev) => !prev)}
@@ -490,16 +533,18 @@ export function Header() {
             </div>
 
             {/* Search Bar */}
-            <div className="hidden lg:flex items-center flex-1 max-w-xl mx-8">
+            <form onSubmit={handleSearchSubmit} className="hidden lg:flex items-center flex-1 max-w-xl mx-8">
               <div className="relative w-full">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 size-5" />
                 <input
                   type="text"
                   placeholder="Tìm kiếm sản phẩm..."
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:border-green-500"
                 />
               </div>
-            </div>
+            </form>
 
             {/* Actions */}
             <div className="flex items-center gap-4">

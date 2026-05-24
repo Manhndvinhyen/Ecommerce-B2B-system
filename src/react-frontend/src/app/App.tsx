@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Header } from './components/Header';
 import { ProductsPage } from './components/ProductsPage';
 import { FeaturedSuppliers } from './components/FeaturedSuppliers';
@@ -27,6 +28,7 @@ function AppContent() {
   const category = getCategoryNameFromQuery(params.get('category'));
   const subcategory = getSubcategoryNameFromQuery(category, params.get('subcategory'));
   const isCategoryView = view === 'category';
+  const isSearchView = view === 'search';
   const isRegisterView = view === 'register';
   const isCartView = view === 'cart';
   const isLoginView = view === 'login';
@@ -38,6 +40,17 @@ function AppContent() {
     window.location.pathname.endsWith('/react/checkout') ||
     window.location.pathname.endsWith('/checkout');
   const isDashboardView = view === 'dashboard';
+
+  useEffect(() => {
+    console.info('[FresoSearch][App] route detected', {
+      view,
+      q: params.get('q'),
+      category: params.get('category'),
+      subcategory: params.get('subcategory'),
+      pathname: window.location.pathname,
+      search: window.location.search
+    });
+  }, [view, category, subcategory]);
 
   if (isDashboardView) {
     return <UserDashboardPage />;
@@ -102,7 +115,7 @@ function AppContent() {
     <div className="min-h-screen bg-white">
       <Header />
       <main>
-        {isCategoryView ? (
+        {isCategoryView || isSearchView ? (
           <ProductCategoryPage categoryName={category} initialSubcategory={subcategory} />
         ) : (
           <>

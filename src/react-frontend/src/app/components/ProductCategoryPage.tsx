@@ -260,6 +260,13 @@ const inferUnitByCategory = (categoryName: string) => {
   return 'kg';
 };
 
+const pickCategoryFromGraphQl = (product: GraphQlProductItem) => {
+  const ignoredSlugs = new Set(['root-catalog', 'default-category', 'products']);
+  return (product.categories ?? [])
+    .map((item) => item.name)
+    .find((name) => name && !ignoredSlugs.has(toQuerySlug(name)));
+};
+
 const fallbackImageByCategory: Record<string, string> = {
   'Rau củ quả': 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&h=500&fit=crop',
   'Trái cây': 'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=500&h=500&fit=crop',
@@ -296,6 +303,10 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
   const latestRequestRef = useRef(0);
   const [wishlistItemsMap, setWishlistItemsMap] = useState<Record<string, { id: string; listId: string }>>({});
   const [wishlistProduct, setWishlistProduct] = useState<WishlistModalProduct | null>(null);
+  const searchQuery = useMemo(() => {
+    return new URLSearchParams(window.location.search).get('q')?.trim() ?? '';
+  }, []);
+  const isSearchMode = searchQuery.length > 0;
 
   const getCategoryDisplayLabel = (product: GraphQlProductItem) => {
     const inferred = inferCategoryFromSku(product.sku);
@@ -402,6 +413,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
     } else {
       params.set('subcategory', toQuerySlug(subcategory));
     }
+    params.delete('q');
 
     const nextUrl = `${window.location.pathname}?${params.toString()}${window.location.hash}`;
     window.history.pushState({}, '', nextUrl);
@@ -496,6 +508,159 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
     const controller = new AbortController();
 
     const fetchProducts = async () => {
+      if (isSearchMode) {
+        const cacheKey = `search|${toQuerySlug(searchQuery)}`;
+        const cachedProducts = productsResponseCache.get(cacheKey);
+        const isCacheFresh =
+          cachedProducts && Date.now() - cachedProducts.fetchedAt < PRODUCT_CACHE_TTL_MS;
+
+        if (cachedProducts && isCacheFresh) {
+          console.info('[FresoSearch][ProductCategoryPage] using cached search results', {
+            searchQuery,
+            count: cachedProducts.items.length
+          });
+          setProducts(cachedProducts.items);
+          setLoadError('');
+          setIsLoading(false);
+          return;
+        }
+
+        console.info('[FresoSearch][ProductCategoryPage] starting search request', {
+          searchQuery,
+          requestId
+        });
+        setIsLoading(true);
+        setLoadError('');
+
+        const query = `
+          query SearchProducts($search: String!) {
+            products(search: $search, pageSize: 100) {
+              items {
+                id
+                sku
+                name
+                categories {
+                  id
+                  name
+                }
+                small_image {
+                  url
+                }
+                price_range {
+                  minimum_price {
+                    final_price {
+                      value
+                    }
+                  }
+                }
+              }
+            }
+          }
+        `;
+
+        try {
+          const response = await fetch('/graphql', {
+            method: 'POST',
+            signal: controller.signal,
+            cache: 'no-store',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              query,
+              variables: {
+                search: searchQuery
+              }
+            })
+          });
+
+          console.info('[FresoSearch][ProductCategoryPage] GraphQL response received', {
+            searchQuery,
+            requestId,
+            status: response.status,
+            ok: response.ok
+          });
+
+          if (!response.ok) {
+            throw new Error(`GraphQL request failed: ${response.status}`);
+          }
+
+          const json = await response.json();
+          if (json?.errors?.length) {
+            console.error('[FresoSearch][ProductCategoryPage] GraphQL returned errors', json.errors);
+            throw new Error(json.errors[0]?.message ?? 'GraphQL error');
+          }
+
+          const items: GraphQlProductItem[] = json?.data?.products?.items ?? [];
+          console.info('[FresoSearch][ProductCategoryPage] raw products received', {
+            searchQuery,
+            count: items.length,
+            skus: items.map((item) => item.sku)
+          });
+          const mappedProducts = items.map((item) => {
+            const imageUrl = item.small_image?.url ?? '';
+            const isPlaceholderImage = imageUrl.includes('/placeholder/');
+            const inferred = inferCategoryFromSku(item.sku);
+            const productCategory = inferred?.category ?? pickCategoryFromGraphQl(item) ?? category.name;
+            const fallbackImage =
+              fallbackImageByCategory[productCategory] ??
+              fallbackImageByCategory[category.name] ??
+              'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop';
+
+            return {
+              id: item.id,
+              sku: item.sku,
+              name: item.name,
+              price: formatPrice(item.price_range?.minimum_price?.final_price?.value),
+              unit: inferUnitByCategory(productCategory),
+              image: !imageUrl || isPlaceholderImage ? fallbackImage : imageUrl,
+              categoryLabel: inferred?.subcategory ?? pickCategoryFromGraphQl(item) ?? productCategory
+            };
+          });
+
+          if (latestRequestRef.current !== requestId) {
+            console.info('[FresoSearch][ProductCategoryPage] skipped stale search response', {
+              searchQuery,
+              requestId,
+              latestRequestId: latestRequestRef.current
+            });
+            return;
+          }
+
+          productsResponseCache.set(cacheKey, {
+            items: mappedProducts,
+            fetchedAt: Date.now()
+          });
+          setProducts(mappedProducts);
+          console.info('[FresoSearch][ProductCategoryPage] search products rendered', {
+            searchQuery,
+            count: mappedProducts.length
+          });
+        } catch (error) {
+          if (controller.signal.aborted || latestRequestRef.current !== requestId) {
+            console.info('[FresoSearch][ProductCategoryPage] search request aborted or stale', {
+              searchQuery,
+              requestId
+            });
+            return;
+          }
+
+          setProducts([]);
+          setLoadError('Không tải được dữ liệu tìm kiếm từ database.');
+          console.error('[FresoSearch][ProductCategoryPage] search request failed', error);
+        } finally {
+          if (latestRequestRef.current === requestId) {
+            setIsLoading(false);
+            console.info('[FresoSearch][ProductCategoryPage] search request finished', {
+              searchQuery,
+              requestId
+            });
+          }
+        }
+
+        return;
+      }
+
       const parentCategoryId = categoryIdLookup[toQuerySlug(category.name)];
       const subcategoryIds = category.subcategories
         .map((subcategory) => categoryIdLookup[toQuerySlug(subcategory)])
@@ -647,7 +812,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
     return () => {
       controller.abort();
     };
-  }, [category.name, category.subcategories, activeSubcategory, categoryIdLookup, refreshTick]);
+  }, [category.name, category.subcategories, activeSubcategory, categoryIdLookup, refreshTick, isSearchMode, searchQuery]);
 
   const productsToShow = products.slice(0, visibleCount);
   const canLoadMore = visibleCount < products.length;
@@ -695,7 +860,9 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
         </nav>
 
         <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm mb-6">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4">Các loại {category.name}</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4">
+            {isSearchMode ? `Kết quả tìm kiếm cho "${searchQuery}"` : `Các loại ${category.name}`}
+          </h1>
 
           <div className="flex flex-wrap gap-2">
             {['Tất cả', ...category.subcategories].map((subcategory) => {
@@ -728,7 +895,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
           </div>
         ) : products.length === 0 ? (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800 text-sm">
-            Chưa có sản phẩm trong danh mục này.
+            {isSearchMode ? 'Không tìm thấy sản phẩm phù hợp.' : 'Chưa có sản phẩm trong danh mục này.'}
           </div>
         ) : (
           <>

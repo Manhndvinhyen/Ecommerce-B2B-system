@@ -101,6 +101,12 @@ const defaultFormData: LoginFormData = {
   rememberMe: false,
 };
 
+const syncAuthStorage = (key: string, value: string) => {
+  if (!value) return;
+  window.localStorage.setItem(key, value);
+  window.sessionStorage.setItem(key, value);
+};
+
 const startCustomerSession = async (token: string, storage: Storage): Promise<string | null> => {
   if (!token) {
     return null;
@@ -108,6 +114,7 @@ const startCustomerSession = async (token: string, storage: Storage): Promise<st
 
   const response = await fetch(`${window.location.origin}/tmdt/registration/session`, {
     method: 'POST',
+    keepalive: true,
     headers: {
       'Content-Type': 'application/json',
     },
@@ -408,6 +415,20 @@ export function LoginPage() {
 
   const sessionRedirect = await startCustomerSession(data.token, primaryStorage);
         window.location.href = sessionRedirect || getPostLoginRedirect(data.redirect_url);
+        const storage = formData.rememberMe ? window.localStorage : window.sessionStorage;
+        syncAuthStorage('freso_customer_token', data.token);
+        syncAuthStorage('freso_customer_email', data.email || '');
+
+        if (data.full_name?.trim()) {
+          syncAuthStorage('freso_customer_name', data.full_name.trim());
+        }
+
+        if (data.branch_name?.trim()) {
+          syncAuthStorage('freso_branch_name', data.branch_name.trim());
+        }
+
+        void startCustomerSession(data.token, storage).catch(() => null);
+        window.location.href = getPostLoginRedirect(data.redirect_url);
       })
       .catch((error: unknown) => {
         setSubmitError(error instanceof Error ? error.message : 'Không thể đăng nhập bằng Google.');

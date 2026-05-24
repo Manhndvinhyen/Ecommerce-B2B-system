@@ -1,13 +1,32 @@
 import React, { useState } from 'react';
-import { AdminSidebar } from './AdminSidebar';
+import { AdminSidebar, adminMenuItems } from './AdminSidebar';
 import { ProfileContent } from './ProfileContent';
+import { GeneralInfo } from './GeneralInfo';
 import { Header } from './Header';
 import { AuthPageFooter } from './auth/AuthPageFooter';
 import { ChatbotWidget } from './ChatbotWidget';
 
 export function UserDashboardPage() {
-  const [activeTab, setActiveTab] = useState('Tài khoản của tôi');
-  const [openMenus, setOpenMenus] = useState({ 'nhan-vien': false, 'bao-cao': false });
+  const params = new URLSearchParams(window.location.search);
+  const tabFromQuery = params.get('tab');
+  const tabLabels = new Set([
+    ...adminMenuItems.map((item) => item.label),
+    ...adminMenuItems.flatMap((item) => item.subItems ?? []),
+  ]);
+  const initialTab = tabFromQuery && tabLabels.has(tabFromQuery) ? tabFromQuery : 'Tài khoản của tôi';
+  const [activeTab, setActiveTab] = useState(initialTab);
+  const [openMenus, setOpenMenus] = useState(() => {
+    const defaults: Record<string, boolean> = { 'nhan-vien': false, 'bao-cao': false };
+    return adminMenuItems.reduce((acc, item) => {
+      if (!item.subItems) {
+        return acc;
+      }
+      if (item.label === initialTab || item.subItems.includes(initialTab)) {
+        acc[item.id] = true;
+      }
+      return acc;
+    }, defaults);
+  });
 
   return (
     <div className="min-h-screen bg-white">
@@ -28,7 +47,8 @@ export function UserDashboardPage() {
           {/* Right content area */}
           <div className="flex-1">
             {activeTab === 'Tài khoản của tôi' && <ProfileContent />}
-            {activeTab !== 'Tài khoản của tôi' && (
+            {activeTab === 'Thông tin chung' && <GeneralInfo />}
+            {activeTab !== 'Tài khoản của tôi' && activeTab !== 'Thông tin chung' && (
               <div className="p-8">Nội dung cho: {activeTab}</div>
             )}
           </div>

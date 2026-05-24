@@ -53,6 +53,16 @@ const emptyFormData: FormDataState = {
   agreeToTerms: false,
 };
 
+const MAX_LICENSE_FILE_SIZE = 5 * 1024 * 1024;
+
+const readFileAsDataUrl = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+    reader.onerror = () => reject(new Error('Không thể đọc file đã chọn.'));
+    reader.readAsDataURL(file);
+  });
+
 export function RegisterPage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [hasDraft, setHasDraft] = useState(false);
@@ -170,7 +180,7 @@ export function RegisterPage() {
     }
   };
 
-  const handleFinalSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleFinalSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!validateStep2()) {
       return;
@@ -179,53 +189,68 @@ export function RegisterPage() {
     setIsSubmitting(true);
     setSubmitError('');
 
-    const payload = {
-      ...formData,
-      files: files.map((file) => ({
-        name: file.name,
-        type: file.type,
-        size: file.size,
-      })),
-    };
+    try {
+      if (files.length === 0) {
+        setValidationErrors((prev) => ({ ...prev, files: 'Vui lòng tải lên giấy phép kinh doanh' }));
+        return;
+      }
 
-    fetch(`${window.location.origin}/rest/V1/tmdt-registration/register`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ payload }),
-    })
-      .then(async (response) => {
-        const bodyText = await response.text().catch(() => '');
-        let data: { success?: boolean; message?: string } | null = null;
+      const tooLarge = files.find((file) => file.size > MAX_LICENSE_FILE_SIZE);
+      if (tooLarge) {
+        setValidationErrors((prev) => ({ ...prev, files: 'File vượt quá dung lượng tối đa 5MB' }));
+        return;
+      }
 
-        if (bodyText.trim()) {
-          try {
-            data = JSON.parse(bodyText) as { success?: boolean; message?: string };
-          } catch {
-            data = null;
-          }
-        }
+      const filesPayload = await Promise.all(
+        files.map(async (file) => ({
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          content: await readFileAsDataUrl(file),
+        })),
+      );
 
-        if (!response.ok) {
-          const errorMessage = data?.message?.trim() || bodyText.trim() || 'Không thể lưu đăng ký vào Magento.';
-          throw new Error(errorMessage);
-        }
+      const payload = {
+        ...formData,
+        files: filesPayload,
+      };
 
-        if (data?.success === false) {
-          throw new Error(data?.message || 'Không thể lưu đăng ký vào Magento.');
-        }
-
-        setIsSubmitted(true);
-      })
-      .catch((error: unknown) => {
-        const errorMessage = error instanceof Error ? error.message : 'Đã xảy ra lỗi khi gửi đăng ký.';
-        mapSubmitErrorToField(errorMessage);
-        setSubmitError(errorMessage);
-      })
-      .finally(() => {
-        setIsSubmitting(false);
+      const response = await fetch(`${window.location.origin}/rest/V1/tmdt-registration/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ payload }),
       });
+
+      const bodyText = await response.text().catch(() => '');
+      let data: { success?: boolean; message?: string } | null = null;
+
+      if (bodyText.trim()) {
+        try {
+          data = JSON.parse(bodyText) as { success?: boolean; message?: string };
+        } catch {
+          data = null;
+        }
+      }
+
+      if (!response.ok) {
+        const errorMessage = data?.message?.trim() || bodyText.trim() || 'Không thể lưu đăng ký vào Magento.';
+        throw new Error(errorMessage);
+      }
+
+      if (data?.success === false) {
+        throw new Error(data?.message || 'Không thể lưu đăng ký vào Magento.');
+      }
+
+      setIsSubmitted(true);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Đã xảy ra lỗi khi gửi đăng ký.';
+      mapSubmitErrorToField(errorMessage);
+      setSubmitError(errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const clearForm = () => {
@@ -469,9 +494,19 @@ export function RegisterPage() {
                               <input
                                 type="file"
                                 multiple
+                                accept=".jpg,.jpeg,.png,.pdf,.heif,.heic,application/pdf,image/*"
                                 className="hidden"
                                 onChange={(event) => {
                                   const fileList = event.target.files ? Array.from(event.target.files) : [];
+                                  const tooLarge = fileList.find((file) => file.size > MAX_LICENSE_FILE_SIZE);
+                                  if (tooLarge) {
+                                    setFiles([]);
+                                    setHasDraft(true);
+                                    setValidationErrors((prev) => ({ ...prev, files: 'File vượt quá dung lượng tối đa 5MB' }));
+                                    event.target.value = '';
+                                    return;
+                                  }
+
                                   setFiles(fileList);
                                   setHasDraft(true);
                                   setValidationErrors((prev) => ({ ...prev, files: '' }));

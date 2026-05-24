@@ -13,15 +13,22 @@ export const ProfileContent = () => {
   const readStorageValue = (key: string) =>
     window.localStorage.getItem(key) || window.sessionStorage.getItem(key) || '';
 
+  const writeStorageValue = (key: string, value: string) => {
+    if (!value) return;
+    window.localStorage.setItem(key, value);
+    window.sessionStorage.setItem(key, value);
+  };
+
   const getAuthToken = () => readStorageValue('freso_customer_token');
 
   const getStoredProfile = (): Profile => {
     const name = readStorageValue('freso_customer_name') || 'Khách hàng';
     const email = readStorageValue('freso_customer_email') || 'chua-cap-nhat@freso.vn';
     const branch = readStorageValue('freso_branch_name') || 'Chưa cập nhật';
+    const phone = readStorageValue('freso_customer_phone') || '';
     return {
       name,
-      phone: '',
+      phone,
       email,
       branch,
       role: 'Khách hàng',
@@ -48,6 +55,8 @@ export const ProfileContent = () => {
     const token = getAuthToken();
     if (!token) return;
 
+    // Nếu endpoint này là API trả về mảng thông tin giống trang trước,
+    // hãy đổi endpoint thành `${window.location.origin}/rest/V1/tmdt-registration/profile` để đồng bộ dữ liệu.
     fetch(`${window.location.origin}/rest/V1/customers/me`, {
       method: 'GET',
       headers: {
@@ -58,30 +67,46 @@ export const ProfileContent = () => {
       .then((res) => res.json())
       .then((data) => {
         if (!data || typeof data !== 'object') return;
-        const email = typeof data.email === 'string' ? data.email : '';
-        const firstname = typeof data.firstname === 'string' ? data.firstname : '';
-        const lastname = typeof data.lastname === 'string' ? data.lastname : '';
-        const name = [firstname, lastname].filter(Boolean).join(' ').trim();
+
+        // Xử lý bóc tách mảng nếu API trả về mảng dữ liệu
+        let info: any = data;
+        if (Array.isArray(data)) {
+          if (data[0] === true && data[1] && typeof data[1] === 'object') {
+            info = data[1];
+          }
+        }
+
+        const email = typeof info.email === 'string' ? info.email : '';
+        const firstname = typeof info.firstname === 'string' ? info.firstname : '';
+        const lastname = typeof info.lastname === 'string' ? info.lastname : '';
+        const name = [firstname, lastname].filter(Boolean).join(' ').trim() || typeof info.full_name === 'string' ? info.full_name : '';
+        
+        // Lấy phone_number từ API trả về
+        const phone = typeof info.phone_number === 'string' ? info.phone_number : (typeof info.phone === 'string' ? info.phone : '');
+
+        const customAttributes = Array.isArray(info.custom_attributes) ? info.custom_attributes : [];
+        const unitNickname = customAttributes.find((attr) => attr?.attribute_code === 'tmdt_unit_nickname')?.value || info.unit_nickname;
+        const branch = typeof unitNickname === 'string' && unitNickname.trim() ? unitNickname.trim() : '';
 
         setProfile((prev) => ({
           ...prev,
           name: name || prev.name,
           email: email || prev.email,
+          branch: branch || prev.branch,
+          phone: phone || prev.phone,
         }));
         setForm((prev) => ({
           ...prev,
           name: name || prev.name,
           email: email || prev.email,
+          branch: branch || prev.branch,
+          phone: phone || prev.phone,
         }));
 
-        if (email) {
-          window.localStorage.setItem('freso_customer_email', email);
-          window.sessionStorage.setItem('freso_customer_email', email);
-        }
-        if (name) {
-          window.localStorage.setItem('freso_customer_name', name);
-          window.sessionStorage.setItem('freso_customer_name', name);
-        }
+        writeStorageValue('freso_customer_email', email);
+        writeStorageValue('freso_customer_name', name);
+        writeStorageValue('freso_branch_name', branch);
+        writeStorageValue('freso_customer_phone', phone);
       })
       .catch((err) => {
         console.error('[ProfileContent] load profile failed', err);
@@ -102,7 +127,7 @@ export const ProfileContent = () => {
     try {
       const token = getAuthToken();
       if (token) {
-        await fetch(`${window.location.origin}/rest/V1/tmdt-registration/profile`, {
+        const response = await fetch(`${window.location.origin}/rest/V1/tmdt-registration/profile`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -117,21 +142,36 @@ export const ProfileContent = () => {
             },
           }),
         });
+
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          const message = payload?.message || 'Lỗi khi cập nhật thông tin';
+          throw new Error(message);
+        }
       }
-      setProfile(form);
-      if (form.email) {
-        window.localStorage.setItem('freso_customer_email', form.email);
-        window.sessionStorage.setItem('freso_customer_email', form.email);
+      const nextProfile = {
+        ...form,
+        name: form.name.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim(),
+        branch: form.branch?.trim() || form.branch,
+      };
+      setProfile(nextProfile);
+      writeStorageValue('freso_customer_email', nextProfile.email || '');
+      writeStorageValue('freso_customer_name', nextProfile.name || '');
+      writeStorageValue('freso_branch_name', nextProfile.branch || '');
+      writeStorageValue('freso_customer_phone', nextProfile.phone || '');
+      try {
+        window.localStorage.setItem('freso_last_profile_update', String(Date.now()));
+      } catch (_err) {
+        // ignore
       }
-      if (form.name) {
-        window.localStorage.setItem('freso_customer_name', form.name);
-        window.sessionStorage.setItem('freso_customer_name', form.name);
-      }
+      window.dispatchEvent(new CustomEvent('freso:profile-updated'));
       setEditing(false);
       alert('Cập nhật thông tin thành công');
     } catch (err) {
       console.error(err);
-      alert('Lỗi khi cập nhật thông tin');
+      alert(err instanceof Error ? err.message : 'Lỗi khi cập nhật thông tin');
     } finally {
       setSaving(false);
     }
@@ -158,7 +198,7 @@ export const ProfileContent = () => {
     }
     setPwSaving(true);
     try {
-      await fetch(`${window.location.origin}/rest/V1/customers/me/password`, {
+      const response = await fetch(`${window.location.origin}/rest/V1/customers/me/password`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -169,14 +209,27 @@ export const ProfileContent = () => {
           newPassword: pwNew,
         }),
       });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        const message = payload?.message || 'Lỗi khi đổi mật khẩu';
+        throw new Error(message);
+      }
       setShowPasswordModal(false);
       setPwCurrent('');
       setPwNew('');
       setPwConfirm('');
-      alert('Đổi mật khẩu thành công');
+      try {
+        window.localStorage.removeItem('freso_customer_token');
+        window.sessionStorage.removeItem('freso_customer_token');
+        window.localStorage.setItem('freso_last_logout', String(Date.now()));
+      } catch (_err) {
+        // ignore
+      }
+      alert('Đổi mật khẩu thành công. Vui lòng đăng nhập lại.');
+      window.location.replace('/react/index.html?view=login');
     } catch (err) {
       console.error(err);
-      alert('Lỗi khi đổi mật khẩu');
+      alert(err instanceof Error ? err.message : 'Lỗi khi đổi mật khẩu');
     } finally {
       setPwSaving(false);
     }

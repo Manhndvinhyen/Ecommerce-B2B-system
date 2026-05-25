@@ -287,6 +287,46 @@ const PRODUCT_CACHE_TTL_MS = 15_000;
 const PRODUCT_AUTO_REFRESH_MS = 30_000;
 const productsResponseCache = new Map<string, { items: ProductItem[]; fetchedAt: number }>();
 
+const getCustomerToken = () =>
+  window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
+
+const graphqlRequest = async (
+  query: string,
+  variables?: Record<string, unknown>,
+  signal?: AbortSignal
+): Promise<Response> => {
+  const token = getCustomerToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetch('/graphql', {
+    method: 'POST',
+    signal,
+    cache: 'no-store',
+    headers,
+    body: JSON.stringify({ query, variables })
+  });
+
+  if ((response.status === 401 || response.status === 403) && token) {
+    return fetch('/graphql', {
+      method: 'POST',
+      signal,
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ query, variables })
+    });
+  }
+
+  return response;
+};
+
 export function ProductCategoryPage({ categoryName, initialSubcategory }: ProductCategoryPageProps) {
   const { openAddToCartModal } = useCart();
   const category = useMemo(() => {
@@ -301,7 +341,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
   const [categoryIdLookup, setCategoryIdLookup] = useState<Record<string, number>>({});
   const [refreshTick, setRefreshTick] = useState(0);
   const latestRequestRef = useRef(0);
-  const [wishlistItemsMap, setWishlistItemsMap] = useState<Record<string, { id: string; listId: string }>>({});
+  const [wishlistItemsMap, setWishlistItemsMap] = useState<Record<string, { itemId: string; listId: string }>>({});
   const [wishlistProduct, setWishlistProduct] = useState<WishlistModalProduct | null>(null);
   const searchQuery = useMemo(() => {
     return new URLSearchParams(window.location.search).get('q')?.trim() ?? '';
@@ -359,8 +399,8 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
 
     const existing = wishlistItemsMap[product.sku];
     if (existing) {
-      await removeWishlistItem(existing.id);
-      setWishlistItemsMap((prev: Record<string, { id: string; listId: string }>) => {
+      await removeWishlistItem(existing.itemId);
+      setWishlistItemsMap((prev: Record<string, { itemId: string; listId: string }>) => {
         const next = { ...prev };
         delete next[product.sku];
         return next;
@@ -427,14 +467,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
       }
 
       try {
-        const response = await fetch('/graphql', {
-          method: 'POST',
-          cache: 'no-store',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            query: `
+        const response = await graphqlRequest(`
               query CategoryTree {
                 categoryList(filters: { ids: { in: ["2"] } }) {
                   id
@@ -453,9 +486,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
                   }
                 }
               }
-            `
-          })
-        });
+            `);
 
         if (!response.ok) {
           throw new Error(`Category lookup failed: ${response.status}`);
@@ -559,20 +590,13 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
         `;
 
         try {
-          const response = await fetch('/graphql', {
-            method: 'POST',
-            signal: controller.signal,
-            cache: 'no-store',
-            headers: {
-              'Content-Type': 'application/json'
+          const response = await graphqlRequest(
+            query,
+            {
+              search: searchQuery
             },
-            body: JSON.stringify({
-              query,
-              variables: {
-                search: searchQuery
-              }
-            })
-          });
+            controller.signal
+          );
 
           console.info('[FresoSearch][ProductCategoryPage] GraphQL response received', {
             searchQuery,
@@ -719,20 +743,13 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
       `;
 
       try {
-        const response = await fetch('/graphql', {
-          method: 'POST',
-          signal: controller.signal,
-          cache: 'no-store',
-          headers: {
-            'Content-Type': 'application/json'
+        const response = await graphqlRequest(
+          query,
+          {
+            categoryIds: requestCategoryIds
           },
-          body: JSON.stringify({
-            query,
-            variables: {
-              categoryIds: requestCategoryIds
-            }
-          })
-        });
+          controller.signal
+        );
 
         if (!response.ok) {
           throw new Error(`GraphQL request failed: ${response.status}`);
@@ -871,7 +888,11 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
                 <button
                   key={subcategory}
                   type="button"
-                  onClick={() => applySubcategoryFilter(subcategory)}
+                  onClick={() => {
+                    if (!isSearchMode) {
+                      applySubcategoryFilter(subcategory);
+                    }
+                  }}
                   className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                     isActive
                       ? 'bg-green-600 text-white'
@@ -1019,7 +1040,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
         if (!item.sku) return;
         setWishlistItemsMap((prev) => ({
           ...prev,
-          [item.sku]: { id: item.id, listId }
+          [item.sku]: { itemId: item.id, listId }
         }));
       }}
     />

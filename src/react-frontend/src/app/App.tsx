@@ -97,6 +97,7 @@ function AppContent() {
     );
   }
 
+
   if (isCheckoutView) {
     return (
       <div className="min-h-screen bg-white">

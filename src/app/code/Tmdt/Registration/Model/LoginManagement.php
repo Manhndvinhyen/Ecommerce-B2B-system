@@ -46,8 +46,8 @@ class LoginManagement implements LoginInterface
             throw new InputException(__('Mật khẩu là bắt buộc.'));
         }
 
-        $registrationRow = $this->getRegistrationByLoginCode($loginCode);
-        if ($registrationRow === null || !$this->isMatchingIdentifier($identifier, (string) $registrationRow['email'], (string) $registrationRow['phone_number'])) {
+        $registrationRow = $this->getRegistrationByLoginCodeAndIdentifier($loginCode, $identifier);
+        if ($registrationRow === null) {
             throw new AuthenticationException(__('Thông tin đăng nhập không hợp lệ.'));
         }
 
@@ -69,32 +69,30 @@ class LoginManagement implements LoginInterface
         ];
     }
 
-    private function getRegistrationByLoginCode(string $loginCode): ?array
+    private function getRegistrationByLoginCodeAndIdentifier(string $loginCode, string $identifier): ?array
     {
         $connection = $this->resourceConnection->getConnection();
         $tableName = $this->resourceConnection->getTableName(self::TABLE_NAME);
-
-        $row = $connection->fetchRow(
-            $connection->select()
-                ->from($tableName, ['customer_id', 'email', 'phone_number', 'full_name', 'unit_nickname'])
-                ->where('login_code = ?', $loginCode)
-                ->limit(1)
-        );
-
-        return is_array($row) ? $row : null;
-    }
-
-    private function isMatchingIdentifier(string $identifier, string $email, string $phoneNumber): bool
-    {
         $normalizedIdentifier = mb_strtolower(trim($identifier));
-        $normalizedEmail = mb_strtolower(trim($email));
+        $normalizedPhone = $this->normalizePhone($identifier);
+        $isEmail = str_contains($normalizedIdentifier, '@');
 
-        if ($normalizedIdentifier === $normalizedEmail) {
-            return true;
+        $select = $connection->select()
+            ->from($tableName, ['customer_id', 'email', 'phone_number', 'full_name', 'unit_nickname'])
+            ->where('login_code = ?', $loginCode)
+            ->limit(1);
+
+        if ($isEmail) {
+            $select->where('LOWER(email) = ?', $normalizedIdentifier);
+        } elseif ($normalizedPhone !== '') {
+            $select->where('phone_number = ?', $normalizedPhone);
+        } else {
+            $select->where('LOWER(email) = ?', $normalizedIdentifier);
         }
 
-        return $this->normalizePhone($identifier) !== ''
-            && $this->normalizePhone($identifier) === $this->normalizePhone($phoneNumber);
+        $row = $connection->fetchRow($select);
+
+        return is_array($row) ? $row : null;
     }
 
     private function normalizePhone(string $value): string

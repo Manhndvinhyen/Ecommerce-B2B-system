@@ -31,8 +31,9 @@
         <constraint xsi:type="unique" referenceId="TMDT_CUSTOMER_REGISTRATION_CUSTOMER_ID_UNIQUE">
             <column name="customer_id" />
         </constraint>
-        <constraint xsi:type="unique" referenceId="TMDT_CUSTOMER_REGISTRATION_LOGIN_CODE_UNIQUE">
+        <constraint xsi:type="unique" referenceId="TMDT_CUSTOMER_REGISTRATION_LOGIN_CODE_PHONE_UNIQUE">
             <column name="login_code" />
+            <column name="phone_number" />
         </constraint>
         <index referenceId="TMDT_CUSTOMER_REGISTRATION_EMAIL_IDX">
             <column name="email" />

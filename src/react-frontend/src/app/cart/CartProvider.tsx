@@ -205,9 +205,15 @@ export function CartProvider({ children }: PropsWithChildren) {
   );
 
   const getCustomerCartId = useCallback(async () => {
+    const token = getAuthToken();
     const cached = window.localStorage.getItem('freso_customer_cart_id');
-    if (cached) {
+    const cachedToken = window.localStorage.getItem('freso_customer_cart_token');
+    if (cached && token && cachedToken === token) {
       return cached;
+    }
+    if (cached && (!token || cachedToken !== token)) {
+      window.localStorage.removeItem('freso_customer_cart_id');
+      window.localStorage.removeItem('freso_customer_cart_token');
     }
 
     const data = await graphqlRequest(`query CustomerCart { customerCart { id } }`);
@@ -217,8 +223,11 @@ export function CartProvider({ children }: PropsWithChildren) {
     }
 
     window.localStorage.setItem('freso_customer_cart_id', cartId);
+    if (token) {
+      window.localStorage.setItem('freso_customer_cart_token', token);
+    }
     return cartId;
-  }, [graphqlRequest]);
+  }, [getAuthToken, graphqlRequest]);
 
   type MagentoCartItem = {
     id: number | string;
@@ -303,7 +312,8 @@ export function CartProvider({ children }: PropsWithChildren) {
   const addProductToMagentoCart = useCallback(
     async (product: AddToCartProduct, quantity: number) => {
       const targetQuantity = clampQuantity(quantity);
-      if (!product.sku) {
+      const normalizedSku = product.sku?.trim() ?? '';
+      if (!normalizedSku) {
         throw new Error('Thiếu SKU để thêm vào giỏ hàng.');
       }
 
@@ -329,7 +339,7 @@ export function CartProvider({ children }: PropsWithChildren) {
         }
       `;
 
-      const cartItems = [{ sku: product.sku, quantity: targetQuantity }];
+  const cartItems = [{ sku: normalizedSku, quantity: targetQuantity }];
 
       try {
         const cartId = await getCustomerCartId();
@@ -338,12 +348,19 @@ export function CartProvider({ children }: PropsWithChildren) {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const normalized = message.toLowerCase();
+        if (normalized.includes('authorization') || normalized.includes('current customer')) {
+          window.localStorage.removeItem('freso_customer_cart_id');
+          window.localStorage.removeItem('freso_customer_cart_token');
+        }
         if (
           normalized.includes('could not find a cart') ||
           normalized.includes("cart isn't active") ||
+          normalized.includes('current customer') ||
+          normalized.includes('authorization') ||
           normalized.includes('cart')
         ) {
           window.localStorage.removeItem('freso_customer_cart_id');
+          window.localStorage.removeItem('freso_customer_cart_token');
           const cartId = await getCustomerCartId();
           const data = await graphqlRequest(mutation, { cartId, items: cartItems });
           return data?.addProductsToCart?.cart?.items ?? [];

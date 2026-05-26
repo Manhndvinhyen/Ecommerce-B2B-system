@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace Tmdt\Registration\Api;
 
-interface ForgotPasswordRequestOtpInterface
+interface AddUsersInterface
 {
     /**
-     * Request OTP code for password reset.
+     * Create a branch manager account for the current restaurant owner.
      *
      * @return array
      */

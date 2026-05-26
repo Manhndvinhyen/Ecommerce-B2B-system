@@ -42,4 +42,10 @@
             <resource ref="anonymous" />
         </resources>
     </route>
+    <route url="/V1/tmdt-registration/addusers" method="POST">
+        <service class="Tmdt\Registration\Api\AddUsersInterface" method="save" />
+        <resources>
+            <resource ref="self" />
+        </resources>
+    </route>
 </routes>

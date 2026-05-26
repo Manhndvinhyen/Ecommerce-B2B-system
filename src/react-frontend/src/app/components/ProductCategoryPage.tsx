@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, ShoppingCart, Heart } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { WishlistAddModal, WishlistModalProduct } from './WishlistAddModal';
+import { hasWishlistAuth, getWishlistItemsMap, removeWishlistItem, WishlistItem } from '../utils/wishlistApi';
 import {
   categoryMenu,
   getCategoryPageLink,
@@ -48,6 +49,54 @@ type GraphQlCategoryNode = {
 type InferredCategory = {
   category: string;
   subcategory?: string;
+};
+
+const dedupeByKey = <T,>(items: T[], keyFn: (item: T) => string) => {
+  const seen = new Set<string>();
+  const result: T[] = [];
+
+  for (const item of items) {
+    const key = keyFn(item).trim().toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(item);
+  }
+
+  return result;
+};
+
+const pickPreferredProduct = (current: ProductItem, candidate: ProductItem) => {
+  const scoreSku = (sku: string) => {
+    const normalizedSku = sku.trim();
+    if (/^[A-Z]{2,}_\d{3,}/.test(normalizedSku)) {
+      return 3;
+    }
+    if (normalizedSku.startsWith('cat-')) {
+      return 1;
+    }
+    return 2;
+  };
+
+  return scoreSku(candidate.sku) > scoreSku(current.sku) ? candidate : current;
+};
+
+const dedupeProductsByName = (products: ProductItem[]) => {
+  const map = new Map<string, ProductItem>();
+
+  for (const product of products) {
+    const key = toQuerySlug(product.name);
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, product);
+      continue;
+    }
+
+    map.set(key, pickPreferredProduct(existing, product));
+  }
+
+  return Array.from(map.values());
 };
 
 const pickSubcategoryFromText = (
@@ -300,6 +349,46 @@ const PRODUCT_CACHE_TTL_MS = 15_000;
 const PRODUCT_AUTO_REFRESH_MS = 30_000;
 const productsResponseCache = new Map<string, { items: ProductItem[]; fetchedAt: number }>();
 
+const getCustomerToken = () =>
+  window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
+
+const graphqlRequest = async (
+  query: string,
+  variables?: Record<string, unknown>,
+  signal?: AbortSignal
+): Promise<Response> => {
+  const token = getCustomerToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetch('/graphql', {
+    method: 'POST',
+    signal,
+    cache: 'no-store',
+    headers,
+    body: JSON.stringify({ query, variables })
+  });
+
+  if ((response.status === 401 || response.status === 403) && token) {
+    return fetch('/graphql', {
+      method: 'POST',
+      signal,
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ query, variables })
+    });
+  }
+
+  return response;
+};
+
 export function ProductCategoryPage({ categoryName, initialSubcategory }: ProductCategoryPageProps) {
   const { openAddToCartModal } = useCart();
   const category = useMemo(() => {
@@ -314,6 +403,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
   const [categoryIdLookup, setCategoryIdLookup] = useState<Record<string, number>>({});
   const [refreshTick, setRefreshTick] = useState(0);
   const latestRequestRef = useRef(0);
+  const [wishlistItemsMap, setWishlistItemsMap] = useState<Record<string, { itemId: string; listId: string }>>({});
   const [wishlistProduct, setWishlistProduct] = useState<WishlistModalProduct | null>(null);
   const searchQuery = useMemo(() => {
     return new URLSearchParams(window.location.search).get('q')?.trim() ?? '';
@@ -353,10 +443,43 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
       return inferred.subcategory;
     }
 
-    return inferred?.category ?? rawNames[rawNames.length - 1] ?? (activeSubcategory === 'Tất cả' ? category.name : activeSubcategory);
+    if (inferred?.category) {
+      return inferred.category;
+    }
+
+    return rawNames[rawNames.length - 1] ?? (activeSubcategory === 'Tất cả' ? category.name : activeSubcategory);
   };
 
-  const openWishlistModal = (product: ProductItem) => {
+  useEffect(() => {
+    const loadWishlist = async () => {
+      if (!hasWishlistAuth()) {
+        return;
+      }
+
+      const { itemsMap } = await getWishlistItemsMap();
+      setWishlistItemsMap(itemsMap);
+    };
+
+    loadWishlist();
+  }, []);
+
+  const toggleWishlistItem = async (product: ProductItem) => {
+    if (!hasWishlistAuth()) {
+      window.location.href = '/react/index.html?view=login';
+      return;
+    }
+
+    const existing = wishlistItemsMap[product.sku];
+    if (existing) {
+      await removeWishlistItem(existing.itemId);
+      setWishlistItemsMap((prev: Record<string, { itemId: string; listId: string }>) => {
+        const next = { ...prev };
+        delete next[product.sku];
+        return next;
+      });
+      return;
+    }
+
     setWishlistProduct({
       sku: product.sku,
       name: product.name,
@@ -389,7 +512,6 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, [categoryName]);
-
   const applySubcategoryFilter = (subcategory: string) => {
     setActiveSubcategory(subcategory);
     setVisibleCount(10);
@@ -417,14 +539,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
       }
 
       try {
-        const response = await fetch('/graphql', {
-          method: 'POST',
-          cache: 'no-store',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            query: `
+        const response = await graphqlRequest(`
               query CategoryTree {
                 categoryList(filters: { ids: { in: ["2"] } }) {
                   id
@@ -443,9 +558,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
                   }
                 }
               }
-            `
-          })
-        });
+            `);
 
         if (!response.ok) {
           throw new Error(`Category lookup failed: ${response.status}`);
@@ -553,22 +666,13 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
         `;
 
         try {
-          const response = await fetch('/graphql', {
-            method: 'POST',
-            signal: controller.signal,
-            cache: 'no-store',
-            credentials: 'omit',
-            headers: {
-              'Content-Type': 'application/json',
-              Accept: 'application/json'
+          const response = await graphqlRequest(
+            query,
+            {
+              search: searchQuery
             },
-            body: JSON.stringify({
-              query,
-              variables: {
-                search: searchQuery
-              }
-            })
-          });
+            controller.signal
+          );
 
           console.info('[FresoSearch][ProductCategoryPage] GraphQL response received', {
             searchQuery,
@@ -715,20 +819,13 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
       `;
 
       try {
-        const response = await fetch('/graphql', {
-          method: 'POST',
-          signal: controller.signal,
-          cache: 'no-store',
-          headers: {
-            'Content-Type': 'application/json'
+        const response = await graphqlRequest(
+          query,
+          {
+            categoryIds: requestCategoryIds
           },
-          body: JSON.stringify({
-            query,
-            variables: {
-              categoryIds: requestCategoryIds
-            }
-          })
-        });
+          controller.signal
+        );
 
         if (!response.ok) {
           throw new Error(`GraphQL request failed: ${response.status}`);
@@ -740,9 +837,12 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
         }
 
         const items: GraphQlProductItem[] = json?.data?.products?.items ?? [];
+        const uniqueItems = dedupeByKey(items, (item) => item.sku || String(item.id));
 
-        const mappedProducts = items
-          .map((item) => {
+        const mappedProducts = dedupeProductsByName(
+          dedupeByKey(
+            uniqueItems
+              .map((item) => {
             const imageUrl = item.small_image?.url ?? '';
             const isPlaceholderImage = imageUrl.includes('/placeholder/');
             const fallbackImage =
@@ -770,8 +870,11 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
               image: !imageUrl || isPlaceholderImage ? fallbackImage : imageUrl,
               categoryLabel: getCategoryDisplayLabel(item)
             };
-          })
-          .filter((item): item is NonNullable<typeof item> => item !== null);
+            })
+            .filter((item): item is NonNullable<typeof item> => item !== null),
+            (product) => product.sku || `${product.name}|${product.price}|${product.categoryLabel}`
+          )
+        );
 
         if (latestRequestRef.current !== requestId) {
           return;
@@ -861,7 +964,11 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
                 <button
                   key={subcategory}
                   type="button"
-                  onClick={() => applySubcategoryFilter(subcategory)}
+                  onClick={() => {
+                    if (!isSearchMode) {
+                      applySubcategoryFilter(subcategory);
+                    }
+                  }}
                   className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                     isActive
                       ? 'bg-green-600 text-white'
@@ -920,18 +1027,20 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
                       type="button"
                       onClick={(event) => {
                         event.stopPropagation();
-                        openWishlistModal(product);
+                        toggleWishlistItem(product);
                       }}
                       onKeyDown={(event) => {
                         event.stopPropagation();
                         if (event.key === 'Enter' || event.key === ' ') {
-                          openWishlistModal(product);
+                          toggleWishlistItem(product);
                         }
                       }}
                       className="absolute top-2 right-2 bg-white rounded-full p-2 hover:bg-red-50 transition-colors shadow-sm"
                       aria-label={`Yêu thích ${product.name}`}
                     >
-                      <Heart className="size-4 text-gray-400 hover:text-red-500" />
+                      <Heart
+                        className={`size-4 ${wishlistItemsMap[product.sku] ? 'fill-rose-400 text-rose-500' : 'text-gray-400 hover:text-red-500'}`}
+                      />
                     </button>
                   </div>
                   <div className="p-3">
@@ -1003,7 +1112,15 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
       isOpen={Boolean(wishlistProduct)}
       product={wishlistProduct}
       onClose={() => setWishlistProduct(null)}
+      onAdded={(item: WishlistItem, listId: string) => {
+        if (!item.sku) return;
+        setWishlistItemsMap((prev) => ({
+          ...prev,
+          [item.sku]: { itemId: item.id, listId }
+        }));
+      }}
     />
+
     </>
   );
 }

@@ -5,6 +5,8 @@ use Magento\Authorization\Model\UserContextInterface;
 use Magento\Framework\Exception\AuthorizationException;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Phrase;
+use Magento\Framework\Webapi\Rest\Request as RestRequest;
+use Magento\Integration\Model\Oauth\TokenFactory;
 use Tmdt\Wishlist\Api\WishlistManagementInterface;
 use Tmdt\Wishlist\Api\Data\WishlistListInterfaceFactory;
 use Tmdt\Wishlist\Api\Data\WishlistItemInterfaceFactory;
@@ -24,6 +26,8 @@ class WishlistManagement implements WishlistManagementInterface
     private WishlistItemResource $itemResource;
     private ListCollectionFactory $listCollectionFactory;
     private ItemCollectionFactory $itemCollectionFactory;
+    private RestRequest $request;
+    private TokenFactory $tokenFactory;
 
     public function __construct(
         UserContextInterface $userContext,
@@ -34,7 +38,9 @@ class WishlistManagement implements WishlistManagementInterface
         WishlistListResource $listResource,
         WishlistItemResource $itemResource,
         ListCollectionFactory $listCollectionFactory,
-        ItemCollectionFactory $itemCollectionFactory
+        ItemCollectionFactory $itemCollectionFactory,
+        RestRequest $request,
+        TokenFactory $tokenFactory
     ) {
         $this->userContext = $userContext;
         $this->listDataFactory = $listDataFactory;
@@ -45,6 +51,8 @@ class WishlistManagement implements WishlistManagementInterface
         $this->itemResource = $itemResource;
         $this->listCollectionFactory = $listCollectionFactory;
         $this->itemCollectionFactory = $itemCollectionFactory;
+        $this->request = $request;
+        $this->tokenFactory = $tokenFactory;
     }
 
     public function getLists()
@@ -164,10 +172,39 @@ class WishlistManagement implements WishlistManagementInterface
     private function getCustomerId(): int
     {
         if ($this->userContext->getUserType() !== UserContextInterface::USER_TYPE_CUSTOMER) {
-            throw new AuthorizationException(new Phrase('Yêu cầu đăng nhập.'));
+            $token = $this->resolveBearerToken();
+            if ($token === '') {
+                throw new AuthorizationException(new Phrase('Yêu cầu đăng nhập.'));
+            }
+
+            $tokenModel = $this->tokenFactory->create()->loadByToken($token);
+            $customerId = (int) $tokenModel->getCustomerId();
+            if ($customerId <= 0) {
+                throw new AuthorizationException(new Phrase('Yêu cầu đăng nhập.'));
+            }
+
+            return $customerId;
         }
 
         return (int)$this->userContext->getUserId();
+    }
+
+    private function resolveBearerToken(): string
+    {
+        $header = (string) $this->request->getHeader('Authorization');
+        if ($header === '' && isset($_SERVER['HTTP_AUTHORIZATION'])) {
+            $header = (string) $_SERVER['HTTP_AUTHORIZATION'];
+        }
+
+        if ($header === '') {
+            return '';
+        }
+
+        if (stripos($header, 'Bearer ') === 0) {
+            return trim(substr($header, 7));
+        }
+
+        return trim($header);
     }
 
     private function assertListOwner(string $listId): void

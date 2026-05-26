@@ -14,6 +14,17 @@ type CustomerAttribute = {
   value?: string;
 };
 
+type CustomerMeResponse = {
+  custom_attributes?: CustomerAttribute[];
+  email?: string;
+  firstname?: string;
+  full_name?: string;
+  lastname?: string;
+  phone?: string;
+  phone_number?: string;
+  unit_nickname?: string;
+};
+
 export const ProfileContent = () => {
   const readStorageValue = (key: string) =>
     window.localStorage.getItem(key) || window.sessionStorage.getItem(key) || '';
@@ -73,17 +84,18 @@ export const ProfileContent = () => {
       if (!data || typeof data !== 'object') return;
 
       // Xử lý bóc tách mảng nếu API trả về mảng dữ liệu
-      let info: any = data;
+      let info: CustomerMeResponse = data as CustomerMeResponse;
       if (Array.isArray(data)) {
         if (data[0] === true && data[1] && typeof data[1] === 'object') {
-          info = data[1];
+          info = data[1] as CustomerMeResponse;
         }
       }
 
       const email = typeof info.email === 'string' ? info.email : '';
       const firstname = typeof info.firstname === 'string' ? info.firstname : '';
       const lastname = typeof info.lastname === 'string' ? info.lastname : '';
-      const name = [firstname, lastname].filter(Boolean).join(' ').trim() || typeof info.full_name === 'string' ? info.full_name : '';
+      const fullName = typeof info.full_name === 'string' ? info.full_name : '';
+      const name = [firstname, lastname].filter(Boolean).join(' ').trim() || fullName;
 
       const phone = typeof info.phone_number === 'string' ? info.phone_number : typeof info.phone === 'string' ? info.phone : '';
 

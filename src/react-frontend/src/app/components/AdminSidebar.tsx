@@ -13,7 +13,14 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-export const adminMenuItems = [
+export type AdminMenuItem = {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  subItems?: string[];
+};
+
+export const adminMenuItems: AdminMenuItem[] = [
   { id: 'tai-khoan', label: 'Tài khoản của tôi', icon: CircleUserRound },
   { id: 'thong-tin', label: 'Thông tin chung', icon: LayoutDashboard },
   { id: 'don-hang', label: 'Quản lý đơn hàng', icon: FileText },
@@ -41,6 +48,7 @@ type SidebarItemProps = {
   hasSubmenu: boolean;
   isOpen: boolean;
   onClick: () => void;
+  onSubItemClick?: (label: string) => void;
   subItems?: string[];
 };
 
@@ -49,9 +57,19 @@ type AdminSidebarProps = {
   setActiveTab?: Dispatch<SetStateAction<string>>;
   openMenus?: OpenMenus;
   setOpenMenus?: Dispatch<SetStateAction<OpenMenus>>;
+  menuItems?: AdminMenuItem[];
 };
 
-const SidebarItem = ({ icon: Icon, label, isActive, hasSubmenu, isOpen, onClick, subItems = [] }: SidebarItemProps) => {
+const SidebarItem = ({
+  icon: Icon,
+  label,
+  isActive,
+  hasSubmenu,
+  isOpen,
+  onClick,
+  onSubItemClick,
+  subItems = [],
+}: SidebarItemProps) => {
   return (
     <div className="mb-3">
       <button

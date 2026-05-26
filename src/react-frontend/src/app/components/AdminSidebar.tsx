@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { 
   CircleUserRound, 
   LayoutDashboard, 
@@ -10,8 +11,16 @@ import {
   LogOut,
   ChevronDown
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
-export const adminMenuItems = [
+export type AdminMenuItem = {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  subItems?: string[];
+};
+
+export const adminMenuItems: AdminMenuItem[] = [
   { id: 'tai-khoan', label: 'Tài khoản của tôi', icon: CircleUserRound },
   { id: 'thong-tin', label: 'Thông tin chung', icon: LayoutDashboard },
   { id: 'don-hang', label: 'Quản lý đơn hàng', icon: FileText },
@@ -30,6 +39,27 @@ export const adminMenuItems = [
   },
 ];
 
+type OpenMenus = Record<string, boolean>;
+
+type SidebarItemProps = {
+  icon: LucideIcon;
+  label: string;
+  isActive: boolean;
+  hasSubmenu: boolean;
+  isOpen: boolean;
+  onClick: () => void;
+  onSubItemClick?: (label: string) => void;
+  subItems?: string[];
+};
+
+type AdminSidebarProps = {
+  activeTab?: string;
+  setActiveTab?: Dispatch<SetStateAction<string>>;
+  openMenus?: OpenMenus;
+  setOpenMenus?: Dispatch<SetStateAction<OpenMenus>>;
+  menuItems?: AdminMenuItem[];
+};
+
 const SidebarItem = ({
   icon: Icon,
   label,
@@ -37,9 +67,9 @@ const SidebarItem = ({
   hasSubmenu,
   isOpen,
   onClick,
-  subItems,
   onSubItemClick,
-}) => {
+  subItems = [],
+}: SidebarItemProps) => {
   return (
     <div className="mb-3">
       <button
@@ -89,7 +119,7 @@ const SidebarItem = ({
   );
 };
 
-export function AdminSidebar(props){
+export function AdminSidebar(props: AdminSidebarProps = {}) {
   const {
     activeTab: propActiveTab,
     setActiveTab: propSetActiveTab,
@@ -100,7 +130,7 @@ export function AdminSidebar(props){
 
   // internal state used when parent doesn't control the component
   const [internalActiveTab, setInternalActiveTab] = useState(propActiveTab ?? 'Tài khoản của tôi');
-  const [internalOpenMenus, setInternalOpenMenus] = useState(propOpenMenus ?? { 'nhan-vien': false, 'bao-cao': false });
+  const [internalOpenMenus, setInternalOpenMenus] = useState<OpenMenus>(propOpenMenus ?? { 'nhan-vien': false, 'bao-cao': false });
 
   const activeTab = propActiveTab ?? internalActiveTab;
   const setActiveTab = propSetActiveTab ?? setInternalActiveTab;
@@ -114,7 +144,7 @@ export function AdminSidebar(props){
     document.head.appendChild(link);
   }, []);
 
-  const toggleSubmenu = (id, label) => {
+  const toggleSubmenu = (id: string, label: string) => {
     setActiveTab(label);
     setOpenMenus(prev => ({ ...prev, [id]: !prev[id] }));
   };

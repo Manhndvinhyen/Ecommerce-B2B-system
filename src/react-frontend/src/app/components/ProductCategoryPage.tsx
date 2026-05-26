@@ -218,6 +218,68 @@ const pickCategoryFromGraphQl = (product: GraphQlProductItem) => {
     .find((name) => name && !ignoredSlugs.has(toQuerySlug(name)));
 };
 
+const relatedSearchGroups: Array<{ triggers: string[]; terms: string[] }> = [
+  {
+    triggers: ['thit-heo', 'heo', 'lon'],
+    terms: ['thịt heo', 'heo', 'ba chỉ', 'ba chỉ heo', 'nạc vai', 'nạc mông', 'sườn heo', 'chân giò']
+  },
+  {
+    triggers: ['thit-bo', 'bo-be', 'bo'],
+    terms: ['thịt bò', 'bò', 'bò bê', 'thịt bò cắt lát', 'nạm bò', 'bắp bò']
+  },
+  {
+    triggers: ['thit-ga', 'ga'],
+    terms: ['thịt gà', 'gà', 'đùi gà', 'ức gà', 'cánh gà', 'trứng gà']
+  },
+  {
+    triggers: ['hai-san', 'thuy-hai-san', 'ca', 'tom', 'muc'],
+    terms: ['hải sản', 'cá', 'tôm', 'mực', 'cá hồi', 'tôm sú', 'mực ống']
+  },
+  {
+    triggers: ['trai-cay', 'hoa-qua'],
+    terms: ['trái cây', 'hoa quả', 'táo', 'chuối', 'cam']
+  },
+  {
+    triggers: ['rau-cu-qua', 'rau', 'cu-qua'],
+    terms: ['rau củ quả', 'rau', 'củ quả', 'cà chua', 'cà rốt', 'carrot', 'tomato', 'khoai tây']
+  },
+  {
+    triggers: ['gao', 'thuc-pham-kho', 'do-kho'],
+    terms: ['gạo', 'thực phẩm khô', 'bún gạo', 'hạt điều']
+  }
+];
+
+const buildExpandedSearchTerms = (query: string) => {
+  const normalizedQuery = toQuerySlug(query);
+  const terms = [query];
+
+  relatedSearchGroups.forEach((group) => {
+    if (group.triggers.some((trigger) => normalizedQuery.includes(trigger))) {
+      terms.push(...group.terms);
+    }
+  });
+
+  normalizedQuery
+    .split('-')
+    .filter((part) => part.length >= 2)
+    .forEach((part) => terms.push(part));
+
+  const seen = new Set<string>();
+  return terms
+    .map((term) => term.trim())
+    .filter(Boolean)
+    .filter((term) => {
+      const key = toQuerySlug(term);
+      if (!key || seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 10);
+};
+
 const fallbackImageByCategory: Record<string, string> = {
   'Rau củ quả': 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&h=500&fit=crop',
   'Trái cây': 'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=500&h=500&fit=crop',

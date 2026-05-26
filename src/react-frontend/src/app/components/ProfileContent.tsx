@@ -9,6 +9,11 @@ type Profile = {
   role?: string;
 };
 
+type CustomerAttribute = {
+  attribute_code?: string;
+  value?: string;
+};
+
 export const ProfileContent = () => {
   const readStorageValue = (key: string) =>
     window.localStorage.getItem(key) || window.sessionStorage.getItem(key) || '';
@@ -79,12 +84,13 @@ export const ProfileContent = () => {
         const email = typeof info.email === 'string' ? info.email : '';
         const firstname = typeof info.firstname === 'string' ? info.firstname : '';
         const lastname = typeof info.lastname === 'string' ? info.lastname : '';
-        const name = [firstname, lastname].filter(Boolean).join(' ').trim() || typeof info.full_name === 'string' ? info.full_name : '';
+        const fullName = typeof info.full_name === 'string' ? info.full_name : '';
+        const name = [firstname, lastname].filter(Boolean).join(' ').trim() || fullName;
         
         // Lấy phone_number từ API trả về
         const phone = typeof info.phone_number === 'string' ? info.phone_number : (typeof info.phone === 'string' ? info.phone : '');
 
-        const customAttributes = Array.isArray(info.custom_attributes) ? info.custom_attributes : [];
+        const customAttributes: CustomerAttribute[] = Array.isArray(info.custom_attributes) ? info.custom_attributes : [];
         const unitNickname = customAttributes.find((attr) => attr?.attribute_code === 'tmdt_unit_nickname')?.value || info.unit_nickname;
         const branch = typeof unitNickname === 'string' && unitNickname.trim() ? unitNickname.trim() : '';
 

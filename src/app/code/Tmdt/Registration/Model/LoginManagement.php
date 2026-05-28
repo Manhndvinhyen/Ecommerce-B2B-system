@@ -51,6 +51,11 @@ class LoginManagement implements LoginInterface
             throw new AuthenticationException(__('Thông tin đăng nhập không hợp lệ.'));
         }
 
+        $status = strtolower(trim((string) ($registrationRow['status'] ?? '')));
+        if ($status === 'inactive') {
+            throw new AuthenticationException(__('Tài khoản đã bị khóa. Vui lòng liên hệ quản trị.'));
+        }
+
         try {
             $token = $this->customerTokenService->createCustomerAccessToken((string) $registrationRow['email'], $password);
         } catch (AuthenticationException | LocalizedException $exception) {
@@ -78,7 +83,7 @@ class LoginManagement implements LoginInterface
         $isEmail = str_contains($normalizedIdentifier, '@');
 
         $select = $connection->select()
-            ->from($tableName, ['customer_id', 'email', 'phone_number', 'full_name', 'unit_nickname'])
+            ->from($tableName, ['customer_id', 'email', 'phone_number', 'full_name', 'unit_nickname', 'status'])
             ->where('login_code = ?', $loginCode)
             ->limit(1);
 

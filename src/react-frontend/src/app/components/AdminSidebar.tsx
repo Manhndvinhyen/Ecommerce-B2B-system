@@ -149,6 +149,34 @@ export function AdminSidebar(props: AdminSidebarProps = {}) {
     setOpenMenus(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const handleLogout = () => {
+    const keysToClear = [
+      'freso_customer_token',
+      'freso_login_token',
+      'freso_customer_email',
+      'freso_customer_name',
+      'freso_customer_phone',
+      'freso_branch_name',
+      'freso_login_code',
+      'freso_is_owner',
+      'freso_is_super_admin',
+    ];
+
+    keysToClear.forEach((key) => {
+      window.localStorage.removeItem(key);
+      window.sessionStorage.removeItem(key);
+    });
+
+    const params = new URLSearchParams(window.location.search);
+    params.delete('view');
+    params.delete('tab');
+    params.delete('category');
+    params.delete('subcategory');
+    const query = params.toString();
+    const target = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`;
+    window.location.href = target;
+  };
+
   const menuItems = propMenuItems ?? adminMenuItems;
 
   return (
@@ -189,7 +217,10 @@ export function AdminSidebar(props: AdminSidebarProps = {}) {
 
         {/* Action Area */}
         <div className="mt-6 pt-5 border-t border-gray-50">
-          <button className="w-full py-2.5 border border-gray-100 rounded-full text-gray-400 text-[11px] font-bold hover:bg-gray-50 transition-all flex items-center justify-center gap-2">
+          <button
+            onClick={handleLogout}
+            className="w-full py-2.5 border border-gray-100 rounded-full text-gray-400 text-[11px] font-bold hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
+          >
             <LogOut size={13} strokeWidth={1.5} />
             <span>Đăng xuất</span>
           </button>

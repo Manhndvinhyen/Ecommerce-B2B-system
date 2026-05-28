@@ -349,44 +349,21 @@ const PRODUCT_CACHE_TTL_MS = 15_000;
 const PRODUCT_AUTO_REFRESH_MS = 30_000;
 const productsResponseCache = new Map<string, { items: ProductItem[]; fetchedAt: number }>();
 
-const getCustomerToken = () =>
-  window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
-
 const graphqlRequest = async (
   query: string,
   variables?: Record<string, unknown>,
   signal?: AbortSignal
 ): Promise<Response> => {
-  const token = getCustomerToken();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json'
-  };
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  const response = await fetch('/graphql', {
+  return fetch('/graphql', {
     method: 'POST',
     signal,
     cache: 'no-store',
-    headers,
+    credentials: 'omit',
+    headers: {
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify({ query, variables })
   });
-
-  if ((response.status === 401 || response.status === 403) && token) {
-    return fetch('/graphql', {
-      method: 'POST',
-      signal,
-      cache: 'no-store',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ query, variables })
-    });
-  }
-
-  return response;
 };
 
 export function ProductCategoryPage({ categoryName, initialSubcategory }: ProductCategoryPageProps) {

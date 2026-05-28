@@ -7,11 +7,11 @@ namespace Tmdt\Registration\Model;
 use Magento\Customer\Api\AccountManagementInterface;
 use Magento\Customer\Api\CustomerRepositoryInterface;
 use Magento\Customer\Api\Data\CustomerInterfaceFactory;
-use Magento\Customer\Model\Customer;
-use Magento\Customer\Model\ResourceModel\Customer\CollectionFactory as CustomerCollectionFactory;
 use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\Exception\AuthorizationException;
+use Magento\Framework\Exception\AlreadyExistsException;
 use Magento\Framework\Exception\InputException;
+use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Serialize\Serializer\Json;
 use Magento\Framework\Webapi\Rest\Request as RestRequest;
 use Magento\Integration\Model\Oauth\TokenFactory;
@@ -31,8 +31,7 @@ class AddUsersManagement implements AddUsersInterface
         private readonly ResourceConnection $resourceConnection,
         private readonly TokenFactory $tokenFactory,
         private readonly RestRequest $request,
-        private readonly Json $serializer,
-        private readonly CustomerCollectionFactory $customerCollectionFactory
+        private readonly Json $serializer
     ) {
     }
 
@@ -51,30 +50,41 @@ class AddUsersManagement implements AddUsersInterface
             throw new InputException(__('Du lieu tao tai khoan khong hop le.'));
         }
 
-        $loginCode = trim((string) ($payload['loginCode'] ?? ''));
         $branchName = trim((string) ($payload['branchName'] ?? ''));
         $phoneNumber = $this->normalizePhone((string) ($payload['phoneNumber'] ?? ''));
+        $email = $this->normalizeEmail((string) ($payload['email'] ?? ''));
         $password = (string) ($payload['password'] ?? '');
 
-        if ($loginCode === '') {
-            throw new InputException(__('Ma dang nhap la bat buoc.'));
-        }
         if ($branchName === '') {
             throw new InputException(__('Chi nhanh la bat buoc.'));
         }
         if ($phoneNumber === '') {
             throw new InputException(__('So dien thoai la bat buoc.'));
         }
+        if ($email === '') {
+            throw new InputException(__('Email la bat buoc.'));
+        }
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw new InputException(__('Email khong hop le.'));
+        }
         if (trim($password) === '') {
             throw new InputException(__('Mat khau la bat buoc.'));
         }
 
-        $ownerRegistration = $this->getRegistrationByLoginCode($loginCode);
+        $ownerRegistration = $this->getRegistrationByCustomerId($ownerId);
         if (!$ownerRegistration) {
             throw new InputException(__('Khong tim thay thong tin nha hang.'));
         }
 
-        $email = $this->buildUniqueEmail($loginCode, $phoneNumber);
+        $loginCode = trim((string) ($ownerRegistration['login_code'] ?? ''));
+        if ($loginCode === '') {
+            throw new InputException(__('Khong tim thay ma nha hang.'));
+        }
+
+        if ($this->getRegistrationByLoginCodeAndPhone($loginCode, $phoneNumber)) {
+            throw new InputException(__('So dien thoai da ton tai cho nha hang nay.'));
+        }
+
         $fullName = $branchName !== '' ? $branchName : 'Quan ly chi nhanh';
         [$firstName, $lastName] = $this->splitName($fullName);
 
@@ -89,8 +99,18 @@ class AddUsersManagement implements AddUsersInterface
         $customer->setCustomAttribute('tmdt_registration_type', (string) ($ownerRegistration['registration_type'] ?? ''));
         $customer->setCustomAttribute('tmdt_unit_nickname', $branchName);
         $customer->setCustomAttribute('is_owner', 0);
+        $customer->setCustomAttribute('is_super_admin', 0);
 
-        $createdCustomer = $this->accountManagement->createAccount($customer, $password);
+        try {
+            $createdCustomer = $this->accountManagement->createAccount($customer, $password);
+        } catch (AlreadyExistsException) {
+            throw new InputException(__('Email da ton tai.'));
+        } catch (LocalizedException $exception) {
+            $message = trim((string) $exception->getMessage());
+            throw new InputException(__($message !== '' ? $message : 'Khong the tao tai khoan quan ly chi nhanh.'));
+        } catch (\Throwable) {
+            throw new InputException(__('Khong the tao tai khoan quan ly chi nhanh.'));
+        }
 
         $connection = $this->resourceConnection->getConnection();
         $tableName = $this->resourceConnection->getTableName(self::TABLE_NAME);
@@ -114,6 +134,7 @@ class AddUsersManagement implements AddUsersInterface
                 'loginCode' => $loginCode,
                 'branchName' => $branchName,
                 'phoneNumber' => $phoneNumber,
+                'email' => $email,
             ]),
             'status' => 'approved',
             'notes' => null,
@@ -126,7 +147,7 @@ class AddUsersManagement implements AddUsersInterface
         ];
     }
 
-    private function getRegistrationByLoginCode(string $loginCode): ?array
+    private function getRegistrationByCustomerId(int $customerId): ?array
     {
         $connection = $this->resourceConnection->getConnection();
         $tableName = $this->resourceConnection->getTableName(self::TABLE_NAME);
@@ -134,8 +155,24 @@ class AddUsersManagement implements AddUsersInterface
         $row = $connection->fetchRow(
             $connection->select()
                 ->from($tableName)
-                ->where('login_code = ?', $loginCode)
+                ->where('customer_id = ?', $customerId)
                 ->order('registration_id ASC')
+                ->limit(1)
+        );
+
+        return is_array($row) ? $row : null;
+    }
+
+    private function getRegistrationByLoginCodeAndPhone(string $loginCode, string $phoneNumber): ?array
+    {
+        $connection = $this->resourceConnection->getConnection();
+        $tableName = $this->resourceConnection->getTableName(self::TABLE_NAME);
+
+        $row = $connection->fetchRow(
+            $connection->select()
+                ->from($tableName, ['customer_id'])
+                ->where('login_code = ?', $loginCode)
+                ->where('phone_number = ?', $phoneNumber)
                 ->limit(1)
         );
 
@@ -185,6 +222,11 @@ class AddUsersManagement implements AddUsersInterface
         return preg_replace('/\D+/', '', $value) ?? '';
     }
 
+    private function normalizeEmail(string $value): string
+    {
+        return strtolower(trim($value));
+    }
+
     private function splitName(string $fullName): array
     {
         $parts = preg_split('/\s+/', trim($fullName)) ?: [];
@@ -213,19 +255,4 @@ class AddUsersManagement implements AddUsersInterface
         return $normalized === '1' || $normalized === 'true' || $normalized === 'yes';
     }
 
-    private function buildUniqueEmail(string $loginCode, string $phoneNumber): string
-    {
-        $safeLogin = preg_replace('/\s+/', '', strtolower($loginCode)) ?? 'restaurant';
-        $safePhone = $phoneNumber !== '' ? $phoneNumber : uniqid('user', false);
-        $base = sprintf('%s_%s', $safeLogin, $safePhone);
-        $email = sprintf('%s@freso.local', $base);
-
-        $collection = $this->customerCollectionFactory->create();
-        $collection->addAttributeToFilter('email', $email);
-        if ($collection->getSize() === 0) {
-            return $email;
-        }
-
-        return sprintf('%s_%s@freso.local', $base, uniqid('u', false));
-    }
 }

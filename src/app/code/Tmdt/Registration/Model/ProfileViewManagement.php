@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tmdt\Registration\Model;
 
 use Magento\Framework\App\ResourceConnection;
+use Magento\Customer\Api\CustomerRepositoryInterface;
 use Magento\Framework\Exception\AuthorizationException;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Serialize\Serializer\Json;
@@ -24,7 +25,8 @@ class ProfileViewManagement implements ProfileViewInterface
         private readonly RestRequest $request,
         private readonly TokenFactory $tokenFactory,
         private readonly Json $serializer,
-        private readonly StoreManagerInterface $storeManager
+        private readonly StoreManagerInterface $storeManager,
+        private readonly CustomerRepositoryInterface $customerRepository
     ) {
     }
 
@@ -43,6 +45,20 @@ class ProfileViewManagement implements ProfileViewInterface
 
         if (!$registrationRow) {
             throw new LocalizedException(__('Khong tim thay du lieu dang ky.'));
+        }
+
+        try {
+            $customer = $this->customerRepository->getById($customerId);
+            if (!$this->isOwnerCustomer($customer)) {
+                $loginCode = trim((string) ($registrationRow['login_code'] ?? ''));
+                if ($loginCode !== '') {
+                    $ownerRegistration = $this->getOwnerRegistrationByLoginCode($loginCode);
+                    if ($ownerRegistration) {
+                        $registrationRow = $ownerRegistration;
+                    }
+                }
+            }
+        } catch (\Throwable) {
         }
 
         $files = $this->parseFilesJson($registrationRow['files_json'] ?? null);
@@ -153,6 +169,22 @@ class ProfileViewManagement implements ProfileViewInterface
         return is_array($data) ? $data : [];
     }
 
+    private function getOwnerRegistrationByLoginCode(string $loginCode): ?array
+    {
+        $connection = $this->resourceConnection->getConnection();
+        $tableName = $this->resourceConnection->getTableName(self::TABLE_NAME);
+
+        $row = $connection->fetchRow(
+            $connection->select()
+                ->from($tableName)
+                ->where('login_code = ?', $loginCode)
+                ->order('registration_id ASC')
+                ->limit(1)
+        );
+
+        return is_array($row) ? $row : null;
+    }
+
     private function parseFilesJson(?string $filesJson): array
     {
         if (!$filesJson) {
@@ -185,6 +217,21 @@ class ProfileViewManagement implements ProfileViewInterface
         }
 
         return is_string($first) ? $first : '';
+    }
+
+    private function isOwnerCustomer(\Magento\Customer\Api\Data\CustomerInterface $customer): bool
+    {
+        $isOwnerAttr = $customer->getCustomAttribute('is_owner');
+        $isSuperAttr = $customer->getCustomAttribute('is_super_admin');
+        $isOwner = $isOwnerAttr ? $this->normalizeBool($isOwnerAttr->getValue()) : false;
+        $isSuper = $isSuperAttr ? $this->normalizeBool($isSuperAttr->getValue()) : false;
+        return $isOwner || $isSuper;
+    }
+
+    private function normalizeBool(mixed $value): bool
+    {
+        $normalized = strtolower(trim((string) $value));
+        return $normalized === '1' || $normalized === 'true' || $normalized === 'yes';
     }
 
     private function buildAddressText(array $parts): string

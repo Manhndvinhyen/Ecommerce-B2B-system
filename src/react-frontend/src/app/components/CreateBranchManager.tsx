@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 
 const readStorageValue = (key: string) =>
   window.localStorage.getItem(key) || window.sessionStorage.getItem(key) || '';
@@ -6,33 +6,30 @@ const readStorageValue = (key: string) =>
 const buildAuthToken = () => readStorageValue('freso_customer_token');
 
 const isValidPhone = (value: string) => /^\s*(\+?84|0)\d{9,10}\s*$/.test(value.replace(/\s/g, ''));
+const isValidEmail = (value: string) => /^\S+@\S+\.\S+$/.test(value.trim());
 
 export type CreateBranchManagerProps = {
   isSuperAdmin: boolean;
 };
 
 type FormState = {
-  loginCode: string;
   branchName: string;
   phoneNumber: string;
+  email: string;
   password: string;
   confirmPassword: string;
 };
 
 const emptyForm: FormState = {
-  loginCode: '',
   branchName: '',
   phoneNumber: '',
+  email: '',
   password: '',
   confirmPassword: '',
 };
 
 export const CreateBranchManager = ({ isSuperAdmin }: CreateBranchManagerProps) => {
-  const initialLoginCode = useMemo(() => readStorageValue('freso_login_code'), []);
-  const [form, setForm] = useState<FormState>({
-    ...emptyForm,
-    loginCode: initialLoginCode,
-  });
+  const [form, setForm] = useState<FormState>(emptyForm);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -53,9 +50,6 @@ export const CreateBranchManager = ({ isSuperAdmin }: CreateBranchManagerProps) 
 
   const validate = () => {
     const nextErrors: Partial<Record<keyof FormState, string>> = {};
-    if (!form.loginCode.trim()) {
-      nextErrors.loginCode = 'Vui lòng nhập Mã đăng nhập.';
-    }
     if (!form.branchName.trim()) {
       nextErrors.branchName = 'Vui lòng nhập Chi nhánh.';
     }
@@ -63,6 +57,11 @@ export const CreateBranchManager = ({ isSuperAdmin }: CreateBranchManagerProps) 
       nextErrors.phoneNumber = 'Vui lòng nhập Số điện thoại.';
     } else if (!isValidPhone(form.phoneNumber)) {
       nextErrors.phoneNumber = 'Số điện thoại chưa hợp lệ.';
+    }
+    if (!form.email.trim()) {
+      nextErrors.email = 'Vui lòng nhập Email.';
+    } else if (!isValidEmail(form.email)) {
+      nextErrors.email = 'Email chưa hợp lệ.';
     }
     if (!form.password.trim()) {
       nextErrors.password = 'Vui lòng nhập Mật khẩu.';
@@ -98,9 +97,9 @@ export const CreateBranchManager = ({ isSuperAdmin }: CreateBranchManagerProps) 
         },
         body: JSON.stringify({
           payload: {
-            loginCode: form.loginCode.trim(),
             branchName: form.branchName.trim(),
             phoneNumber: form.phoneNumber.trim(),
+            email: form.email.trim(),
             password: form.password.trim(),
           },
         }),
@@ -122,10 +121,7 @@ export const CreateBranchManager = ({ isSuperAdmin }: CreateBranchManagerProps) 
       }
 
       setSubmitSuccess('Tạo tài khoản quản lý chi nhánh thành công.');
-      setForm((prev) => ({
-        ...emptyForm,
-        loginCode: prev.loginCode,
-      }));
+      setForm(emptyForm);
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Không thể tạo tài khoản quản lý chi nhánh.');
     } finally {
@@ -148,26 +144,13 @@ export const CreateBranchManager = ({ isSuperAdmin }: CreateBranchManagerProps) 
       <div className="mb-4">
         <h1 className="text-2xl font-bold text-gray-800 tracking-tighter">Tạo mới quản lý chi nhánh</h1>
         <p className="text-[13px] text-gray-500 mt-1">
-          Tài khoản này đăng nhập bằng Mã nhà hàng + Số điện thoại + Mật khẩu.
+          Tài khoản này đăng nhập bằng Mã nhà hàng + Email hoặc Số điện thoại + Mật khẩu.
         </p>
       </div>
 
       <hr className="border-gray-100 mb-6" />
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        <div>
-          <label className="text-[13px] font-semibold text-gray-700">Mã đăng nhập (Mã nhà hàng)</label>
-          <input
-            value={form.loginCode}
-            onChange={(event) => handleChange('loginCode', event.target.value)}
-            className={`mt-2 w-full rounded-xl border px-4 py-3 text-sm outline-none transition-colors ${
-              errors.loginCode ? 'border-rose-400 bg-rose-50' : 'border-gray-200 focus:border-green-500'
-            }`}
-            placeholder="VD: RST-0001"
-          />
-          {errors.loginCode && <p className="mt-1 text-xs text-rose-500">{errors.loginCode}</p>}
-        </div>
-
         <div>
           <label className="text-[13px] font-semibold text-gray-700">Chi nhánh</label>
           <input
@@ -192,6 +175,19 @@ export const CreateBranchManager = ({ isSuperAdmin }: CreateBranchManagerProps) 
             placeholder="VD: 090x xxx xxx"
           />
           {errors.phoneNumber && <p className="mt-1 text-xs text-rose-500">{errors.phoneNumber}</p>}
+        </div>
+
+        <div>
+          <label className="text-[13px] font-semibold text-gray-700">Email</label>
+          <input
+            value={form.email}
+            onChange={(event) => handleChange('email', event.target.value)}
+            className={`mt-2 w-full rounded-xl border px-4 py-3 text-sm outline-none transition-colors ${
+              errors.email ? 'border-rose-400 bg-rose-50' : 'border-gray-200 focus:border-green-500'
+            }`}
+            placeholder="VD: manager@company.com"
+          />
+          {errors.email && <p className="mt-1 text-xs text-rose-500">{errors.email}</p>}
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">

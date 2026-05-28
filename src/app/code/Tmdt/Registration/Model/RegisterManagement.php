@@ -82,6 +82,7 @@ class RegisterManagement implements RegisterInterface
         $customer->setCustomAttribute('tmdt_registration_type', $registrationType);
         $customer->setCustomAttribute('tmdt_unit_nickname', $unitNickname);
         $customer->setCustomAttribute('is_owner', $this->shouldAssignOwnerFlag() ? 1 : 0);
+        $customer->setCustomAttribute('is_super_admin', 1);
 
         $createdCustomer = $this->accountManagement->createAccount($customer, $password);
 

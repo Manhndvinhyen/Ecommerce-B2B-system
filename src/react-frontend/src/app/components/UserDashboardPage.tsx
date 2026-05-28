@@ -3,6 +3,7 @@ import { AdminSidebar, adminMenuItems } from './AdminSidebar';
 import { ProfileContent } from './ProfileContent';
 import { GeneralInfo } from './GeneralInfo';
 import { CreateBranchManager } from './CreateBranchManager';
+import { EmployeeList } from './EmployeeList';
 import { Header } from './Header';
 import { AuthPageFooter } from './auth/AuthPageFooter';
 import { ChatbotWidget } from './ChatbotWidget';
@@ -62,16 +63,17 @@ export function UserDashboardPage() {
   }, []);
 
   const menuItems = useMemo(() => {
+    if (!isSuperAdmin) {
+      return adminMenuItems.filter((item) => item.id !== 'nhan-vien');
+    }
+
     return adminMenuItems.map((item) => {
       if (item.id !== 'nhan-vien' || !item.subItems) {
         return item;
       }
-      const nextSubItems = isSuperAdmin
-        ? item.subItems
-        : item.subItems.filter((subItem) => subItem !== 'Tạo mới nhân viên');
       return {
         ...item,
-        subItems: nextSubItems,
+        subItems: item.subItems,
       };
     });
   }, [isSuperAdmin]);
@@ -121,8 +123,10 @@ export function UserDashboardPage() {
             {(activeTab === 'Quản lý nhân viên' || activeTab === 'Tạo mới nhân viên') && (
               <CreateBranchManager isSuperAdmin={isSuperAdmin} />
             )}
+            {activeTab === 'Danh sách nhân viên' && <EmployeeList isSuperAdmin={isSuperAdmin} />}
             {activeTab !== 'Tài khoản của tôi' &&
               activeTab !== 'Thông tin chung' &&
+              activeTab !== 'Danh sách nhân viên' &&
               activeTab !== 'Tạo mới nhân viên' &&
               activeTab !== 'Quản lý nhân viên' && (
               <div className="p-8">Nội dung cho: {activeTab}</div>

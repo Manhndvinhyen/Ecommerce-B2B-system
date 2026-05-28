@@ -37,6 +37,17 @@ export const ProfileContent = () => {
 
   const getAuthToken = () => readStorageValue('freso_customer_token');
 
+  const parseBoolFlag = (value: string) => {
+    const normalized = value.trim().toLowerCase();
+    return normalized === '1' || normalized === 'true' || normalized === 'yes';
+  };
+
+  const getStoredRole = () => {
+    const isOwner = parseBoolFlag(readStorageValue('freso_is_owner'));
+    const isSuperAdmin = parseBoolFlag(readStorageValue('freso_is_super_admin'));
+    return isOwner || isSuperAdmin ? 'Chủ sở hữu' : 'Quản lý';
+  };
+
   const getStoredProfile = (): Profile => {
     const name = readStorageValue('freso_customer_name') || 'Khách hàng';
     const email = readStorageValue('freso_customer_email') || 'chua-cap-nhat@freso.vn';
@@ -47,7 +58,7 @@ export const ProfileContent = () => {
       phone,
       email,
       branch,
-      role: 'Khách hàng',
+      role: getStoredRole(),
     };
   };
 
@@ -102,6 +113,11 @@ export const ProfileContent = () => {
       const customAttributes = Array.isArray(info.custom_attributes) ? info.custom_attributes : [];
       const unitNickname = customAttributes.find((attr) => attr?.attribute_code === 'tmdt_unit_nickname')?.value || info.unit_nickname;
       const branch = typeof unitNickname === 'string' && unitNickname.trim() ? unitNickname.trim() : '';
+      const ownerAttr = customAttributes.find((attr) => attr?.attribute_code === 'is_owner')?.value;
+      const superAdminAttr = customAttributes.find((attr) => attr?.attribute_code === 'is_super_admin')?.value;
+      const isOwner = parseBoolFlag(String(ownerAttr ?? ''));
+      const isSuperAdmin = parseBoolFlag(String(superAdminAttr ?? ''));
+      const role = isOwner || isSuperAdmin ? 'Chủ sở hữu' : 'Quản lý';
 
       setProfile((prev) => ({
         ...prev,
@@ -109,6 +125,7 @@ export const ProfileContent = () => {
         email: email || prev.email,
         branch: branch || prev.branch,
         phone: phone || prev.phone,
+        role,
       }));
       setForm((prev) => ({
         ...prev,
@@ -122,6 +139,8 @@ export const ProfileContent = () => {
       writeStorageValue('freso_customer_name', name);
       writeStorageValue('freso_branch_name', branch);
       writeStorageValue('freso_customer_phone', phone);
+      writeStorageValue('freso_is_owner', isOwner ? '1' : '0');
+      writeStorageValue('freso_is_super_admin', isSuperAdmin ? '1' : '0');
     };
 
     const loadRegistrationProfile = async () => {
@@ -165,18 +184,26 @@ export const ProfileContent = () => {
             ? String((info as { phone?: unknown }).phone)
             : '';
 
+      const branchName =
+        typeof (info as { unit_nickname?: unknown }).unit_nickname === 'string'
+          ? String((info as { unit_nickname?: unknown }).unit_nickname)
+          : '';
+
       if (!phone.trim()) return;
 
       setProfile((prev) => ({
         ...prev,
         phone: phone || prev.phone,
+        branch: branchName || prev.branch,
       }));
       setForm((prev) => ({
         ...prev,
         phone: phone || prev.phone,
+        branch: branchName || prev.branch,
       }));
 
       writeStorageValue('freso_customer_phone', phone);
+      writeStorageValue('freso_branch_name', branchName || profile.branch || '');
     };
 
     Promise.allSettled([loadCustomerMe(), loadRegistrationProfile()]).catch((err) => {

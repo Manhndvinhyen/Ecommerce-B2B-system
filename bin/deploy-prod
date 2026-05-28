@@ -22,7 +22,8 @@ git reset --hard "origin/$BRANCH"
 
 echo ""
 echo "🔑 Fixing file permissions..."
-chmod -R 777 src/app/etc/ 2>/dev/null || true
+mkdir -p src/var src/generated src/pub/static src/pub/media/tmdt_registration/licenses
+bin/docker-compose --prod exec -T -u root phpfpm sh -c "mkdir -p /var/www/html/var /var/www/html/generated /var/www/html/pub/static /var/www/html/pub/media/tmdt_registration/licenses && chown -R app:app /var/www/html/var /var/www/html/generated /var/www/html/pub/static /var/www/html/pub/media /var/www/html/app/etc && chmod -R u+rwX,g+rwX /var/www/html/var /var/www/html/generated /var/www/html/pub/static /var/www/html/pub/media /var/www/html/app/etc" || true
 
 echo ""
 echo "⚙️  Running Magento setup:upgrade..."
@@ -35,6 +36,10 @@ bin/docker-compose --prod exec -T phpfpm bin/magento cache:flush
 echo ""
 echo "🔨 Building React frontend..."
 bin/deploy-react
+
+echo ""
+echo "Re-applying writable directory permissions..."
+bin/docker-compose --prod exec -T -u root phpfpm sh -c "mkdir -p /var/www/html/pub/media/tmdt_registration/licenses && chown -R app:app /var/www/html/var /var/www/html/generated /var/www/html/pub/static /var/www/html/pub/media /var/www/html/app/etc && chmod -R u+rwX,g+rwX /var/www/html/var /var/www/html/generated /var/www/html/pub/static /var/www/html/pub/media /var/www/html/app/etc" || true
 
 echo ""
 echo "========================================"

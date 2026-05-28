@@ -85,9 +85,9 @@ class RegisterManagement implements RegisterInterface
 
         $createdCustomer = $this->accountManagement->createAccount($customer, $password);
 
-        $storedFiles = $this->storeUploadedFiles((int) $createdCustomer->getId(), $payload['files'] ?? []);
-
         try {
+            $storedFiles = $this->storeUploadedFiles((int) $createdCustomer->getId(), $payload['files'] ?? []);
+
             $connection->insert($tableName, [
                 'customer_id' => (int) $createdCustomer->getId(),
                 'email' => $email,
@@ -109,7 +109,11 @@ class RegisterManagement implements RegisterInterface
                 'notes' => null,
             ]);
         } catch (DuplicateException $exception) {
+            $this->deleteCreatedCustomer((int) $createdCustomer->getId());
             throw new InputException(__('Mã đăng nhập đã tồn tại. Vui lòng chọn mã khác.'));
+        } catch (\Throwable $exception) {
+            $this->deleteCreatedCustomer((int) $createdCustomer->getId());
+            throw $exception;
         }
 
         return [
@@ -117,6 +121,20 @@ class RegisterManagement implements RegisterInterface
             'message' => (string) __('Đăng ký đã được lưu vào Magento.'),
             'customer_id' => (int) $createdCustomer->getId(),
         ];
+    }
+
+    private function deleteCreatedCustomer(int $customerId): void
+    {
+        if ($customerId <= 0) {
+            return;
+        }
+
+        try {
+            \Magento\Framework\App\ObjectManager::getInstance()
+                ->get(\Magento\Customer\Api\CustomerRepositoryInterface::class)
+                ->deleteById($customerId);
+        } catch (\Throwable) {
+        }
     }
 
     private function shouldAssignOwnerFlag(): bool

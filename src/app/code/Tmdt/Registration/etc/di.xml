@@ -9,4 +9,6 @@
     <preference for="Tmdt\Registration\Api\ProfileViewInterface" type="Tmdt\Registration\Model\ProfileViewManagement" />
     <preference for="Tmdt\Registration\Api\AddUsersInterface" type="Tmdt\Registration\Model\AddUsersManagement" />
     <preference for="Tmdt\Registration\Api\BranchManagerListInterface" type="Tmdt\Registration\Model\BranchManagerListManagement" />
+    <preference for="Tmdt\Registration\Api\BranchManagerUpdateInterface" type="Tmdt\Registration\Model\BranchManagerUpdateManagement" />
+    <preference for="Tmdt\Registration\Api\BranchManagerDeleteInterface" type="Tmdt\Registration\Model\BranchManagerDeleteManagement" />
 </config>

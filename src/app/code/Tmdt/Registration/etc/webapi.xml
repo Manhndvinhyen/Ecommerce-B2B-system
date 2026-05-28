@@ -54,4 +54,16 @@
             <resource ref="self" />
         </resources>
     </route>
+    <route url="/V1/tmdt-registration/branch-managers/:managerId" method="PUT">
+        <service class="Tmdt\Registration\Api\BranchManagerUpdateInterface" method="update" />
+        <resources>
+            <resource ref="self" />
+        </resources>
+    </route>
+    <route url="/V1/tmdt-registration/branch-managers/:managerId" method="DELETE">
+        <service class="Tmdt\Registration\Api\BranchManagerDeleteInterface" method="delete" />
+        <resources>
+            <resource ref="self" />
+        </resources>
+    </route>
 </routes>

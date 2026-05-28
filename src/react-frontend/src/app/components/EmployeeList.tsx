@@ -19,6 +19,8 @@ type ApiResponse = {
   message?: string;
 };
 
+type ApiArrayResponse = [boolean, EmployeeItem[]?];
+
 const formatStatus = (status: string) => {
   const normalized = status.trim().toLowerCase();
   if (!normalized || normalized === 'approved') return 'Đang hoạt động';
@@ -59,12 +61,17 @@ export const EmployeeList = ({ isSuperAdmin }: { isSuperAdmin: boolean }) => {
       },
     })
       .then(async (res) => {
-        const data = (await res.json().catch(() => ({}))) as ApiResponse;
-        if (!res.ok || data?.success === false) {
+        const raw = (await res.json().catch(() => ({}))) as ApiResponse | ApiArrayResponse;
+        const arrayPayload = Array.isArray(raw) ? (raw as ApiArrayResponse) : null;
+        const data = (!Array.isArray(raw) ? (raw as ApiResponse) : null) || null;
+        const isSuccess = arrayPayload ? arrayPayload[0] !== false : data?.success !== false;
+        if (!res.ok || !isSuccess) {
           const message = data?.message || 'Không thể tải danh sách nhân viên.';
           throw new Error(message);
         }
-        setItems(Array.isArray(data.items) ? data.items : []);
+        const itemsFromArray = arrayPayload && Array.isArray(arrayPayload[1]) ? arrayPayload[1] : [];
+        const itemsFromObject = data && Array.isArray(data.items) ? data.items : [];
+        setItems(itemsFromArray.length ? itemsFromArray : itemsFromObject);
       })
       .catch((err) => {
         setErrorMessage(err instanceof Error ? err.message : 'Không thể tải danh sách nhân viên.');

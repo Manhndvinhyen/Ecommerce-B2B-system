@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Tmdt\Registration\Model;
 
-use Magento\Framework\App\ResourceConnection;
 use Magento\Customer\Api\CustomerRepositoryInterface;
+use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\Exception\AuthorizationException;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Serialize\Serializer\Json;
@@ -33,6 +33,8 @@ class ProfileViewManagement implements ProfileViewInterface
     public function get(): array
     {
         $customerId = $this->getCustomerIdFromRequest();
+        $isOwner = false;
+        $isSuperAdmin = false;
 
         $connection = $this->resourceConnection->getConnection();
         $tableName = $this->resourceConnection->getTableName(self::TABLE_NAME);
@@ -49,7 +51,12 @@ class ProfileViewManagement implements ProfileViewInterface
 
         try {
             $customer = $this->customerRepository->getById($customerId);
-            if (!$this->isOwnerCustomer($customer)) {
+            $isOwnerAttr = $customer->getCustomAttribute('is_owner');
+            $isSuperAttr = $customer->getCustomAttribute('is_super_admin');
+            $isOwner = $isOwnerAttr ? $this->normalizeBool($isOwnerAttr->getValue()) : false;
+            $isSuperAdmin = $isSuperAttr ? $this->normalizeBool($isSuperAttr->getValue()) : false;
+
+            if (!$isOwner && !$isSuperAdmin) {
                 $loginCode = trim((string) ($registrationRow['login_code'] ?? ''));
                 if ($loginCode !== '') {
                     $ownerRegistration = $this->getOwnerRegistrationByLoginCode($loginCode);
@@ -92,6 +99,8 @@ class ProfileViewManagement implements ProfileViewInterface
                 'notes' => (string) ($registrationRow['notes'] ?? ''),
                 'files' => $files,
                 'license_name' => $licenseName,
+                'is_owner' => $isOwner ? 1 : 0,
+                'is_super_admin' => $isSuperAdmin ? 1 : 0,
             ],
         ];
     }
@@ -154,8 +163,7 @@ class ProfileViewManagement implements ProfileViewInterface
         }
 
         $payload = $this->getJsonPayload();
-        $token = trim((string) ($payload['token'] ?? ($payload['payload']['token'] ?? '')));
-        return $token;
+        return trim((string) ($payload['token'] ?? ($payload['payload']['token'] ?? '')));
     }
 
     private function getJsonPayload(): array
@@ -217,15 +225,6 @@ class ProfileViewManagement implements ProfileViewInterface
         }
 
         return is_string($first) ? $first : '';
-    }
-
-    private function isOwnerCustomer(\Magento\Customer\Api\Data\CustomerInterface $customer): bool
-    {
-        $isOwnerAttr = $customer->getCustomAttribute('is_owner');
-        $isSuperAttr = $customer->getCustomAttribute('is_super_admin');
-        $isOwner = $isOwnerAttr ? $this->normalizeBool($isOwnerAttr->getValue()) : false;
-        $isSuper = $isSuperAttr ? $this->normalizeBool($isSuperAttr->getValue()) : false;
-        return $isOwner || $isSuper;
     }
 
     private function normalizeBool(mixed $value): bool

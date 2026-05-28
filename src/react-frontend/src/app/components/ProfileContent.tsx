@@ -189,12 +189,21 @@ export const ProfileContent = () => {
           ? String((info as { unit_nickname?: unknown }).unit_nickname)
           : '';
 
-      if (!phone.trim()) return;
+      const hasOwnerFlag = Object.prototype.hasOwnProperty.call(info, 'is_owner');
+      const hasSuperFlag = Object.prototype.hasOwnProperty.call(info, 'is_super_admin');
+      const roleOwnerFlag = hasOwnerFlag
+        ? parseBoolFlag(String((info as { is_owner?: unknown }).is_owner ?? ''))
+        : parseBoolFlag(readStorageValue('freso_is_owner'));
+      const roleSuperFlag = hasSuperFlag
+        ? parseBoolFlag(String((info as { is_super_admin?: unknown }).is_super_admin ?? ''))
+        : parseBoolFlag(readStorageValue('freso_is_super_admin'));
+      const roleLabel = roleOwnerFlag || roleSuperFlag ? 'Chủ sở hữu' : 'Quản lý';
 
       setProfile((prev) => ({
         ...prev,
         phone: phone || prev.phone,
         branch: branchName || prev.branch,
+        role: roleLabel,
       }));
       setForm((prev) => ({
         ...prev,
@@ -204,6 +213,12 @@ export const ProfileContent = () => {
 
       writeStorageValue('freso_customer_phone', phone);
       writeStorageValue('freso_branch_name', branchName || profile.branch || '');
+      if (hasOwnerFlag) {
+        writeStorageValue('freso_is_owner', roleOwnerFlag ? '1' : '0');
+      }
+      if (hasSuperFlag) {
+        writeStorageValue('freso_is_super_admin', roleSuperFlag ? '1' : '0');
+      }
     };
 
     Promise.allSettled([loadCustomerMe(), loadRegistrationProfile()]).catch((err) => {

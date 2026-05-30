@@ -67,8 +67,10 @@ export function ShoppingCartPage() {
       supplier: suppliers[0] || ''
     };
 
-    window.sessionStorage.setItem(checkoutPayloadKey, JSON.stringify(payload));
-    const checkoutUrl = 'https://magento.test/react/index.html?view=checkout';
+    const serializedPayload = JSON.stringify(payload);
+    window.sessionStorage.setItem(checkoutPayloadKey, serializedPayload);
+    window.localStorage.setItem(checkoutPayloadKey, serializedPayload);
+    const checkoutUrl = `${reactHomeUrl}?view=checkout`;
     safeNavigate(checkoutUrl);
   };
 

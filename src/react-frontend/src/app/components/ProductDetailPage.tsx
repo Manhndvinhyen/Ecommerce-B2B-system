@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Heart, ShoppingCart } from 'lucide-react';
+import { ImageWithFallback } from './figma/ImageWithFallback';
 import { WishlistAddModal, WishlistModalProduct } from './WishlistAddModal';
 import { useCart, toCurrencyTextFromNumber, toUnitPriceFromLooseValue } from '../cart/CartProvider';
 import { toQuerySlug } from '../data/categories';
@@ -112,6 +113,7 @@ export function ProductDetailPage() {
   const [isFavorite, setIsFavorite] = useState(false);
   const [product, setProduct] = useState<MagentoProduct | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [wishlistProduct, setWishlistProduct] = useState<WishlistModalProduct | null>(null);
   const holdTimerRef = useRef<number | null>(null);
@@ -212,6 +214,7 @@ export function ProductDetailPage() {
           method: 'POST',
           signal: controller.signal,
           cache: 'no-store',
+          credentials: 'omit',
           headers: {
             'Content-Type': 'application/json'
           },
@@ -296,26 +299,31 @@ export function ProductDetailPage() {
   };
 
   const handleAddToCart = async () => {
-    if (!product) {
+    if (!product || isAddingToCart) {
       return;
     }
     // Add straight to cart (no modal).
     // Quantity should be added to cart, but cart badge should count distinct items.
     const sourceElement = imageRef.current ?? document.getElementById('pdp-product-image');
-    await quickAddToCart(
-      {
-        id: product.id,
-        sku: product.sku,
-        name: product.name,
-        category: product.category,
-        priceText: toCurrencyTextFromNumber(product.price),
-        unit: product.unit,
-        unitPrice: toUnitPriceFromLooseValue(product.price),
-        image: product.image
-      },
-      quantity,
-      sourceElement
-    );
+    setIsAddingToCart(true);
+    try {
+      await quickAddToCart(
+        {
+          id: product.id,
+          sku: product.sku,
+          name: product.name,
+          category: product.category,
+          priceText: toCurrencyTextFromNumber(product.price),
+          unit: product.unit,
+          unitPrice: toUnitPriceFromLooseValue(product.price),
+          image: product.image
+        },
+        quantity,
+        sourceElement
+      );
+    } finally {
+      setIsAddingToCart(false);
+    }
   };
 
   const openWishlistModal = () => {
@@ -372,7 +380,7 @@ export function ProductDetailPage() {
               <div className="grid gap-10 lg:grid-cols-[1.1fr_1fr]">
                 <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
                   <div className="group relative overflow-hidden rounded-2xl bg-gray-50">
-                    <img
+                    <ImageWithFallback
                       id="pdp-product-image"
                       ref={imageRef}
                       src={product.image}
@@ -479,10 +487,11 @@ export function ProductDetailPage() {
                     <button
                       type="button"
                       onClick={handleAddToCart}
+                      disabled={isAddingToCart}
                       className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-green-600 px-6 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-70"
                     >
                       <ShoppingCart className="size-5" />
-                      Thêm vào giỏ hàng
+                      {isAddingToCart ? 'Đang thêm...' : 'Thêm vào giỏ hàng'}
                     </button>
                   </div>
                 </div>

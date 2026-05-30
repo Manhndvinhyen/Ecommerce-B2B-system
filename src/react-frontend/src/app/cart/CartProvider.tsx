@@ -28,6 +28,23 @@ export type CartLineItem = {
   note: string;
 };
 
+type MagentoCartItem = {
+  id: number | string;
+  quantity?: number;
+  product?: {
+    sku?: string | null;
+    name?: string | null;
+    categories?: Array<{ name?: string | null }> | null;
+    small_image?: { url?: string | null } | null;
+    thumbnail?: { url?: string | null } | null;
+    price_range?: {
+      minimum_price?: {
+        final_price?: { value?: number | null } | null;
+      } | null;
+    } | null;
+  } | null;
+};
+
 type CartContextValue = {
   cartItems: CartLineItem[];
   cartItemCount: number;
@@ -45,6 +62,47 @@ const CartContext = createContext<CartContextValue | null>(null);
 const formatCurrency = (value: number) => `${new Intl.NumberFormat('vi-VN').format(Math.round(value))}đ`;
 
 const clampQuantity = (value: number) => Math.max(1, Math.floor(value));
+
+const authSessionErrorMarkers = [
+  'consumer key has expired',
+  'token has expired',
+  'invalid token',
+  'the current customer',
+  'current customer',
+  'authorization',
+  'unauthorized',
+  'khong hop le hoac da het han',
+  'không hợp lệ hoặc đã hết hạn',
+];
+
+const isAuthSessionError = (message: string) => {
+  const normalized = message.toLowerCase();
+  return authSessionErrorMarkers.some((marker) => normalized.includes(marker));
+};
+
+const clearCustomerAuthSession = () => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const keys = [
+    'freso_customer_token',
+    'freso_login_token',
+    'freso_customer_cart_id',
+    'freso_customer_cart_token',
+  ];
+
+  keys.forEach((key) => {
+    window.localStorage.removeItem(key);
+    window.sessionStorage.removeItem(key);
+  });
+
+  window.localStorage.setItem('freso_last_logout', String(Date.now()));
+};
+
+let activeCustomerCartIdRequest: Promise<string> | null = null;
+let activeCustomerCartItemsRequest: Promise<MagentoCartItem[]> | null = null;
+let activeAddToCartRequest: Promise<MagentoCartItem[]> | null = null;
 
 function parseNumberFromText(value: string): number {
   const digits = value.replace(/[^\d]/g, '');
@@ -182,6 +240,7 @@ export function CartProvider({ children }: PropsWithChildren) {
 
       const response = await fetch('/graphql', {
         method: 'POST',
+        credentials: 'omit',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
@@ -191,11 +250,20 @@ export function CartProvider({ children }: PropsWithChildren) {
 
       if (!response.ok) {
         const responseText = await response.text().catch(() => '');
+        if (response.status === 401 || response.status === 403 || isAuthSessionError(responseText)) {
+          clearCustomerAuthSession();
+          throw new Error('Phiên đăng nhập hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.');
+        }
         throw new Error(`GraphQL request failed: ${response.status} ${response.statusText} ${responseText}`);
       }
 
       const json = await response.json();
       if (json?.errors?.length) {
+        const message = json.errors.map((error: { message?: string }) => error?.message ?? '').join(' ');
+        if (isAuthSessionError(message)) {
+          clearCustomerAuthSession();
+          throw new Error('Phiên đăng nhập hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.');
+        }
         throw new Error(json.errors[0]?.message ?? 'GraphQL error');
       }
 
@@ -216,35 +284,26 @@ export function CartProvider({ children }: PropsWithChildren) {
       window.localStorage.removeItem('freso_customer_cart_token');
     }
 
-    const data = await graphqlRequest(`query CustomerCart { customerCart { id } }`);
-    const cartId = data?.customerCart?.id;
-    if (!cartId) {
-      throw new Error('Không lấy được mã giỏ hàng.');
+    if (!activeCustomerCartIdRequest) {
+      activeCustomerCartIdRequest = (async () => {
+        const data = await graphqlRequest(`query CustomerCart { customerCart { id } }`);
+        const cartId = data?.customerCart?.id;
+        if (!cartId) {
+          throw new Error('Không lấy được mã giỏ hàng.');
+        }
+
+        window.localStorage.setItem('freso_customer_cart_id', cartId);
+        if (token) {
+          window.localStorage.setItem('freso_customer_cart_token', token);
+        }
+        return cartId;
+      })().finally(() => {
+        activeCustomerCartIdRequest = null;
+      });
     }
 
-    window.localStorage.setItem('freso_customer_cart_id', cartId);
-    if (token) {
-      window.localStorage.setItem('freso_customer_cart_token', token);
-    }
-    return cartId;
+    return activeCustomerCartIdRequest;
   }, [getAuthToken, graphqlRequest]);
-
-  type MagentoCartItem = {
-    id: number | string;
-    quantity?: number;
-    product?: {
-      sku?: string | null;
-      name?: string | null;
-      categories?: Array<{ name?: string | null }> | null;
-      small_image?: { url?: string | null } | null;
-      thumbnail?: { url?: string | null } | null;
-      price_range?: {
-        minimum_price?: {
-          final_price?: { value?: number | null } | null;
-        } | null;
-      } | null;
-    } | null;
-  };
 
   const mapMagentoCartItems = useCallback((items: MagentoCartItem[] = []): CartLineItem[] => {
     return items.map((item) => {
@@ -275,31 +334,41 @@ export function CartProvider({ children }: PropsWithChildren) {
       return;
     }
 
-    const data = await graphqlRequest(`
-      query CustomerCartItems {
-        customerCart {
-          id
-          items {
-            id
-            quantity
-            product {
-              sku
-              name
-              categories { name }
-              small_image { url }
-              thumbnail { url }
-              price_range { minimum_price { final_price { value } } }
+    if (!activeCustomerCartItemsRequest) {
+      activeCustomerCartItemsRequest = (async () => {
+        const data = await graphqlRequest(`
+          query CustomerCartItems {
+            customerCart {
+              id
+              items {
+                id
+                quantity
+                product {
+                  sku
+                  name
+                  categories { name }
+                  small_image { url }
+                  thumbnail { url }
+                  price_range { minimum_price { final_price { value } } }
+                }
+              }
             }
           }
-        }
-      }
-    `);
+        `);
 
-    const items: MagentoCartItem[] = data?.customerCart?.items ?? [];
-    const cartId = data?.customerCart?.id;
-    if (cartId) {
-      window.localStorage.setItem('freso_customer_cart_id', cartId);
+        const items: MagentoCartItem[] = data?.customerCart?.items ?? [];
+        const cartId = data?.customerCart?.id;
+        if (cartId) {
+          window.localStorage.setItem('freso_customer_cart_id', cartId);
+        }
+
+        return items;
+      })().finally(() => {
+        activeCustomerCartItemsRequest = null;
+      });
     }
+
+    const items = await activeCustomerCartItemsRequest;
     setCartItems(mapMagentoCartItems(items));
   }, [graphqlRequest, isAuthenticated, mapMagentoCartItems]);
 
@@ -339,15 +408,28 @@ export function CartProvider({ children }: PropsWithChildren) {
         }
       `;
 
-  const cartItems = [{ sku: normalizedSku, quantity: targetQuantity }];
-
-      try {
+      const cartItems = [{ sku: normalizedSku, quantity: targetQuantity }];
+      const performAddToCart = async () => {
         const cartId = await getCustomerCartId();
         const data = await graphqlRequest(mutation, { cartId, items: cartItems });
         return data?.addProductsToCart?.cart?.items ?? [];
+      };
+
+      try {
+        if (!activeAddToCartRequest) {
+          activeAddToCartRequest = performAddToCart().finally(() => {
+            activeAddToCartRequest = null;
+          });
+        }
+
+        return await activeAddToCartRequest;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const normalized = message.toLowerCase();
+        if (isAuthSessionError(message)) {
+          clearCustomerAuthSession();
+          throw error;
+        }
         if (normalized.includes('authorization') || normalized.includes('current customer')) {
           window.localStorage.removeItem('freso_customer_cart_id');
           window.localStorage.removeItem('freso_customer_cart_token');
@@ -361,9 +443,10 @@ export function CartProvider({ children }: PropsWithChildren) {
         ) {
           window.localStorage.removeItem('freso_customer_cart_id');
           window.localStorage.removeItem('freso_customer_cart_token');
-          const cartId = await getCustomerCartId();
-          const data = await graphqlRequest(mutation, { cartId, items: cartItems });
-          return data?.addProductsToCart?.cart?.items ?? [];
+          activeAddToCartRequest = performAddToCart().finally(() => {
+            activeAddToCartRequest = null;
+          });
+          return await activeAddToCartRequest;
         }
         throw error;
       }
@@ -514,7 +597,7 @@ export function CartProvider({ children }: PropsWithChildren) {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setToastMessage('Không thể thêm sản phẩm vào giỏ hàng. Vui lòng thử lại.');
-      if (message.toLowerCase().includes('authorization') || message.toLowerCase().includes('current customer')) {
+      if (isAuthSessionError(message)) {
         setIsLoginPromptOpen(true);
       }
       toastTimerRef.current = window.setTimeout(() => setToastMessage(''), 2400);
@@ -546,7 +629,7 @@ export function CartProvider({ children }: PropsWithChildren) {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setToastMessage('Không thể thêm sản phẩm vào giỏ hàng. Vui lòng thử lại.');
-        if (message.toLowerCase().includes('authorization') || message.toLowerCase().includes('current customer')) {
+        if (isAuthSessionError(message)) {
           setIsLoginPromptOpen(true);
         }
         toastTimerRef.current = window.setTimeout(() => setToastMessage(''), 2400);

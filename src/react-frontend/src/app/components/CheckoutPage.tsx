@@ -53,8 +53,25 @@ const getAuthToken = () =>
 
 const isValidPhone = (value: string) => /^(\+?84|0)\d{9,10}$/.test(value.replace(/\s/g, ''));
 
+type MagentoCartItem = {
+  id: number | string;
+  quantity?: number;
+  product?: {
+    sku?: string | null;
+    name?: string | null;
+    categories?: Array<{ name?: string | null }> | null;
+    small_image?: { url?: string | null } | null;
+    thumbnail?: { url?: string | null } | null;
+    price_range?: {
+      minimum_price?: {
+        final_price?: { value?: number | null } | null;
+      } | null;
+    } | null;
+  } | null;
+};
+
 const readCheckoutPayload = (): CheckoutPayload | null => {
-  const raw = window.sessionStorage.getItem(checkoutPayloadKey);
+  const raw = window.sessionStorage.getItem(checkoutPayloadKey) || window.localStorage.getItem(checkoutPayloadKey);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as CheckoutPayload;
@@ -63,6 +80,84 @@ const readCheckoutPayload = (): CheckoutPayload | null => {
   } catch {
     return null;
   }
+};
+
+const buildCheckoutPayload = (items: CheckoutItem[]): CheckoutPayload => {
+  const suppliers = Array.from(new Set(items.map((item) => item.category).filter(Boolean)));
+  return {
+    items,
+    subtotal: items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
+    suppliers,
+    supplier: suppliers[0] || ''
+  };
+};
+
+const mapMagentoCartItems = (items: MagentoCartItem[] = []): CheckoutItem[] => {
+  return items.map((item) => {
+    const product = item.product ?? {};
+    const unitPrice = Number(product.price_range?.minimum_price?.final_price?.value ?? 0);
+    const category = product.categories?.find((cat) => cat?.name)?.name ?? '';
+
+    return {
+      id: String(item.id),
+      sku: product.sku ?? '',
+      name: product.name ?? 'Sản phẩm',
+      quantity: Math.max(1, Math.floor(item.quantity ?? 1)),
+      unitPrice,
+      unit: 'SP',
+      image: product.small_image?.url || product.thumbnail?.url || '',
+      category
+    };
+  });
+};
+
+const fetchCustomerCartPayload = async (): Promise<CheckoutPayload | null> => {
+  const token = getAuthToken();
+  if (!token) {
+    return null;
+  }
+
+  const response = await fetch('/graphql', {
+    method: 'POST',
+    credentials: 'omit',
+    cache: 'no-store',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      query: `
+        query CheckoutCustomerCart {
+          customerCart {
+            items {
+              id
+              quantity
+              product {
+                sku
+                name
+                categories { name }
+                small_image { url }
+                thumbnail { url }
+                price_range { minimum_price { final_price { value } } }
+              }
+            }
+          }
+        }
+      `
+    })
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const json = await response.json().catch(() => null);
+  if (json?.errors?.length) {
+    return null;
+  }
+
+  const items = mapMagentoCartItems(json?.data?.customerCart?.items ?? []);
+  return items.length > 0 ? buildCheckoutPayload(items) : null;
 };
 
 const loadSavedShipping = (): ShippingInfo | null => {
@@ -121,8 +216,12 @@ export function CheckoutPage() {
   const totalAmount = subtotal + shippingFee - shippingDiscount;
 
   useEffect(() => {
+    let isCancelled = false;
+
+    const loadCheckoutItems = async () => {
     const storedPayload = readCheckoutPayload();
     if (storedPayload) {
+      if (isCancelled) return;
       setCheckoutItems(storedPayload.items);
       setSupplierOptions(storedPayload.suppliers);
       setSupplier(storedPayload.supplier || storedPayload.suppliers[0] || '');
@@ -141,13 +240,25 @@ export function CheckoutPage() {
       category: item.category
     }));
 
-    if (selected.length > 0) {
-      const suppliers = Array.from(new Set(selected.map((item) => item.category).filter(Boolean)));
-      setCheckoutItems(selected);
-      setSupplierOptions(suppliers);
-      setSupplier(suppliers[0] || '');
+    const fallbackPayload = selected.length > 0 ? buildCheckoutPayload(selected) : await fetchCustomerCartPayload();
+    if (isCancelled) return;
+
+    if (fallbackPayload) {
+      const serializedPayload = JSON.stringify(fallbackPayload);
+      window.sessionStorage.setItem(checkoutPayloadKey, serializedPayload);
+      window.localStorage.setItem(checkoutPayloadKey, serializedPayload);
+      setCheckoutItems(fallbackPayload.items);
+      setSupplierOptions(fallbackPayload.suppliers);
+      setSupplier(fallbackPayload.supplier || fallbackPayload.suppliers[0] || '');
     }
     setIsReady(true);
+    };
+
+    loadCheckoutItems();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [cartItems]);
 
   useEffect(() => {
@@ -282,6 +393,7 @@ export function CheckoutPage() {
 
       showToast('Đặt hàng thành công! Đang chờ xác nhận thanh toán.');
       window.sessionStorage.removeItem(checkoutPayloadKey);
+      window.localStorage.removeItem(checkoutPayloadKey);
       window.location.href = reactHomePath;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Không thể tạo đơn hàng.';

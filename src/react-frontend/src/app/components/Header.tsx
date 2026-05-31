@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ShoppingCart, User, Menu, Search, ChevronRight, Heart } from 'lucide-react';
+import { ShoppingCart, User, Menu, Search, ChevronRight, Heart, Bell, HelpCircle, Store } from 'lucide-react';
 import { categoryMenu, getCategoryPageLink } from '../data/categories';
 import { getDefaultWishlistList, hasWishlistAuth } from '../utils/wishlistApi';
 import { adminMenuItems } from './AdminSidebar';
@@ -16,6 +16,7 @@ export function Header() {
   const [customerToken, setCustomerToken] = useState('');
   const [branchName, setBranchName] = useState('Chi nhanh 1');
   const [searchTerm, setSearchTerm] = useState('');
+  const [userRole, setUserRole] = useState('');
   const userMenuRef = useRef<HTMLDivElement | null>(null);
   const reactHomePath = '/react/index.html';
   const [wishlistDetailHref, setWishlistDetailHref] = useState(`${reactHomePath}?view=wishlist`);
@@ -87,16 +88,80 @@ export function Header() {
     const storedToken = window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
     const storedEmail = window.localStorage.getItem('freso_customer_email') || window.sessionStorage.getItem('freso_customer_email') || '';
     const storedName = window.localStorage.getItem('freso_customer_name') || window.sessionStorage.getItem('freso_customer_name') || '';
+    const storedRole = window.localStorage.getItem('freso_role') || window.sessionStorage.getItem('freso_role') || '';
 
     setCustomerToken(storedToken);
     setCustomerEmail(storedEmail);
     setCustomerName(storedName);
+    setUserRole(storedRole);
 
     const storedBranch = window.localStorage.getItem('freso_branch_name') || window.sessionStorage.getItem('freso_branch_name') || '';
     if (storedBranch.trim()) {
       setBranchName(storedBranch.trim());
     }
   }, []);
+
+  useEffect(() => {
+    if (!customerToken) return;
+
+    fetch(`${window.location.origin}/rest/V1/customers/me`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${customerToken}`,
+      },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data || typeof data !== 'object') return;
+        
+        const firstname = String(data.firstname || '').trim();
+        const lastname = String(data.lastname || '').trim();
+        const fullName = `${firstname} ${lastname}`.trim();
+        if (fullName) {
+          window.localStorage.setItem('freso_customer_name', fullName);
+          window.sessionStorage.setItem('freso_customer_name', fullName);
+          setCustomerName(fullName);
+        }
+
+        const customAttributes = Array.isArray((data as { custom_attributes?: unknown }).custom_attributes)
+          ? ((data as { custom_attributes?: unknown }).custom_attributes as Array<{ attribute_code?: string; value?: unknown }>)
+          : [];
+        const roleAttr = customAttributes.find((attr) => attr?.attribute_code === 'tmdt_role');
+        const ownerAttr = customAttributes.find((attr) => attr?.attribute_code === 'is_owner');
+        const superAdminAttr = customAttributes.find((attr) => attr?.attribute_code === 'is_super_admin');
+
+        const parseBoolFlag = (value: string) => {
+          const normalized = value.trim().toLowerCase();
+          return normalized === '1' || normalized === 'true' || normalized === 'yes';
+        };
+
+        if (ownerAttr || superAdminAttr) {
+          const isOwner = ownerAttr ? parseBoolFlag(String(ownerAttr.value ?? '')) : false;
+          const isSuper = superAdminAttr ? parseBoolFlag(String(superAdminAttr.value ?? '')) : false;
+          const hasPrivilege = isOwner || isSuper;
+          window.localStorage.setItem('freso_is_owner', hasPrivilege ? '1' : '0');
+          window.sessionStorage.setItem('freso_is_owner', hasPrivilege ? '1' : '0');
+          window.localStorage.setItem('freso_is_super_admin', hasPrivilege ? '1' : '0');
+          window.sessionStorage.setItem('freso_is_super_admin', hasPrivilege ? '1' : '0');
+        }
+
+        if (roleAttr) {
+          const nextRole = String(roleAttr.value ?? '').trim().toLowerCase();
+          const currentRole = window.localStorage.getItem('freso_role') || window.sessionStorage.getItem('freso_role') || '';
+          
+          if (nextRole !== currentRole) {
+            window.localStorage.setItem('freso_role', nextRole);
+            window.sessionStorage.setItem('freso_role', nextRole);
+            setUserRole(nextRole);
+            window.dispatchEvent(new CustomEvent('freso:profile-updated'));
+          }
+        }
+      })
+      .catch(() => {
+        // ignore background sync errors
+      });
+  }, [customerToken]);
 
   useEffect(() => {
     const loadWishlistLink = async () => {
@@ -192,6 +257,7 @@ export function Header() {
         setCustomerEmail('');
         setCustomerName('');
         setBranchName('Chi nhanh 1');
+        setUserRole('');
         setIsUserMenuOpen(false);
         return;
       }
@@ -204,10 +270,12 @@ export function Header() {
       const email = window.localStorage.getItem('freso_customer_email') || window.sessionStorage.getItem('freso_customer_email') || '';
       const name = window.localStorage.getItem('freso_customer_name') || window.sessionStorage.getItem('freso_customer_name') || '';
       const branch = window.localStorage.getItem('freso_branch_name') || window.sessionStorage.getItem('freso_branch_name') || '';
+      const role = window.localStorage.getItem('freso_role') || window.sessionStorage.getItem('freso_role') || '';
 
       setCustomerToken(token);
       setCustomerEmail(email);
       setCustomerName(name);
+      setUserRole(role);
       if (branch.trim()) {
         setBranchName(branch.trim());
       }
@@ -409,6 +477,9 @@ export function Header() {
     );
   }
 
+  const params = new URLSearchParams(window.location.search);
+  const currentView = params.get('view');
+
   return (
   <header className="sticky top-0 z-50 bg-white shadow-sm" onClickCapture={handleTopLevelNavigation}>
       {/* Top Bar - Tầng 1 */}
@@ -432,6 +503,27 @@ export function Header() {
               </>
             ) : (
               <>
+                {userRole === 'customer' ? (
+                  <>
+                    <a
+                      href="/react/index.html?view=register&seller=1"
+                      className="px-3 py-1 text-xs border border-orange-500 text-orange-500 rounded-full hover:bg-orange-50 transition-colors font-bold whitespace-nowrap"
+                    >
+                      Đăng ký người bán
+                    </a>
+                    <span className="text-gray-300">|</span>
+                  </>
+                ) : userRole === 'seller' ? (
+                  <>
+                    <a
+                      href="/react/index.html?view=seller-dashboard"
+                      className="px-3 py-1 text-xs bg-orange-500 text-white rounded-full hover:bg-orange-600 transition-colors font-bold whitespace-nowrap shadow-sm"
+                    >
+                      Trang người bán
+                    </a>
+                    <span className="text-gray-300">|</span>
+                  </>
+                ) : null}
                 <div className="flex items-center gap-2 text-sm text-gray-700">
                   <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -453,22 +545,24 @@ export function Header() {
                     <div className="absolute right-0 mt-2 w-[280px] bg-white border border-gray-200 rounded-2xl shadow-xl p-2 z-50">
                       <div className="px-3 py-2 text-sm font-semibold text-gray-900">{displayedUserName}</div>
                       <div className="grid grid-cols-1 gap-1 text-sm">
-                        {adminMenuItems.map((item) => {
-                          const isActive = activeDashboardTab === item.label;
-                          return (
-                            <a
-                              key={item.id}
-                              href={getDashboardHref(item.label)}
-                              className={`w-full rounded-xl px-4 py-2.5 text-[14px] font-semibold transition-colors ${
-                                isActive
-                                  ? 'bg-green-50 text-green-700'
-                                  : 'text-gray-700 hover:bg-green-50 hover:text-green-700'
-                              }`}
-                            >
-                              {item.label}
-                            </a>
-                          );
-                        })}
+                        {adminMenuItems
+                          .filter((item) => item.id !== 'thong-tin')
+                          .map((item) => {
+                            const isActive = activeDashboardTab === item.label;
+                            return (
+                              <a
+                                key={item.id}
+                                href={getDashboardHref(item.label)}
+                                className={`w-full rounded-xl px-4 py-2.5 text-[14px] font-semibold transition-colors ${
+                                  isActive
+                                    ? 'bg-green-50 text-green-700'
+                                    : 'text-gray-700 hover:bg-green-50 hover:text-green-700'
+                                }`}
+                              >
+                                {item.label}
+                              </a>
+                            );
+                          })}
                       </div>
                       <div className="mt-4">
                         <button

@@ -66,6 +66,10 @@ const readFileAsDataUrl = (file: File) =>
 export function RegisterPage() {
   const params = new URLSearchParams(window.location.search);
   const isSeller = params.get('seller') === '1';
+  const isLoggedIn = Boolean(
+    window.localStorage.getItem('freso_customer_token') ||
+      window.sessionStorage.getItem('freso_customer_token')
+  );
 
   const [currentStep, setCurrentStep] = useState(isSeller ? 1 : 2);
   const [hasDraft, setHasDraft] = useState(false);
@@ -163,9 +167,88 @@ export function RegisterPage() {
     return Object.keys(errors).length === 0;
   };
 
-  const handleStep1Submit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleStep1Submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (validateStep1()) {
+    if (!validateStep1()) {
+      return;
+    }
+
+    if (isLoggedIn && isSeller) {
+      setIsSubmitting(true);
+      setSubmitError('');
+      try {
+        const token = window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
+        
+        let filesPayload: any[] = [];
+        if (files.length > 0) {
+          const tooLarge = files.find((file) => file.size > MAX_LICENSE_FILE_SIZE);
+          if (tooLarge) {
+            setValidationErrors((prev) => ({ ...prev, files: 'File vượt quá dung lượng tối đa 5MB' }));
+            setIsSubmitting(false);
+            return;
+          }
+
+          filesPayload = await Promise.all(
+            files.map(async (file) => ({
+              name: file.name,
+              type: file.type,
+              size: file.size,
+              content: await readFileAsDataUrl(file),
+            })),
+          );
+        }
+
+        const payload = {
+          taxCode: formData.taxCode,
+          businessName: formData.businessName,
+          registrationType: formData.registrationType,
+          province: formData.province,
+          ward: formData.ward,
+          detailAddress: formData.detailAddress,
+          role: 'seller',
+          files: filesPayload
+        };
+
+        const response = await fetch(`${window.location.origin}/rest/V1/tmdt-registration/profile`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ payload }),
+        });
+
+        const bodyText = await response.text().catch(() => '');
+        let data: { success?: boolean; message?: string } | null = null;
+        if (bodyText.trim()) {
+          try {
+            data = JSON.parse(bodyText);
+          } catch {
+            data = null;
+          }
+        }
+
+        if (!response.ok) {
+          const errorMessage = data?.message?.trim() || bodyText.trim() || 'Không thể nâng cấp lên tài khoản người bán.';
+          throw new Error(errorMessage);
+        }
+
+        if (data?.success === false) {
+          throw new Error(data?.message || 'Không thể nâng cấp lên tài khoản người bán.');
+        }
+
+        window.localStorage.setItem('freso_role', 'seller');
+        window.sessionStorage.setItem('freso_role', 'seller');
+        window.dispatchEvent(new CustomEvent('freso:profile-updated'));
+        
+        setIsSubmitted(true);
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Đã xảy ra lỗi khi nâng cấp người bán.';
+        setSubmitError(errorMessage);
+      } finally {
+        setIsSubmitting(false);
+      }
+    } else {
       setCurrentStep(2);
     }
   };
@@ -260,7 +343,7 @@ export function RegisterPage() {
         window.sessionStorage.setItem('freso_is_super_admin', '1');
       }
 
-      if (!isSeller && data && 'token' in data && data.token) {
+      if (data && 'token' in data && data.token) {
         const token = data.token;
         const email = data.email || formData.email;
         const fullName = data.full_name || formData.fullName;
@@ -276,6 +359,15 @@ export function RegisterPage() {
         if (branchName) {
           window.localStorage.setItem('freso_branch_name', branchName);
         }
+        
+        if (isSeller) {
+          window.localStorage.setItem('freso_role', 'seller');
+          window.sessionStorage.setItem('freso_role', 'seller');
+          window.localStorage.setItem('freso_is_owner', '1');
+          window.sessionStorage.setItem('freso_is_owner', '1');
+          window.localStorage.setItem('freso_is_super_admin', '1');
+          window.sessionStorage.setItem('freso_is_super_admin', '1');
+        }
 
         // Call session endpoint to login to Magento session
         await fetch(`${window.location.origin}/tmdt/registration/session`, {
@@ -288,7 +380,9 @@ export function RegisterPage() {
         }).catch(() => null);
 
         // Redirect to homepage or dashboard
-        window.location.href = '/react/index.html?view=dashboard';
+        window.location.href = isSeller
+          ? '/react/index.html?view=seller-dashboard'
+          : '/react/index.html?view=dashboard';
         return;
       }
 
@@ -318,17 +412,31 @@ export function RegisterPage() {
           <div className="size-24 bg-green-100 text-[#00b14f] rounded-full flex items-center justify-center mx-auto mb-8 shadow-lg shadow-green-200/20">
             <CheckCircle2 size={48} />
           </div>
-          <h1 className="text-3xl font-extrabold text-[#004d39]">Đăng ký thành công!</h1>
+          <h1 className="text-3xl font-extrabold text-[#004d39]">
+            {isLoggedIn && isSeller ? 'Nâng cấp thành công!' : 'Đăng ký thành công!'}
+          </h1>
           <p className="text-gray-600 leading-relaxed font-medium">
-            Cảm ơn doanh nghiệp <span className="font-bold text-[#00b14f]">{formData.businessName}</span> đã tin tưởng Freso.
-            Chúng tôi sẽ sớm liên hệ để xác thực thông tin.
+            {isLoggedIn && isSeller ? (
+              'Tài khoản của bạn đã được chuyển đổi thành Người bán thành công. Bạn có thể truy cập trang quản trị bán hàng ngay bây giờ.'
+            ) : (
+              <>
+                Cảm ơn doanh nghiệp <span className="font-bold text-[#00b14f]">{formData.businessName}</span> đã tin tưởng Freso.
+                Chúng tôi sẽ sớm liên hệ để xác thực thông tin.
+              </>
+            )}
           </p>
           <button
             type="button"
-            onClick={navigateHome}
+            onClick={() => {
+              if (isLoggedIn && isSeller) {
+                window.location.href = '/react/index.html?view=seller-dashboard';
+              } else {
+                navigateHome();
+              }
+            }}
             className="w-full py-4 bg-[#00b14f] text-white font-bold rounded-2xl hover:bg-[#009642] transition-all shadow-lg shadow-green-200/50"
           >
-            Quay lại trang chủ
+            {isLoggedIn && isSeller ? 'Vào trang người bán ngay' : 'Quay lại trang chủ'}
           </button>
         </div>
       </div>
@@ -356,15 +464,34 @@ export function RegisterPage() {
             </button>
 
             <h1 className="text-[28px] lg:text-[32px] font-extrabold text-[#004d39] leading-[1.2] mb-6 tracking-tight">
-              {currentStep === 1 ? 'Đăng ký tài khoản mua hàng cho doanh nghiệp' : 'Tạo tài khoản đăng nhập Freso'}
+              {isLoggedIn && isSeller
+                ? 'Nâng cấp lên tài khoản Người bán'
+                : currentStep === 1
+                  ? 'Đăng ký tài khoản mua hàng cho doanh nghiệp'
+                  : 'Tạo tài khoản đăng nhập Freso'}
             </h1>
             <p className="text-[#006a4e]/70 text-[15px] lg:text-[16px] mb-12 font-medium leading-relaxed italic">
-              {currentStep === 1
-                ? 'Nông sản tươi sạch từ thảo nguyên mướt xanh, kết nối trực tiếp đến đơn vị của bạn.'
-                : 'Hãy thiết lập thông tin bảo mật để bắt đầu quản lý nguồn cung nông sản sạch của bạn.'}
+              {isLoggedIn && isSeller
+                ? 'Nâng cấp cửa hàng của bạn để bắt đầu phân phối nông sản tươi sạch trên sàn Freso.'
+                : currentStep === 1
+                  ? 'Nông sản tươi sạch từ thảo nguyên mướt xanh, kết nối trực tiếp đến đơn vị của bạn.'
+                  : 'Hãy thiết lập thông tin bảo mật để bắt đầu quản lý nguồn cung nông sản sạch của bạn.'}
             </p>
 
-            {isSeller ? (
+            {isLoggedIn && isSeller ? (
+              <div className="space-y-10 lg:space-y-12 relative ml-1">
+                <div className="flex items-start gap-6 relative">
+                  <div className="size-8 rounded-full flex items-center justify-center text-sm font-bold z-10 bg-[#00b14f] text-white shadow-lg shadow-green-200/30 scale-110">
+                    1
+                  </div>
+                  <div className="pt-1">
+                    <p className="text-[15px] font-bold text-[#006a4e]">
+                      Thông tin kinh doanh
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : isSeller ? (
               <div className="space-y-10 lg:space-y-12 relative ml-1">
                 <div className="absolute left-[15px] top-4 bottom-4 w-[1.5px] bg-[#b8e6cc]" />
 
@@ -584,11 +711,21 @@ export function RegisterPage() {
                     </div>
 
                     <div className="pt-4">
+                      {submitError && <p className="mb-4 text-center text-[13px] font-bold text-red-500">{submitError}</p>}
                       <button
                         type="submit"
-                        className="group w-full py-5 bg-[#00b14f] hover:bg-[#009642] text-white font-extrabold rounded-full transition-all shadow-xl shadow-green-200/50 text-[17px] active:scale-[0.98] flex items-center justify-center gap-2"
+                        disabled={isSubmitting}
+                        className="group w-full py-5 bg-[#00b14f] hover:bg-[#009642] disabled:bg-green-300 text-white font-extrabold rounded-full transition-all shadow-xl shadow-green-200/50 text-[17px] active:scale-[0.98] disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
-                        Tiếp tục <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                        {isSubmitting ? (
+                          'Đang gửi...'
+                        ) : isLoggedIn && isSeller ? (
+                          'Hoàn tất đăng ký người bán'
+                        ) : (
+                          <>
+                            Tiếp tục <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                          </>
+                        )}
                       </button>
                     </div>
                   </form>
@@ -742,12 +879,14 @@ export function RegisterPage() {
                   </form>
                 )}
 
-                <div className="mt-8 text-center border-t border-gray-50 pt-6">
-                  <span className="text-[14px] text-gray-500 font-medium">Bạn đã có tài khoản? </span>
-                  <a href={buildLoginHref()} className="text-[14px] font-extrabold text-[#00b14f] hover:text-[#006a4e] transition-colors underline underline-offset-4 decoration-2">
-                    Đăng nhập
-                  </a>
-                </div>
+                {!isLoggedIn && (
+                  <div className="mt-8 text-center border-t border-gray-50 pt-6">
+                    <span className="text-[14px] text-gray-500 font-medium">Bạn đã có tài khoản? </span>
+                    <a href={buildLoginHref()} className="text-[14px] font-extrabold text-[#00b14f] hover:text-[#006a4e] transition-colors underline underline-offset-4 decoration-2">
+                      Đăng nhập
+                    </a>
+                  </div>
+                )}
               </div>
             </div>
           </div>

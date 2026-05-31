@@ -49,12 +49,15 @@ class ProfileViewManagement implements ProfileViewInterface
             throw new LocalizedException(__('Khong tim thay du lieu dang ky.'));
         }
 
+        $role = '';
         try {
             $customer = $this->customerRepository->getById($customerId);
             $isOwnerAttr = $customer->getCustomAttribute('is_owner');
             $isSuperAttr = $customer->getCustomAttribute('is_super_admin');
+            $roleAttr = $customer->getCustomAttribute('tmdt_role');
             $isOwner = $isOwnerAttr ? $this->normalizeBool($isOwnerAttr->getValue()) : false;
             $isSuperAdmin = $isSuperAttr ? $this->normalizeBool($isSuperAttr->getValue()) : false;
+            $role = $roleAttr ? (string) $roleAttr->getValue() : '';
 
             if (!$isOwner && !$isSuperAdmin) {
                 $loginCode = trim((string) ($registrationRow['login_code'] ?? ''));
@@ -101,6 +104,7 @@ class ProfileViewManagement implements ProfileViewInterface
                 'license_name' => $licenseName,
                 'is_owner' => $isOwner ? 1 : 0,
                 'is_super_admin' => $isSuperAdmin ? 1 : 0,
+                'role' => $role,
             ],
         ];
     }

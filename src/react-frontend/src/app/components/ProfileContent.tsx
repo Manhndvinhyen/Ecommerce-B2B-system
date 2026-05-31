@@ -43,6 +43,13 @@ export const ProfileContent = () => {
   };
 
   const getStoredRole = () => {
+    const roleAttr = readStorageValue('freso_role');
+    if (roleAttr === 'customer') {
+      return 'Khách hàng';
+    }
+    if (roleAttr === 'seller') {
+      return 'Người bán';
+    }
     const isOwner = parseBoolFlag(readStorageValue('freso_is_owner'));
     const isSuperAdmin = parseBoolFlag(readStorageValue('freso_is_super_admin'));
     return isOwner || isSuperAdmin ? 'Chủ sở hữu' : 'Quản lý';
@@ -115,9 +122,17 @@ export const ProfileContent = () => {
       const branch = typeof unitNickname === 'string' && unitNickname.trim() ? unitNickname.trim() : '';
       const ownerAttr = customAttributes.find((attr) => attr?.attribute_code === 'is_owner')?.value;
       const superAdminAttr = customAttributes.find((attr) => attr?.attribute_code === 'is_super_admin')?.value;
+      const roleAttr = customAttributes.find((attr) => attr?.attribute_code === 'tmdt_role')?.value;
       const isOwner = parseBoolFlag(String(ownerAttr ?? ''));
       const isSuperAdmin = parseBoolFlag(String(superAdminAttr ?? ''));
-      const role = isOwner || isSuperAdmin ? 'Chủ sở hữu' : 'Quản lý';
+      const roleVal = String(roleAttr ?? '').trim().toLowerCase();
+
+      let role = isOwner || isSuperAdmin ? 'Chủ sở hữu' : 'Quản lý';
+      if (roleVal === 'customer') {
+        role = 'Khách hàng';
+      } else if (roleVal === 'seller') {
+        role = 'Người bán';
+      }
 
       setProfile((prev) => ({
         ...prev,
@@ -141,6 +156,9 @@ export const ProfileContent = () => {
       writeStorageValue('freso_customer_phone', phone);
       writeStorageValue('freso_is_owner', isOwner ? '1' : '0');
       writeStorageValue('freso_is_super_admin', isSuperAdmin ? '1' : '0');
+      if (roleVal) {
+        writeStorageValue('freso_role', roleVal);
+      }
     };
 
     const loadRegistrationProfile = async () => {
@@ -191,13 +209,23 @@ export const ProfileContent = () => {
 
       const hasOwnerFlag = Object.prototype.hasOwnProperty.call(info, 'is_owner');
       const hasSuperFlag = Object.prototype.hasOwnProperty.call(info, 'is_super_admin');
+      const hasRoleFlag = Object.prototype.hasOwnProperty.call(info, 'role');
       const roleOwnerFlag = hasOwnerFlag
         ? parseBoolFlag(String((info as { is_owner?: unknown }).is_owner ?? ''))
         : parseBoolFlag(readStorageValue('freso_is_owner'));
       const roleSuperFlag = hasSuperFlag
         ? parseBoolFlag(String((info as { is_super_admin?: unknown }).is_super_admin ?? ''))
         : parseBoolFlag(readStorageValue('freso_is_super_admin'));
-      const roleLabel = roleOwnerFlag || roleSuperFlag ? 'Chủ sở hữu' : 'Quản lý';
+      const roleVal = hasRoleFlag
+        ? String((info as { role?: unknown }).role ?? '').trim().toLowerCase()
+        : readStorageValue('freso_role');
+
+      let roleLabel = roleOwnerFlag || roleSuperFlag ? 'Chủ sở hữu' : 'Quản lý';
+      if (roleVal === 'customer') {
+        roleLabel = 'Khách hàng';
+      } else if (roleVal === 'seller') {
+        roleLabel = 'Người bán';
+      }
 
       setProfile((prev) => ({
         ...prev,
@@ -218,6 +246,9 @@ export const ProfileContent = () => {
       }
       if (hasSuperFlag) {
         writeStorageValue('freso_is_super_admin', roleSuperFlag ? '1' : '0');
+      }
+      if (hasRoleFlag && roleVal) {
+        writeStorageValue('freso_role', roleVal);
       }
     };
 

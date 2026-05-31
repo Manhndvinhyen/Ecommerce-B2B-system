@@ -2,7 +2,7 @@
 rootCA.pem
 nginx.key
 nginx.crt
-
+.antigravitycli
 # Database dumps (use bin/db-dump / bin/db-import to share)
 # dump/*.sql
 # dump/*.sql.gz

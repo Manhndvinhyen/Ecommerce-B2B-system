@@ -23,6 +23,7 @@ export function Header() {
   registerParams.set('view', 'register');
   registerParams.delete('category');
   registerParams.delete('subcategory');
+  registerParams.delete('seller');
   const registerHref = `${reactHomePath}?${registerParams.toString()}`;
 
   const loginParams = new URLSearchParams(window.location.search);
@@ -257,7 +258,7 @@ export function Header() {
               <a href={registerHref} className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors">
                 Đăng ký
               </a>
-              <a href="/contact" className="px-4 py-1.5 text-sm border-2 border-orange-500 text-orange-500 rounded-full hover:bg-orange-50 transition-colors whitespace-nowrap">
+              <a href="/react/index.html?view=register&seller=1" className="px-4 py-1.5 text-sm border-2 border-orange-500 text-orange-500 rounded-full hover:bg-orange-50 transition-colors whitespace-nowrap">
                 Đăng ký bán hàng
               </a>
             </div>
@@ -423,7 +424,7 @@ export function Header() {
                   Đăng ký
                 </a>
                 <a
-                  href="/react/index.html?view=register"
+                  href="/react/index.html?view=register&seller=1"
                   className="px-4 py-1.5 text-sm border-2 border-orange-500 text-orange-500 rounded-full hover:bg-orange-50 transition-colors whitespace-nowrap"
                 >
                   Đăng ký bán hàng

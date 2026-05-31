@@ -64,7 +64,10 @@ const readFileAsDataUrl = (file: File) =>
   });
 
 export function RegisterPage() {
-  const [currentStep, setCurrentStep] = useState(1);
+  const params = new URLSearchParams(window.location.search);
+  const isSeller = params.get('seller') === '1';
+
+  const [currentStep, setCurrentStep] = useState(isSeller ? 1 : 2);
   const [hasDraft, setHasDraft] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -190,28 +193,32 @@ export function RegisterPage() {
     setSubmitError('');
 
     try {
-      if (files.length === 0) {
-        setValidationErrors((prev) => ({ ...prev, files: 'Vui lòng tải lên giấy phép kinh doanh' }));
-        return;
-      }
+      let filesPayload: any[] = [];
+      if (isSeller) {
+        if (files.length === 0) {
+          setValidationErrors((prev) => ({ ...prev, files: 'Vui lòng tải lên giấy phép kinh doanh' }));
+          return;
+        }
 
-      const tooLarge = files.find((file) => file.size > MAX_LICENSE_FILE_SIZE);
-      if (tooLarge) {
-        setValidationErrors((prev) => ({ ...prev, files: 'File vượt quá dung lượng tối đa 5MB' }));
-        return;
-      }
+        const tooLarge = files.find((file) => file.size > MAX_LICENSE_FILE_SIZE);
+        if (tooLarge) {
+          setValidationErrors((prev) => ({ ...prev, files: 'File vượt quá dung lượng tối đa 5MB' }));
+          return;
+        }
 
-      const filesPayload = await Promise.all(
-        files.map(async (file) => ({
-          name: file.name,
-          type: file.type,
-          size: file.size,
-          content: await readFileAsDataUrl(file),
-        })),
-      );
+        filesPayload = await Promise.all(
+          files.map(async (file) => ({
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            content: await readFileAsDataUrl(file),
+          })),
+        );
+      }
 
       const payload = {
         ...formData,
+        isSeller,
         files: filesPayload,
       };
 
@@ -224,11 +231,11 @@ export function RegisterPage() {
       });
 
       const bodyText = await response.text().catch(() => '');
-      let data: { success?: boolean; message?: string } | null = null;
+      let data: { success?: boolean; message?: string; token?: string; email?: string; full_name?: string; branch_name?: string } | null = null;
 
       if (bodyText.trim()) {
         try {
-          data = JSON.parse(bodyText) as { success?: boolean; message?: string };
+          data = JSON.parse(bodyText);
         } catch {
           data = null;
         }
@@ -253,6 +260,38 @@ export function RegisterPage() {
         window.sessionStorage.setItem('freso_is_super_admin', '1');
       }
 
+      if (!isSeller && data && 'token' in data && data.token) {
+        const token = data.token;
+        const email = data.email || formData.email;
+        const fullName = data.full_name || formData.fullName;
+        const branchName = data.branch_name || formData.unitNickname;
+
+        window.localStorage.setItem('freso_customer_token', token);
+        window.localStorage.setItem('freso_login_token', token);
+        window.sessionStorage.setItem('freso_customer_token', token);
+        window.localStorage.setItem('freso_customer_email', email);
+        if (fullName) {
+          window.localStorage.setItem('freso_customer_name', fullName);
+        }
+        if (branchName) {
+          window.localStorage.setItem('freso_branch_name', branchName);
+        }
+
+        // Call session endpoint to login to Magento session
+        await fetch(`${window.location.origin}/tmdt/registration/session`, {
+          method: 'POST',
+          keepalive: true,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ token }),
+        }).catch(() => null);
+
+        // Redirect to homepage or dashboard
+        window.location.href = '/react/index.html?view=dashboard';
+        return;
+      }
+
       setIsSubmitted(true);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Đã xảy ra lỗi khi gửi đăng ký.';
@@ -266,7 +305,7 @@ export function RegisterPage() {
   const clearForm = () => {
     setFormData(emptyFormData);
     setFiles([]);
-    setCurrentStep(1);
+    setCurrentStep(isSeller ? 1 : 2);
     setHasDraft(false);
     setValidationErrors({});
     setSubmitError('');
@@ -307,13 +346,13 @@ export function RegisterPage() {
           <div className="relative z-10 w-full max-w-md">
             <button
               type="button"
-              onClick={() => (currentStep === 2 ? setCurrentStep(1) : navigateHome())}
+              onClick={() => (currentStep === 2 && isSeller ? setCurrentStep(1) : navigateHome())}
               className="flex items-center text-gray-400 hover:text-[#00b14f] transition-colors mb-10 group"
             >
               <div className="p-1.5 bg-white rounded-lg mr-3 shadow-sm border border-gray-100 group-hover:bg-green-50">
                 <ChevronLeft size={16} />
               </div>
-              <span className="text-[14px] font-bold">{currentStep === 2 ? 'Quay lại Bước 1' : 'Quay lại trang chủ'}</span>
+              <span className="text-[14px] font-bold">{currentStep === 2 && isSeller ? 'Quay lại Bước 1' : 'Quay lại trang chủ'}</span>
             </button>
 
             <h1 className="text-[28px] lg:text-[32px] font-extrabold text-[#004d39] leading-[1.2] mb-6 tracking-tight">
@@ -325,39 +364,54 @@ export function RegisterPage() {
                 : 'Hãy thiết lập thông tin bảo mật để bắt đầu quản lý nguồn cung nông sản sạch của bạn.'}
             </p>
 
-            <div className="space-y-10 lg:space-y-12 relative ml-1">
-              <div className="absolute left-[15px] top-4 bottom-4 w-[1.5px] bg-[#b8e6cc]" />
+            {isSeller ? (
+              <div className="space-y-10 lg:space-y-12 relative ml-1">
+                <div className="absolute left-[15px] top-4 bottom-4 w-[1.5px] bg-[#b8e6cc]" />
 
-              <div className="flex items-start gap-6 relative">
-                <div
-                  className={`size-8 rounded-full flex items-center justify-center text-sm font-bold z-10 transition-all duration-500 ${
-                    currentStep >= 1 ? 'bg-[#00b14f] text-white shadow-lg shadow-green-200/30 scale-110' : 'bg-white border border-[#b8e6cc] text-[#b8e6cc]'
-                  }`}
-                >
-                  {currentStep > 1 ? <CheckCircle2 size={18} /> : '1'}
+                <div className="flex items-start gap-6 relative">
+                  <div
+                    className={`size-8 rounded-full flex items-center justify-center text-sm font-bold z-10 transition-all duration-500 ${
+                      currentStep >= 1 ? 'bg-[#00b14f] text-white shadow-lg shadow-green-200/30 scale-110' : 'bg-white border border-[#b8e6cc] text-[#b8e6cc]'
+                    }`}
+                  >
+                    {currentStep > 1 ? <CheckCircle2 size={18} /> : '1'}
+                  </div>
+                  <div className="pt-1">
+                    <p className={`text-[15px] font-bold transition-colors duration-300 ${currentStep === 1 ? 'text-[#006a4e]' : 'text-[#006a4e] opacity-60'}`}>
+                      Thông tin kinh doanh
+                    </p>
+                  </div>
                 </div>
-                <div className="pt-1">
-                  <p className={`text-[15px] font-bold transition-colors duration-300 ${currentStep === 1 ? 'text-[#006a4e]' : 'text-[#006a4e] opacity-60'}`}>
-                    Thông tin kinh doanh
-                  </p>
+
+                <div className="flex items-start gap-6 relative">
+                  <div
+                    className={`size-8 rounded-full flex items-center justify-center text-sm font-bold z-10 transition-all duration-500 ${
+                      currentStep >= 2 ? 'bg-[#00b14f] text-white shadow-lg shadow-green-200/30 scale-110' : 'bg-white border border-[#b8e6cc] text-[#b8e6cc]'
+                    }`}
+                  >
+                    2
+                  </div>
+                  <div className="pt-1">
+                    <p className={`text-[15px] font-bold transition-colors duration-300 ${currentStep === 2 ? 'text-[#006a4e]' : 'text-gray-400'}`}>
+                      Tạo tài khoản đăng nhập
+                    </p>
+                  </div>
                 </div>
               </div>
-
-              <div className="flex items-start gap-6 relative">
-                <div
-                  className={`size-8 rounded-full flex items-center justify-center text-sm font-bold z-10 transition-all duration-500 ${
-                    currentStep >= 2 ? 'bg-[#00b14f] text-white shadow-lg shadow-green-200/30 scale-110' : 'bg-white border border-[#b8e6cc] text-[#b8e6cc]'
-                  }`}
-                >
-                  2
-                </div>
-                <div className="pt-1">
-                  <p className={`text-[15px] font-bold transition-colors duration-300 ${currentStep === 2 ? 'text-[#006a4e]' : 'text-gray-400'}`}>
-                    Tạo tài khoản đăng nhập
-                  </p>
+            ) : (
+              <div className="space-y-10 lg:space-y-12 relative ml-1">
+                <div className="flex items-start gap-6 relative">
+                  <div className="size-8 rounded-full flex items-center justify-center text-sm font-bold z-10 bg-[#00b14f] text-white shadow-lg shadow-green-200/30 scale-110">
+                    1
+                  </div>
+                  <div className="pt-1">
+                    <p className="text-[15px] font-bold text-[#006a4e]">
+                      Tạo tài khoản đăng nhập
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
 
           <div className="absolute bottom-[-20px] left-0 right-0 h-[300px] pointer-events-none z-0 opacity-40">

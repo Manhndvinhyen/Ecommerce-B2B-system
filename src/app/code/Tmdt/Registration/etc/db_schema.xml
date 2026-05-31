@@ -22,6 +22,7 @@
         <column xsi:type="timestamp" name="password_reset_otp_expires_at" on_update="false" nullable="true" comment="Password Reset OTP Expires At" />
         <column xsi:type="smallint" name="password_reset_otp_attempts" nullable="false" default="0" comment="Password Reset OTP Attempts" />
         <column xsi:type="varchar" name="status" nullable="false" length="32" default="pending" comment="Status" />
+        <column xsi:type="varchar" name="role" nullable="true" length="32" comment="Role" />
         <column xsi:type="text" name="notes" nullable="true" comment="Notes" />
         <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At" />
         <column xsi:type="timestamp" name="updated_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Updated At" />

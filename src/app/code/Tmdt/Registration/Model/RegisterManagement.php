@@ -14,6 +14,7 @@ use Magento\Framework\Serialize\Serializer\Json;
 use Magento\Framework\Webapi\Rest\Request as RestRequest;
 use Magento\Store\Model\StoreManagerInterface;
 use Tmdt\Registration\Api\RegisterInterface;
+use Magento\Integration\Api\CustomerTokenServiceInterface;
 
 class RegisterManagement implements RegisterInterface
 {
@@ -30,7 +31,8 @@ class RegisterManagement implements RegisterInterface
         private readonly CustomerCollectionFactory $customerCollectionFactory,
         private readonly Json $serializer,
         private readonly RestRequest $request,
-        private readonly Filesystem $filesystem
+        private readonly Filesystem $filesystem,
+        private readonly CustomerTokenServiceInterface $customerTokenService
     ) {
     }
 
@@ -49,9 +51,12 @@ class RegisterManagement implements RegisterInterface
         $password = (string) $payload['password'];
         $fullName = trim((string) $payload['fullName']);
         $loginCode = trim((string) $payload['loginCode']);
-        $taxCode = $this->normalize((string) $payload['taxCode']);
-        $businessName = trim((string) $payload['businessName']);
-        $registrationType = trim((string) $payload['registrationType']);
+
+        $isSeller = filter_var($payload['isSeller'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+        $taxCode = $isSeller ? $this->normalize((string) $payload['taxCode']) : '';
+        $businessName = $isSeller ? trim((string) $payload['businessName']) : '';
+        $registrationType = $isSeller ? trim((string) $payload['registrationType']) : '';
         $unitNickname = trim((string) $payload['unitNickname']);
         $phoneNumber = $this->normalize((string) $payload['phoneNumber']);
         $agreeToTerms = filter_var($payload['agreeToTerms'] ?? false, FILTER_VALIDATE_BOOLEAN);
@@ -71,6 +76,8 @@ class RegisterManagement implements RegisterInterface
             throw new InputException(__('Mã đăng nhập đã tồn tại. Vui lòng chọn mã khác.'));
         }
 
+        $role = $isSeller ? 'seller' : 'customer';
+
         $customer = $this->customerFactory->create();
         $customer->setWebsiteId((int) $this->storeManager->getStore()->getWebsiteId());
         $customer->setEmail($email);
@@ -83,11 +90,15 @@ class RegisterManagement implements RegisterInterface
         $customer->setCustomAttribute('tmdt_unit_nickname', $unitNickname);
         $customer->setCustomAttribute('is_owner', $this->shouldAssignOwnerFlag() ? 1 : 0);
         $customer->setCustomAttribute('is_super_admin', 1);
+        $customer->setCustomAttribute('tmdt_role', $role);
 
         $createdCustomer = $this->accountManagement->createAccount($customer, $password);
 
         try {
-            $storedFiles = $this->storeUploadedFiles((int) $createdCustomer->getId(), $payload['files'] ?? []);
+            $storedFiles = [];
+            if ($isSeller) {
+                $storedFiles = $this->storeUploadedFiles((int) $createdCustomer->getId(), $payload['files'] ?? []);
+            }
 
             $connection->insert($tableName, [
                 'customer_id' => (int) $createdCustomer->getId(),
@@ -95,10 +106,10 @@ class RegisterManagement implements RegisterInterface
                 'tax_code' => $taxCode,
                 'business_name' => $businessName,
                 'registration_type' => $registrationType,
-                'province' => trim((string) $payload['province']),
-                'district' => trim((string) ($payload['district'] ?? '')),
-                'ward' => trim((string) $payload['ward']),
-                'detail_address' => trim((string) ($payload['detailAddress'] ?? '')),
+                'province' => $isSeller ? trim((string) $payload['province']) : '',
+                'district' => $isSeller ? trim((string) ($payload['district'] ?? '')) : '',
+                'ward' => $isSeller ? trim((string) $payload['ward']) : '',
+                'detail_address' => $isSeller ? trim((string) ($payload['detailAddress'] ?? '')) : '',
                 'unit_nickname' => $unitNickname,
                 'login_code' => $loginCode,
                 'full_name' => $fullName,
@@ -107,6 +118,7 @@ class RegisterManagement implements RegisterInterface
                 'files_json' => $this->serializer->serialize($storedFiles),
                 'sanitized_payload_json' => $this->buildSanitizedPayloadJson($payload),
                 'status' => 'pending',
+                'role' => $role,
                 'notes' => null,
             ]);
         } catch (DuplicateException $exception) {
@@ -117,10 +129,21 @@ class RegisterManagement implements RegisterInterface
             throw $exception;
         }
 
+        $token = '';
+        try {
+            $token = $this->customerTokenService->createCustomerAccessToken($email, $password);
+        } catch (\Throwable $e) {
+            // Keep token empty but succeed registration
+        }
+
         return [
             'success' => true,
             'message' => (string) __('Đăng ký đã được lưu vào Magento.'),
             'customer_id' => (int) $createdCustomer->getId(),
+            'token' => $token,
+            'email' => $email,
+            'full_name' => $fullName,
+            'branch_name' => $unitNickname,
         ];
     }
 
@@ -153,12 +176,9 @@ class RegisterManagement implements RegisterInterface
 
     private function validatePayload(array $payload): void
     {
+        $isSeller = filter_var($payload['isSeller'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
         $requiredFields = [
-            'taxCode' => 'Mã số thuế',
-            'businessName' => 'Tên doanh nghiệp',
-            'registrationType' => 'Đối tượng đăng ký',
-            'province' => 'Tỉnh/Thành',
-            'ward' => 'Phường/Xã',
             'unitNickname' => 'Tên gợi nhớ đơn vị',
             'loginCode' => 'Mã đăng nhập',
             'fullName' => 'Họ và tên',
@@ -167,6 +187,16 @@ class RegisterManagement implements RegisterInterface
             'password' => 'Mật khẩu',
             'confirmPassword' => 'Xác nhận mật khẩu',
         ];
+
+        if ($isSeller) {
+            $requiredFields = array_merge([
+                'taxCode' => 'Mã số thuế',
+                'businessName' => 'Tên doanh nghiệp',
+                'registrationType' => 'Đối tượng đăng ký',
+                'province' => 'Tỉnh/Thành',
+                'ward' => 'Phường/Xã',
+            ], $requiredFields);
+        }
 
         foreach ($requiredFields as $field => $label) {
             if (!isset($payload[$field]) || trim((string) $payload[$field]) === '') {
@@ -187,26 +217,28 @@ class RegisterManagement implements RegisterInterface
             throw new InputException(__('Mật khẩu phải có ít nhất 8 ký tự.'));
         }
 
-        $files = $payload['files'] ?? null;
-        if (!is_array($files) || count($files) === 0) {
-            throw new InputException(__('Vui lòng tải lên giấy phép kinh doanh.'));
-        }
+        if ($isSeller) {
+            $files = $payload['files'] ?? null;
+            if (!is_array($files) || count($files) === 0) {
+                throw new InputException(__('Vui lòng tải lên giấy phép kinh doanh.'));
+            }
 
-        $firstFile = $files[0] ?? null;
-        if (!is_array($firstFile)) {
-            throw new InputException(__('Vui lòng tải lên giấy phép kinh doanh.'));
-        }
+            $firstFile = $files[0] ?? null;
+            if (!is_array($firstFile)) {
+                throw new InputException(__('Vui lòng tải lên giấy phép kinh doanh.'));
+            }
 
-        if (trim((string) ($firstFile['name'] ?? '')) === '') {
-            throw new InputException(__('Vui lòng tải lên giấy phép kinh doanh.'));
-        }
+            if (trim((string) ($firstFile['name'] ?? '')) === '') {
+                throw new InputException(__('Vui lòng tải lên giấy phép kinh doanh.'));
+            }
 
-        $content = (string) ($firstFile['content'] ?? ($firstFile['dataUrl'] ?? ''));
-        if (trim($content) === '') {
-            throw new InputException(__('Vui lòng tải lên giấy phép kinh doanh.'));
-        }
+            $content = (string) ($firstFile['content'] ?? ($firstFile['dataUrl'] ?? ''));
+            if (trim($content) === '') {
+                throw new InputException(__('Vui lòng tải lên giấy phép kinh doanh.'));
+            }
 
-        $this->validateLicenseFilePayload($firstFile);
+            $this->validateLicenseFilePayload($firstFile);
+        }
     }
 
     private function validateLicenseFilePayload(array $file): void

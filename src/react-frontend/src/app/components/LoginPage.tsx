@@ -241,6 +241,7 @@ export function LoginPage() {
     params.set('view', 'register');
     params.delete('category');
     params.delete('subcategory');
+    params.delete('seller');
     return `${window.location.pathname}?${params.toString()}`;
   };
 

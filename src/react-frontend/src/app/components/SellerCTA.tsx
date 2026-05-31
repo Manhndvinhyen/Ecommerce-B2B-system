@@ -110,7 +110,7 @@ export function SellerCTA() {
               </ul>
 
               {/* CTA Button */}
-              <a href="/react/index.html?view=register" className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold py-4 px-8 rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2">
+              <a href="/react/index.html?view=register&seller=1" className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold py-4 px-8 rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2">
                 <Store className="size-5" />
                 Đăng ký bán hàng ngay
               </a>

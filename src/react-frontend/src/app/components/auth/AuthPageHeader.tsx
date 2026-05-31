@@ -5,9 +5,12 @@ export function AuthPageHeader() {
         <span className="text-3xl font-extrabold text-[#00b14f] tracking-tight">Freso</span>
       </div>
       <div className="flex items-center gap-6">
-        <button type="button" className="text-[14px] lg:text-[15px] font-semibold text-[#006a4e] hover:text-[#00b14f] transition-colors">
+        <a
+          href="/react/index.html?view=register&seller=1"
+          className="text-[14px] lg:text-[15px] font-semibold text-[#006a4e] hover:text-[#00b14f] transition-colors"
+        >
           Tìm hiểu <span className="font-normal text-gray-500 hidden sm:inline">trở thành người bán</span>
-        </button>
+        </a>
       </div>
     </header>
   );

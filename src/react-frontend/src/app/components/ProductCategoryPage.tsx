@@ -9,7 +9,9 @@ import {
   getSubcategoryNameFromQuery,
   toQuerySlug
 } from '../data/categories';
+import { searchSynonymGroups } from '../data/searchSynonyms';
 import { toCurrencyTextFromLooseValue, toUnitPriceFromLooseValue, useCart } from '../cart/CartProvider';
+import { applySeo, buildBreadcrumbJsonLd, buildItemListJsonLd, getSiteName } from '../utils/seo';
 
 type ProductItem = {
   id: string | number;
@@ -267,42 +269,11 @@ const pickCategoryFromGraphQl = (product: GraphQlProductItem) => {
     .find((name) => name && !ignoredSlugs.has(toQuerySlug(name)));
 };
 
-const relatedSearchGroups: Array<{ triggers: string[]; terms: string[] }> = [
-  {
-    triggers: ['thit-heo', 'heo', 'lon'],
-    terms: ['thịt heo', 'heo', 'ba chỉ', 'ba chỉ heo', 'nạc vai', 'nạc mông', 'sườn heo', 'chân giò']
-  },
-  {
-    triggers: ['thit-bo', 'bo-be', 'bo'],
-    terms: ['thịt bò', 'bò', 'bò bê', 'thịt bò cắt lát', 'nạm bò', 'bắp bò']
-  },
-  {
-    triggers: ['thit-ga', 'ga'],
-    terms: ['thịt gà', 'gà', 'đùi gà', 'ức gà', 'cánh gà', 'trứng gà']
-  },
-  {
-    triggers: ['hai-san', 'thuy-hai-san', 'ca', 'tom', 'muc'],
-    terms: ['hải sản', 'cá', 'tôm', 'mực', 'cá hồi', 'tôm sú', 'mực ống']
-  },
-  {
-    triggers: ['trai-cay', 'hoa-qua'],
-    terms: ['trái cây', 'hoa quả', 'táo', 'chuối', 'cam']
-  },
-  {
-    triggers: ['rau-cu-qua', 'rau', 'cu-qua'],
-    terms: ['rau củ quả', 'rau', 'củ quả', 'cà chua', 'cà rốt', 'carrot', 'tomato', 'khoai tây']
-  },
-  {
-    triggers: ['gao', 'thuc-pham-kho', 'do-kho'],
-    terms: ['gạo', 'thực phẩm khô', 'bún gạo', 'hạt điều']
-  }
-];
-
 const buildExpandedSearchTerms = (query: string) => {
   const normalizedQuery = toQuerySlug(query);
   const terms = [query];
 
-  relatedSearchGroups.forEach((group) => {
+  searchSynonymGroups.forEach((group) => {
     if (group.triggers.some((trigger) => normalizedQuery.includes(trigger))) {
       terms.push(...group.terms);
     }
@@ -615,6 +586,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
         });
         setIsLoading(true);
         setLoadError('');
+        const expandedSearchTerms = buildExpandedSearchTerms(searchQuery);
 
         const query = `
           query SearchProducts($search: String!) {
@@ -643,34 +615,44 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
         `;
 
         try {
-          const response = await graphqlRequest(
-            query,
-            {
-              search: searchQuery
-            },
-            controller.signal
+          const searchResults = await Promise.all(
+            expandedSearchTerms.map(async (term) => {
+              const response = await graphqlRequest(
+                query,
+                {
+                  search: term
+                },
+                controller.signal
+              );
+
+              console.info('[FresoSearch][ProductCategoryPage] GraphQL response received', {
+                searchQuery,
+                term,
+                requestId,
+                status: response.status,
+                ok: response.ok
+              });
+
+              if (!response.ok) {
+                throw new Error(`GraphQL request failed: ${response.status}`);
+              }
+
+              const json = await response.json();
+              if (json?.errors?.length) {
+                console.error('[FresoSearch][ProductCategoryPage] GraphQL returned errors', json.errors);
+                throw new Error(json.errors[0]?.message ?? 'GraphQL error');
+              }
+
+              return (json?.data?.products?.items ?? []) as GraphQlProductItem[];
+            })
           );
-
-          console.info('[FresoSearch][ProductCategoryPage] GraphQL response received', {
-            searchQuery,
-            requestId,
-            status: response.status,
-            ok: response.ok
-          });
-
-          if (!response.ok) {
-            throw new Error(`GraphQL request failed: ${response.status}`);
-          }
-
-          const json = await response.json();
-          if (json?.errors?.length) {
-            console.error('[FresoSearch][ProductCategoryPage] GraphQL returned errors', json.errors);
-            throw new Error(json.errors[0]?.message ?? 'GraphQL error');
-          }
-
-          const items: GraphQlProductItem[] = json?.data?.products?.items ?? [];
+          const items = dedupeByKey(
+            searchResults.flat(),
+            (item) => item.sku || String(item.id)
+          );
           console.info('[FresoSearch][ProductCategoryPage] raw products received', {
             searchQuery,
+            expandedSearchTerms,
             count: items.length,
             skus: items.map((item) => item.sku)
           });
@@ -886,6 +868,20 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
 
   const productsToShow = products.slice(0, visibleCount);
   const canLoadMore = visibleCount < products.length;
+  const canonicalPath = useMemo(() => {
+    if (isSearchMode) {
+      const params = new URLSearchParams({
+        view: 'search',
+        q: searchQuery
+      });
+      return `/react/index.html?${params.toString()}`;
+    }
+
+    return getCategoryPageLink(
+      category.name,
+      activeSubcategory !== 'Táº¥t cáº£' ? activeSubcategory : undefined
+    );
+  }, [activeSubcategory, category.name, isSearchMode, searchQuery]);
   const breadcrumbItems = [
     {
       label: 'Trang chủ',
@@ -904,6 +900,52 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
         ]
       : [])
   ];
+  const productsToShowSeoKey = productsToShow.map((product) => `${product.sku}:${product.name}`).join('|');
+
+  useEffect(() => {
+    const siteName = getSiteName();
+    const pageLabel = activeSubcategory !== 'Táº¥t cáº£' ? activeSubcategory : category.name;
+    const title = isSearchMode
+      ? `Tìm kiếm ${searchQuery} | ${siteName}`
+      : `${pageLabel} B2B | ${siteName}`;
+    const description = isSearchMode
+      ? `Kết quả tìm kiếm "${searchQuery}" với danh sách sản phẩm thực phẩm B2B đang có trên ${siteName}.`
+      : `Tìm nguồn ${pageLabel.toLowerCase()} cho doanh nghiệp, nhà hàng và cửa hàng thực phẩm trên ${siteName}.`;
+    const itemList = buildItemListJsonLd(
+      title,
+      productsToShow.slice(0, 20).map((product, index) => ({
+        name: product.name,
+        image: product.image,
+        position: index + 1,
+        path: `/react/index.html?view=product&sku=${encodeURIComponent(product.sku)}`
+      }))
+    );
+    const breadcrumb = buildBreadcrumbJsonLd(
+      breadcrumbItems.map((item) => ({
+        name: item.label,
+        path: item.href ?? canonicalPath
+      }))
+    );
+
+    applySeo({
+      title,
+      description,
+      canonicalPath,
+      robots: isSearchMode ? 'noindex, follow' : 'index, follow',
+      structuredData: {
+        '@context': 'https://schema.org',
+        '@graph': [breadcrumb, itemList]
+      }
+    });
+  }, [
+    activeSubcategory,
+    breadcrumbItems,
+    canonicalPath,
+    category.name,
+    isSearchMode,
+    productsToShowSeoKey,
+    searchQuery
+  ]);
 
   return (
     <>

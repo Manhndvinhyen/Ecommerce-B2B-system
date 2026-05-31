@@ -21,6 +21,7 @@ import { WishlistPage } from './components/WishlistPage';
 import { CheckoutPage } from './components/CheckoutPage';
 import { getCategoryNameFromQuery, getSubcategoryNameFromQuery } from './data/categories';
 import { CartProvider } from './cart/CartProvider';
+import { applySeo, buildCanonicalPath, getSiteName } from './utils/seo';
 
 function AppContent() {
   const params = new URLSearchParams(window.location.search);
@@ -51,6 +52,72 @@ function AppContent() {
       search: window.location.search
     });
   }, [view, category, subcategory]);
+
+  useEffect(() => {
+    const siteName = getSiteName();
+    const canonicalPath = buildCanonicalPath(params);
+
+    if (isCategoryView) {
+      applySeo({
+        title: `${category} B2B | ${siteName}`,
+        description: `Tìm nguồn ${category.toLowerCase()} cho doanh nghiệp, nhà hàng và cửa hàng thực phẩm với dữ liệu sản phẩm cập nhật từ Magento.`,
+        canonicalPath
+      });
+      return;
+    }
+
+    if (isSearchView) {
+      const query = params.get('q')?.trim() ?? '';
+      applySeo({
+        title: query ? `Tìm kiếm ${query} | ${siteName}` : `Tìm kiếm sản phẩm | ${siteName}`,
+        description: query
+          ? `Kết quả tìm kiếm sản phẩm "${query}" trên ${siteName}.`
+          : `Tìm kiếm sản phẩm thực phẩm B2B trên ${siteName}.`,
+        canonicalPath,
+        robots: 'noindex, follow'
+      });
+      return;
+    }
+
+    if (isProductView) {
+      applySeo({
+        title: `Chi tiết sản phẩm | ${siteName}`,
+        description: `Xem thông tin sản phẩm, giá và mô tả chi tiết trên ${siteName}.`,
+        canonicalPath
+      });
+      return;
+    }
+
+    if (isCartView || isLoginView || isRegisterView || isForgotPasswordView || isWishlistView || isCheckoutView || isDashboardView) {
+      applySeo({
+        title: `${siteName} | Tài khoản và mua hàng`,
+        description: `Khu vực tài khoản, giỏ hàng và thanh toán của ${siteName}.`,
+        canonicalPath,
+        robots: 'noindex, nofollow'
+      });
+      return;
+    }
+
+    applySeo({
+      title: `${siteName} - Nền tảng thực phẩm B2B Việt Nam`,
+      description: `${siteName} kết nối doanh nghiệp với nguồn thực phẩm tươi sống, rau củ, hải sản, đồ khô và tiện ích bếp tại Việt Nam.`,
+      canonicalPath: '/react/'
+    });
+  }, [
+    view,
+    category,
+    subcategory,
+    isCategoryView,
+    isSearchView,
+    isRegisterView,
+    isCartView,
+    isLoginView,
+    isForgotPasswordView,
+    isProductView,
+    isWishlistView,
+    isCheckoutView,
+    isDashboardView
+  ]);
 
   if (isDashboardView) {
     return <UserDashboardPage />;

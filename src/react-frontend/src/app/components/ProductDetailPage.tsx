@@ -4,6 +4,7 @@ import { ImageWithFallback } from './figma/ImageWithFallback';
 import { WishlistAddModal, WishlistModalProduct } from './WishlistAddModal';
 import { useCart, toCurrencyTextFromNumber, toUnitPriceFromLooseValue } from '../cart/CartProvider';
 import { toQuerySlug } from '../data/categories';
+import { applySeo, buildBreadcrumbJsonLd, buildProductJsonLd, getSiteName } from '../utils/seo';
 
 type MagentoProduct = {
   id: string;
@@ -291,6 +292,40 @@ export function ProductDetailPage() {
   const updateQuantity = (delta: number) => {
     setQuantity((prev) => Math.max(1, prev + delta));
   };
+
+  useEffect(() => {
+    if (!product) {
+      return;
+    }
+
+    const canonicalPath = `/react/index.html?view=product&sku=${encodeURIComponent(product.sku)}`;
+    const description = product.note || product.description.features || `${product.name} trên ${getSiteName()}.`;
+    const productJsonLd = buildProductJsonLd({
+      name: product.name,
+      sku: product.sku,
+      image: product.image,
+      description,
+      price: product.price,
+      category: product.category,
+      canonicalPath
+    });
+    const breadcrumbJsonLd = buildBreadcrumbJsonLd([
+      { name: 'Trang chủ', path: '/react/' },
+      { name: product.category, path: `/react/index.html?view=category&category=${toQuerySlug(product.category)}` },
+      { name: product.name, path: canonicalPath }
+    ]);
+
+    applySeo({
+      title: `${product.name} | ${getSiteName()}`,
+      description,
+      canonicalPath,
+      image: product.image,
+      structuredData: {
+        '@context': 'https://schema.org',
+        '@graph': [breadcrumbJsonLd, productJsonLd]
+      }
+    });
+  }, [product]);
 
   const startHold = (delta: number) => {
     updateQuantity(delta);

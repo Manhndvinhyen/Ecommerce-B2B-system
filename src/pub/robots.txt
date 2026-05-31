@@ -19,7 +19,6 @@ Disallow: /customer/
 Disallow: /wishlist/
 Disallow: /review/
 Disallow: /catalog/product_compare/
-Disallow: /*?*
 
 # Sitemap
-Sitemap: http://localhost:8081/sitemap.xml
+Sitemap: https://organica.click/sitemap.xml

@@ -88,7 +88,8 @@ class RegisterManagement implements RegisterInterface
         $customer->setCustomAttribute('tmdt_login_code', $loginCode);
         $customer->setCustomAttribute('tmdt_registration_type', $registrationType);
         $customer->setCustomAttribute('tmdt_unit_nickname', $unitNickname);
-        $customer->setCustomAttribute('is_owner', $this->shouldAssignOwnerFlag() ? 1 : 0);
+        $isOwnerVal = $isSeller ? 1 : ($this->shouldAssignOwnerFlag() ? 1 : 0);
+        $customer->setCustomAttribute('is_owner', $isOwnerVal);
         $customer->setCustomAttribute('is_super_admin', 1);
         $customer->setCustomAttribute('tmdt_role', $role);
 
@@ -117,7 +118,7 @@ class RegisterManagement implements RegisterInterface
                 'agree_to_terms' => (int) $agreeToTerms,
                 'files_json' => $this->serializer->serialize($storedFiles),
                 'sanitized_payload_json' => $this->buildSanitizedPayloadJson($payload),
-                'status' => 'pending',
+                'status' => $isSeller ? 'approved' : 'pending',
                 'role' => $role,
                 'notes' => null,
             ]);

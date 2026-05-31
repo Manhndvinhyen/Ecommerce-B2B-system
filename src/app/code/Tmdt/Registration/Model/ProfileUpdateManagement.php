@@ -19,11 +19,17 @@ class ProfileUpdateManagement implements ProfileUpdateInterface
     private const TABLE_NAME = 'tmdt_customer_registration';
     private const AUTH_HEADER = 'Authorization';
 
+    private const MEDIA_SUBDIR = 'tmdt_registration/licenses';
+    private const MAX_FILE_SIZE = 5242880;
+    private const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'pdf', 'heif', 'heic'];
+
     public function __construct(
         private readonly ResourceConnection $resourceConnection,
         private readonly RestRequest $request,
         private readonly CustomerRepositoryInterface $customerRepository,
-        private readonly TokenFactory $tokenFactory
+        private readonly TokenFactory $tokenFactory,
+        private readonly \Magento\Framework\Filesystem $filesystem,
+        private readonly \Magento\Framework\Serialize\Serializer\Json $serializer
     ) {
     }
 
@@ -137,6 +143,25 @@ class ProfileUpdateManagement implements ProfileUpdateInterface
             $hasUpdate = true;
         }
 
+        if (array_key_exists('role', $payload)) {
+            $role = trim((string) $payload['role']);
+            if ($role === 'seller') {
+                $this->setCustomAttribute($customer, 'tmdt_role', 'seller');
+                $tableUpdate['role'] = 'seller';
+                $tableUpdate['status'] = 'approved';
+                $hasUpdate = true;
+            }
+        }
+
+        if (array_key_exists('files', $payload)) {
+            $filesPayload = $payload['files'];
+            if (is_array($filesPayload) && $filesPayload !== []) {
+                $storedFiles = $this->storeUploadedFiles($customerId, $filesPayload);
+                $tableUpdate['files_json'] = $this->serializer->serialize($storedFiles);
+                $hasUpdate = true;
+            }
+        }
+
         if (!$hasUpdate) {
             throw new InputException(__('Khong co du lieu can cap nhat.'));
         }
@@ -247,5 +272,97 @@ class ProfileUpdateManagement implements ProfileUpdateInterface
     private function setCustomAttribute(CustomerInterface $customer, string $code, string $value): void
     {
         $customer->setCustomAttribute($code, $value);
+    }
+
+    private function storeUploadedFiles(int $customerId, mixed $files): array
+    {
+        if (!is_array($files) || $files === []) {
+            return [];
+        }
+
+        $mediaDirectory = $this->filesystem->getDirectoryWrite(\Magento\Framework\App\Filesystem\DirectoryList::MEDIA);
+        $result = [];
+
+        foreach ($files as $file) {
+            if (!is_array($file)) {
+                continue;
+            }
+
+            $originalName = trim((string) ($file['name'] ?? ''));
+            if ($originalName === '') {
+                continue;
+            }
+
+            $safeName = basename($originalName);
+            $ext = strtolower((string) pathinfo($safeName, PATHINFO_EXTENSION));
+            if ($ext === '') {
+                $type = strtolower(trim((string) ($file['type'] ?? '')));
+                $ext = match ($type) {
+                    'image/jpeg' => 'jpg',
+                    'image/jpg' => 'jpg',
+                    'image/png' => 'png',
+                    'application/pdf' => 'pdf',
+                    'image/heif' => 'heif',
+                    'image/heic' => 'heic',
+                    default => '',
+                };
+            }
+
+            if ($ext === '' || !in_array($ext, self::ALLOWED_EXTENSIONS, true)) {
+                throw new InputException(__('Định dạng file giấy phép kinh doanh không được hỗ trợ.'));
+            }
+
+            $content = trim((string) ($file['content'] ?? ($file['dataUrl'] ?? '')));
+            if ($content === '') {
+                throw new InputException(__('Vui lòng tải lên giấy phép kinh doanh.'));
+            }
+
+            $base64 = $content;
+            if (str_starts_with($base64, 'data:')) {
+                $commaPos = strpos($base64, ',');
+                $base64 = $commaPos !== false ? substr($base64, $commaPos + 1) : '';
+            }
+            $base64 = preg_replace('/\s+/', '', (string) $base64) ?? '';
+
+            $binary = base64_decode($base64, true);
+            if ($binary === false) {
+                throw new InputException(__('File giấy phép kinh doanh không hợp lệ.'));
+            }
+
+            if (strlen($binary) > self::MAX_FILE_SIZE) {
+                throw new InputException(__('File giấy phép kinh doanh vượt quá dung lượng tối đa 5MB.'));
+            }
+
+            $baseName = (string) pathinfo($safeName, PATHINFO_FILENAME);
+            $baseName = trim(preg_replace('/[^a-zA-Z0-9._-]+/', '_', $baseName) ?? $baseName, '_');
+            if ($baseName === '') {
+                $baseName = 'license';
+            }
+
+            try {
+                $random = bin2hex(random_bytes(8));
+            } catch (\Throwable) {
+                $random = (string) mt_rand(100000, 999999);
+            }
+
+            $relativeDir = self::MEDIA_SUBDIR . '/' . $customerId;
+            $relativePath = $relativeDir . '/' . time() . '_' . $random . '_' . $baseName . '.' . $ext;
+
+            $mediaDirectory->create($relativeDir);
+            $mediaDirectory->writeFile($relativePath, $binary);
+
+            $result[] = [
+                'name' => $safeName,
+                'type' => (string) ($file['type'] ?? ''),
+                'size' => (int) ($file['size'] ?? strlen($binary)),
+                'path' => $relativePath,
+            ];
+        }
+
+        if ($result === []) {
+            throw new InputException(__('Vui lòng tải lên giấy phép kinh doanh.'));
+        }
+
+        return $result;
     }
 }

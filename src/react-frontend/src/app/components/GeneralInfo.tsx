@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Image as ImageIcon, FileBadge } from 'lucide-react';
+import { Image as ImageIcon, FileBadge, TrendingUp, ShoppingBag, Box, PlusCircle, ArrowRight, ShieldCheck } from 'lucide-react';
 
 const readStorageValue = (key: string) =>
   window.localStorage.getItem(key) || window.sessionStorage.getItem(key) || '';
@@ -86,6 +86,10 @@ const buildAddress = (detail: string, ward: string, district: string, province: 
 const safeValue = (value: string, fallback = '---') => (value.trim() ? value : fallback);
 
 export const GeneralInfo = () => {
+  const getStoredRole = () => {
+    return readStorageValue('freso_role') || '';
+  };
+
   const [data, setData] = useState<GeneralInfoData>(() => ({
     displayName: readStorageValue('freso_branch_name') || 'Chưa cập nhật',
     loginCode: readStorageValue('freso_login_code') || '---',
@@ -97,6 +101,7 @@ export const GeneralInfo = () => {
     licenseName: readStorageValue('freso_license_name') || 'Chưa có file',
     licenseUrl: readStorageValue('freso_license_url') || '',
   }));
+  const [userRole, setUserRole] = useState(getStoredRole());
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const loadInFlightRef = useRef(false);
@@ -284,8 +289,9 @@ export const GeneralInfo = () => {
     loadProfile();
 
     const handleSync = (ev?: StorageEvent | null) => {
-      if (!ev || ev.key === 'freso_last_profile_update' || ev.key === 'freso_customer_token') {
+      if (!ev || ev.key === 'freso_last_profile_update' || ev.key === 'freso_customer_token' || ev.key === 'freso_role') {
         loadProfile();
+        setUserRole(getStoredRole());
       }
     };
 
@@ -307,6 +313,149 @@ export const GeneralInfo = () => {
       : 'bg-[#E9F8EF] text-[#00b14f]';
 
   const canOpenLicense = Boolean(data.licenseUrl && data.licenseName && data.licenseName !== 'Chưa có file');
+
+  if (userRole === 'seller') {
+    return (
+      <div className="flex-1 bg-gray-50/50 p-8 overflow-y-auto" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+        {/* Seller Header Summary */}
+        <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 bg-gradient-to-br from-orange-400 to-orange-600 rounded-2xl flex items-center justify-center text-white shadow-md shadow-orange-500/10 shrink-0">
+              <ImageIcon size={32} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-0.5">
+                <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{data.displayName}</h1>
+                <span className={`px-3 py-0.5 text-xs font-bold rounded-full ${statusTone}`}>
+                  {data.statusLabel}
+                </span>
+              </div>
+              <p className="text-[13px] text-gray-500 font-medium">Mã nhà bán hàng: <span className="font-bold text-gray-700">{data.loginCode}</span></p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="px-5 py-2 bg-orange-500 text-white rounded-full text-[13px] font-bold hover:bg-orange-600 transition-all flex items-center gap-1.5 shadow-sm">
+              <PlusCircle size={15} />
+              <span>Đăng sản phẩm mới</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Business Metrics Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-all">
+            <div className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center text-[#00b14f] shrink-0">
+              <TrendingUp size={22} />
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium mb-0.5">Doanh thu tháng này</p>
+              <h3 className="text-xl font-bold text-gray-900">142,500,000đ</h3>
+              <span className="text-[11px] text-green-600 font-bold flex items-center gap-0.5 mt-0.5">
+                +12.4% so với tháng trước
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-all">
+            <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 shrink-0">
+              <ShoppingBag size={22} />
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium mb-0.5">Đơn hàng mới</p>
+              <h3 className="text-xl font-bold text-gray-900">18 đơn hàng</h3>
+              <span className="text-[11px] text-blue-600 font-bold flex items-center gap-0.5 mt-0.5">
+                4 đơn đang chờ xử lý
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-all">
+            <div className="w-12 h-12 bg-purple-50 rounded-2xl flex items-center justify-center text-purple-600 shrink-0">
+              <Box size={22} />
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium mb-0.5">Sản phẩm đang bán</p>
+              <h3 className="text-xl font-bold text-gray-900">114 sản phẩm</h3>
+              <span className="text-[11px] text-purple-600 font-bold flex items-center gap-0.5 mt-0.5">
+                Tất cả đều hiển thị
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Detailed Info Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* General Information Card */}
+          <div className="lg:col-span-2 bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
+            <h2 className="text-[17px] font-bold text-gray-800 mb-5 tracking-tight flex items-center gap-2">
+              <ShieldCheck className="text-orange-500" size={20} />
+              Thông tin kinh doanh
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-5 gap-x-12">
+              <div>
+                <p className="text-xs text-gray-400 font-medium mb-1">Mã đăng nhập doanh nghiệp</p>
+                <p className="text-sm font-bold text-gray-800">{data.loginCode}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 font-medium mb-1">Mã số thuế</p>
+                <p className="text-sm font-bold text-gray-800">{data.taxCode}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 font-medium mb-1">Đối tượng đăng ký</p>
+                <p className="text-sm font-bold text-gray-800">{data.registrationType}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 font-medium mb-1">Tên trên giấy phép kinh doanh</p>
+                <p className="text-sm font-bold text-gray-800">{data.businessName}</p>
+              </div>
+              <div className="sm:col-span-2 border-t border-gray-50 pt-4 mt-2">
+                <p className="text-xs text-gray-400 font-medium mb-1">Địa chỉ kinh doanh</p>
+                <p className="text-sm font-bold text-gray-800 leading-relaxed">{data.address}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* License Card */}
+          <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm flex flex-col justify-between">
+            <div>
+              <h2 className="text-[17px] font-bold text-gray-800 mb-2 tracking-tight flex items-center gap-2">
+                <FileBadge className="text-orange-500" size={20} />
+                Giấy phép kinh doanh
+              </h2>
+              <p className="text-xs text-gray-400 leading-relaxed mb-6">
+                Hồ sơ pháp lý đã được duyệt xác thực bởi hệ thống Freso.
+              </p>
+              
+              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center gap-3">
+                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-orange-500 border border-gray-100 shadow-sm shrink-0">
+                  <FileBadge size={20} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-gray-400 font-medium">Tên tài liệu</p>
+                  <p className="text-xs font-bold text-gray-700 truncate">{data.licenseName || 'Chưa có file'}</p>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              disabled={!canOpenLicense}
+              onClick={() => {
+                if (!canOpenLicense) return;
+                window.open(data.licenseUrl, '_blank', 'noopener,noreferrer');
+              }}
+              className={`w-full mt-6 py-3 border border-orange-500 text-orange-500 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                canOpenLicense ? 'hover:bg-orange-50 cursor-pointer' : 'opacity-50 cursor-not-allowed'
+              }`}
+            >
+              <span>Xem chi tiết tài liệu</span>
+              <ArrowRight size={13} />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 bg-white p-8 overflow-y-auto">

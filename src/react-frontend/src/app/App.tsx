@@ -17,6 +17,7 @@ import { LoginPage } from './components/LoginPage';
 import { ForgotPasswordPage } from './components/ForgotPasswordPage';
 import { ProductDetailPage } from './components/ProductDetailPage';
 import { UserDashboardPage } from './components/UserDashboardPage';
+import { SellerDashboardPage } from './components/SellerDashboardPage';
 import { WishlistPage } from './components/WishlistPage';
 import { CheckoutPage } from './components/CheckoutPage';
 import { getCategoryNameFromQuery, getSubcategoryNameFromQuery } from './data/categories';
@@ -41,6 +42,7 @@ function AppContent() {
     window.location.pathname.endsWith('/react/checkout') ||
     window.location.pathname.endsWith('/checkout');
   const isDashboardView = view === 'dashboard';
+  const isSellerDashboardView = view === 'seller-dashboard';
 
   useEffect(() => {
     console.info('[FresoSearch][App] route detected', {
@@ -88,7 +90,7 @@ function AppContent() {
       return;
     }
 
-    if (isCartView || isLoginView || isRegisterView || isForgotPasswordView || isWishlistView || isCheckoutView || isDashboardView) {
+    if (isCartView || isLoginView || isRegisterView || isForgotPasswordView || isWishlistView || isCheckoutView || isDashboardView || isSellerDashboardView) {
       applySeo({
         title: `${siteName} | Tài khoản và mua hàng`,
         description: `Khu vực tài khoản, giỏ hàng và thanh toán của ${siteName}.`,
@@ -116,11 +118,16 @@ function AppContent() {
     isProductView,
     isWishlistView,
     isCheckoutView,
-    isDashboardView
+    isDashboardView,
+    isSellerDashboardView
   ]);
 
   if (isDashboardView) {
     return <UserDashboardPage />;
+  }
+
+  if (isSellerDashboardView) {
+    return <SellerDashboardPage />;
   }
 
   if (isRegisterView) {

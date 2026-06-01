@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { User, Bell, HelpCircle } from 'lucide-react';
-import { adminMenuItems } from './AdminSidebar';
+import { adminMenuItems } from './SidebarMenu';
 
 export function SellerHeader() {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);

@@ -1,43 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import { 
-  CircleUserRound, 
-  LayoutDashboard, 
-  FileText,
-  History,
-  Handshake, 
-  UserRoundSearch, 
-  PieChart, 
-  ChevronRight,
-  LogOut,
-  ChevronDown,
-  ShieldCheck,
-  Box,
-  ShoppingCart,
-  Store
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-
-export type AdminMenuItem = {
-  id: string;
-  label: string;
-  icon: LucideIcon;
-  subItems?: string[];
-};
-
-export const adminMenuItems: AdminMenuItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'profile-seller', label: 'Thông tin hồ sơ', icon: CircleUserRound },
-  { id: 'quan-ly-san-pham', label: 'Quản lý sản phẩm', icon: Box },
-  { id: 'quan-ly-gio-hang', label: 'Quản lý giỏ hàng', icon: ShoppingCart },
-  { id: 'quan-ly-kho', label: 'Quản lý kho hàng', icon: History },
-  { id: 'don-hang', label: 'Quản lý đơn hàng', icon: FileText },
-  { id: 'bao-gia', label: 'Đàm phán giá', icon: Handshake },
-];
+import { ChevronRight, LogOut, Store } from 'lucide-react';
+import { adminMenuItems, AdminMenuItem } from './SidebarMenu';
 
 type OpenMenus = Record<string, boolean>;
 
-type AdminSidebarProps = {
+type SellerSidebarProps = {
   activeTab?: string;
   setActiveTab?: Dispatch<SetStateAction<string>>;
   openMenus?: OpenMenus;
@@ -45,7 +13,7 @@ type AdminSidebarProps = {
   menuItems?: AdminMenuItem[];
 };
 
-export function AdminSidebar(props: AdminSidebarProps = {}) {
+export function SellerSidebar(props: SellerSidebarProps = {}) {
   const {
     activeTab: propActiveTab,
     setActiveTab: propSetActiveTab,
@@ -99,7 +67,7 @@ export function AdminSidebar(props: AdminSidebarProps = {}) {
   return (
     <div style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }} className="w-full">
       <div className="w-full max-w-[270px] bg-white border border-slate-100 rounded-3xl p-5 shadow-lg shadow-slate-100/40 relative">
-        {/* Merchant Identity Card Badge */}
+        {/* Identity Card Badge */}
         <div className="mb-6 p-4 bg-gradient-to-br from-green-500/10 via-emerald-500/5 to-transparent rounded-2xl border border-green-500/10 flex items-center gap-3 relative overflow-hidden">
           <div className="w-10 h-10 bg-gradient-to-br from-green-600 to-emerald-600 rounded-xl flex items-center justify-center text-white shrink-0 shadow-md shadow-green-600/10">
             <Store size={18} />

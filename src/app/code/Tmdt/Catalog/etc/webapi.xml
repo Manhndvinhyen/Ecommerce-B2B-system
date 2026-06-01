@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Webapi:etc/webapi.xsd">
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Webapi:etc/webapi.xsd">
     <!-- Product Management Routes -->
     <route url="/V1/tmdt-catalog/product" method="POST">
         <service class="Tmdt\Catalog\Api\ProductManagementInterface" method="createProduct"/>
@@ -39,4 +39,4 @@
             <resource ref="self"/>
         </resources>
     </route>
-</config>
+</routes>

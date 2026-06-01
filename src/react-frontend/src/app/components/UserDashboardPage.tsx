@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AdminSidebar, adminMenuItems } from './AdminSidebar';
+import { CustomerSidebar } from './CustomerSidebar';
+import { adminMenuItems } from './SidebarMenu';
 import { ProfileContent } from './ProfileContent';
 import { CreateBranchManager } from './CreateBranchManager';
 import { EmployeeList } from './EmployeeList';
@@ -63,15 +64,8 @@ export function UserDashboardPage() {
   }, []);
 
   const menuItems = useMemo(() => {
-    // For customers/buyers, completely exclude the seller's "Thông tin chung" dashboard tab
-    let items = adminMenuItems.filter((item) => item.id !== 'thong-tin');
-
-    if (!isSuperAdmin) {
-      items = items.filter((item) => item.id !== 'nhan-vien');
-    }
-
-    return items;
-  }, [isSuperAdmin]);
+    return adminMenuItems.filter((item) => item.id === 'profile-seller' || item.id === 'nhan-vien');
+  }, []);
 
   const params = new URLSearchParams(window.location.search);
   const tabFromQuery = params.get('tab');
@@ -79,20 +73,8 @@ export function UserDashboardPage() {
     ...menuItems.map((item) => item.label),
     ...menuItems.flatMap((item) => item.subItems ?? []),
   ]);
-  const initialTab = tabFromQuery && tabLabels.has(tabFromQuery) ? tabFromQuery : 'Tài khoản của tôi';
+  const initialTab = tabFromQuery && tabLabels.has(tabFromQuery) ? tabFromQuery : 'Thông tin hồ sơ';
   const [activeTab, setActiveTab] = useState(initialTab);
-  const [openMenus, setOpenMenus] = useState(() => {
-    const defaults: Record<string, boolean> = { 'nhan-vien': false, 'bao-cao': false };
-    return menuItems.reduce((acc, item) => {
-      if (!item.subItems) {
-        return acc;
-      }
-      if (item.label === initialTab || item.subItems.includes(initialTab)) {
-        acc[item.id] = true;
-      }
-      return acc;
-    }, defaults);
-  });
 
   return (
     <div className="min-h-screen bg-white">
@@ -102,27 +84,21 @@ export function UserDashboardPage() {
         <div className="max-w-[1200px] mx-auto flex items-start">
           {/* Left sidebar */}
           <div className="w-[255px] flex-none border-r border-gray-200 pr-5">
-            <AdminSidebar
+            <CustomerSidebar
               activeTab={activeTab}
               setActiveTab={setActiveTab}
-              openMenus={openMenus}
-              setOpenMenus={setOpenMenus}
               menuItems={menuItems}
             />
           </div>
 
           {/* Right content area */}
           <div className="flex-1">
-            {activeTab === 'Tài khoản của tôi' && <ProfileContent />}
-            {(activeTab === 'Quản lý nhân viên' || activeTab === 'Tạo mới nhân viên') && (
-              <CreateBranchManager isSuperAdmin={isSuperAdmin} />
-            )}
-            {activeTab === 'Danh sách nhân viên' && <EmployeeList isSuperAdmin={isSuperAdmin} />}
-            {activeTab !== 'Tài khoản của tôi' &&
-              activeTab !== 'Danh sách nhân viên' &&
-              activeTab !== 'Tạo mới nhân viên' &&
-              activeTab !== 'Quản lý nhân viên' && (
-              <div className="p-8">Nội dung cho: {activeTab}</div>
+            {activeTab === 'Thông tin hồ sơ' && <ProfileContent />}
+            {activeTab === 'Quản lý nhân viên' && (
+              <div className="space-y-6">
+                <CreateBranchManager isSuperAdmin={isSuperAdmin} />
+                <EmployeeList isSuperAdmin={isSuperAdmin} />
+              </div>
             )}
           </div>
         </div>

@@ -9,6 +9,7 @@ import {
   getSubcategoryNameFromQuery,
   toQuerySlug
 } from '../data/categories';
+import { getMockSupplierForProduct, supplierRegions } from '../data/mockSuppliers';
 import { searchSynonymGroups } from '../data/searchSynonyms';
 import { toCurrencyTextFromLooseValue, toUnitPriceFromLooseValue, useCart } from '../cart/CartProvider';
 import { applySeo, buildBreadcrumbJsonLd, buildItemListJsonLd, getSiteName } from '../utils/seo';
@@ -18,9 +19,12 @@ type ProductItem = {
   sku: string;
   name: string;
   price: string;
+  priceValue: number;
   image: string;
   categoryLabel: string;
   unit: string;
+  supplierName: string;
+  supplierRegion: string;
 };
 
 type GraphQlProductItem = {
@@ -281,7 +285,7 @@ const buildExpandedSearchTerms = (query: string) => {
 
   normalizedQuery
     .split('-')
-    .filter((part) => part.length >= 2)
+    .filter((part) => part.length >= 3)
     .forEach((part) => terms.push(part));
 
   const seen = new Set<string>();
@@ -298,6 +302,36 @@ const buildExpandedSearchTerms = (query: string) => {
       return true;
     })
     .slice(0, 10);
+};
+
+const scoreProductForSearch = (product: ProductItem, query: string, expandedTerms: string[]) => {
+  const normalizedQuery = toQuerySlug(query);
+  const haystack = toQuerySlug(`${product.name} ${product.categoryLabel} ${product.sku}`);
+  let score = 0;
+
+  if (haystack.includes(normalizedQuery)) {
+    score += 120;
+  }
+
+  expandedTerms.forEach((term, index) => {
+    const normalizedTerm = toQuerySlug(term);
+    if (normalizedTerm.length < 3) {
+      return;
+    }
+
+    if (haystack.includes(normalizedTerm)) {
+      score += Math.max(12, 80 - index * 4);
+      return;
+    }
+
+    const termParts = normalizedTerm.split('-').filter((part) => part.length >= 3);
+    const matchedParts = termParts.filter((part) => haystack.includes(part)).length;
+    if (matchedParts > 0 && matchedParts === termParts.length) {
+      score += Math.max(8, 36 - index * 2);
+    }
+  });
+
+  return score;
 };
 
 const fallbackImageByCategory: Record<string, string> = {
@@ -319,6 +353,7 @@ let cachedCategoryLookup: Record<string, number> | null = null;
 const PRODUCT_CACHE_TTL_MS = 15_000;
 const PRODUCT_AUTO_REFRESH_MS = 30_000;
 const productsResponseCache = new Map<string, { items: ProductItem[]; fetchedAt: number }>();
+const preferredRegionStorageKey = 'freso_preferred_region';
 
 const graphqlRequest = async (
   query: string,
@@ -337,6 +372,14 @@ const graphqlRequest = async (
   });
 };
 
+const getStoredPreferredRegion = () => {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  return window.localStorage.getItem(preferredRegionStorageKey) || window.sessionStorage.getItem(preferredRegionStorageKey) || '';
+};
+
 export function ProductCategoryPage({ categoryName, initialSubcategory }: ProductCategoryPageProps) {
   const { openAddToCartModal } = useCart();
   const category = useMemo(() => {
@@ -353,6 +396,9 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
   const latestRequestRef = useRef(0);
   const [wishlistItemsMap, setWishlistItemsMap] = useState<Record<string, { itemId: string; listId: string }>>({});
   const [wishlistProduct, setWishlistProduct] = useState<WishlistModalProduct | null>(null);
+  const [sortMode, setSortMode] = useState<'recommended' | 'price-asc' | 'price-desc'>('recommended');
+  const [regionFilter, setRegionFilter] = useState('all');
+  const [preferredRegion] = useState(getStoredPreferredRegion);
   const searchQuery = useMemo(() => {
     return new URLSearchParams(window.location.search).get('q')?.trim() ?? '';
   }, []);
@@ -661,6 +707,8 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
             const isPlaceholderImage = imageUrl.includes('/placeholder/');
             const inferred = inferCategoryFromSku(item.sku);
             const productCategory = inferred?.category ?? pickCategoryFromGraphQl(item) ?? category.name;
+            const priceValue = Number(item.price_range?.minimum_price?.final_price?.value ?? 0);
+            const supplier = getMockSupplierForProduct(item.sku, productCategory);
             const fallbackImage =
               fallbackImageByCategory[productCategory] ??
               fallbackImageByCategory[category.name] ??
@@ -670,12 +718,22 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
               id: item.id,
               sku: item.sku,
               name: item.name,
-              price: formatPrice(item.price_range?.minimum_price?.final_price?.value),
+              price: formatPrice(priceValue),
+              priceValue,
               unit: inferUnitByCategory(productCategory),
               image: !imageUrl || isPlaceholderImage ? fallbackImage : imageUrl,
-              categoryLabel: inferred?.subcategory ?? pickCategoryFromGraphQl(item) ?? productCategory
+              categoryLabel: inferred?.subcategory ?? pickCategoryFromGraphQl(item) ?? productCategory,
+              supplierName: supplier.name,
+              supplierRegion: supplier.region
             };
-          });
+          })
+            .map((product) => ({
+              product,
+              searchScore: scoreProductForSearch(product, searchQuery, expandedSearchTerms)
+            }))
+            .filter((item) => item.searchScore > 0)
+            .sort((a, b) => b.searchScore - a.searchScore)
+            .map((item) => item.product);
 
           if (latestRequestRef.current !== requestId) {
             console.info('[FresoSearch][ProductCategoryPage] skipped stale search response', {
@@ -809,6 +867,9 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
               'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop';
 
             const inferred = inferCategoryFromSku(item.sku);
+            const productCategory = inferred?.category ?? category.name;
+            const priceValue = Number(item.price_range?.minimum_price?.final_price?.value ?? 0);
+            const supplier = getMockSupplierForProduct(item.sku, productCategory);
 
             if (isUsingSkuFallback) {
               const categoryMatched = inferred?.category === category.name;
@@ -824,10 +885,13 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
               id: item.id,
               sku: item.sku,
               name: item.name,
-              price: formatPrice(item.price_range?.minimum_price?.final_price?.value),
-              unit: inferUnitByCategory(inferred?.category ?? category.name),
+              price: formatPrice(priceValue),
+              priceValue,
+              unit: inferUnitByCategory(productCategory),
               image: !imageUrl || isPlaceholderImage ? fallbackImage : imageUrl,
-              categoryLabel: getCategoryDisplayLabel(item)
+              categoryLabel: getCategoryDisplayLabel(item),
+              supplierName: supplier.name,
+              supplierRegion: supplier.region
             };
             })
             .filter((item): item is NonNullable<typeof item> => item !== null),
@@ -866,8 +930,31 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
     };
   }, [category.name, category.subcategories, activeSubcategory, categoryLookupDependency, refreshTick, isSearchMode, searchQuery]);
 
-  const productsToShow = products.slice(0, visibleCount);
-  const canLoadMore = visibleCount < products.length;
+  const filteredProducts = useMemo(() => {
+    const scopedProducts =
+      regionFilter === 'all' ? products : products.filter((product) => product.supplierRegion === regionFilter);
+    const regionBoost = (product: ProductItem) =>
+      preferredRegion && product.supplierRegion === preferredRegion ? 1 : 0;
+    const sortedProducts = [...scopedProducts].sort((left, right) => {
+      if (sortMode === 'price-asc') {
+        return left.priceValue - right.priceValue;
+      }
+      if (sortMode === 'price-desc') {
+        return right.priceValue - left.priceValue;
+      }
+
+      const boostDiff = regionBoost(right) - regionBoost(left);
+      if (boostDiff !== 0) {
+        return boostDiff;
+      }
+
+      return left.name.localeCompare(right.name, 'vi');
+    });
+
+    return sortedProducts;
+  }, [preferredRegion, products, regionFilter, sortMode]);
+  const productsToShow = filteredProducts.slice(0, visibleCount);
+  const canLoadMore = visibleCount < filteredProducts.length;
   const canonicalPath = useMemo(() => {
     if (isSearchMode) {
       const params = new URLSearchParams({
@@ -999,6 +1086,62 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
               );
             })}
           </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+            <label className="text-sm font-medium text-gray-700">
+              Khu vực nhà cung cấp
+              <select
+                value={regionFilter}
+                onChange={(event) => {
+                  setRegionFilter(event.target.value);
+                  setVisibleCount(10);
+                }}
+                className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-green-500"
+              >
+                <option value="all">Tất cả khu vực</option>
+                {supplierRegions.map((region) => (
+                  <option key={region} value={region}>
+                    {region}{preferredRegion === region ? ' - khu vực của bạn' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="text-sm font-medium text-gray-700">
+              Sắp xếp
+              <select
+                value={sortMode}
+                onChange={(event) => {
+                  setSortMode(event.target.value as typeof sortMode);
+                  setVisibleCount(10);
+                }}
+                className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-green-500"
+              >
+                <option value="recommended">Phù hợp nhất{preferredRegion ? ` - ưu tiên ${preferredRegion}` : ''}</option>
+                <option value="price-asc">Giá thấp đến cao</option>
+                <option value="price-desc">Giá cao đến thấp</option>
+              </select>
+            </label>
+
+            <div className="flex items-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setRegionFilter('all');
+                  setSortMode('recommended');
+                  setVisibleCount(10);
+                }}
+                className="w-full rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 hover:border-green-500 hover:text-green-700 md:w-auto"
+              >
+                Đặt lại
+              </button>
+            </div>
+          </div>
+          {preferredRegion && (
+            <p className="mt-3 text-xs text-gray-500">
+              Đã ghi nhớ khu vực mua gần nhất: <span className="font-semibold text-green-700">{preferredRegion}</span>.
+            </p>
+          )}
         </div>
 
         {isLoading ? (
@@ -1064,6 +1207,9 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
                   </div>
                   <div className="p-3">
                     <p className="text-xs text-gray-500 mb-1">{product.categoryLabel}</p>
+                    <p className="mb-2 text-[11px] font-medium text-green-700">
+                      {product.supplierName} · {product.supplierRegion}
+                    </p>
                     <div className="mb-2 flex items-start justify-between gap-2">
                       <h3 className="font-bold text-gray-900 group-hover:text-green-600 transition-colors line-clamp-2">
                         {product.name}

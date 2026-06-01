@@ -7,13 +7,13 @@ use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Phrase;
 use Magento\Framework\Webapi\Rest\Request as RestRequest;
 use Magento\Integration\Model\Oauth\TokenFactory;
-use Tmdt\Wishlist\Api\WishlistManagementInterface;
-use Tmdt\Wishlist\Api\Data\WishlistListInterfaceFactory;
 use Tmdt\Wishlist\Api\Data\WishlistItemInterfaceFactory;
-use Tmdt\Wishlist\Model\ResourceModel\WishlistList as WishlistListResource;
+use Tmdt\Wishlist\Api\Data\WishlistListInterfaceFactory;
+use Tmdt\Wishlist\Api\WishlistManagementInterface;
 use Tmdt\Wishlist\Model\ResourceModel\WishlistItem as WishlistItemResource;
-use Tmdt\Wishlist\Model\ResourceModel\WishlistList\CollectionFactory as ListCollectionFactory;
 use Tmdt\Wishlist\Model\ResourceModel\WishlistItem\CollectionFactory as ItemCollectionFactory;
+use Tmdt\Wishlist\Model\ResourceModel\WishlistList as WishlistListResource;
+use Tmdt\Wishlist\Model\ResourceModel\WishlistList\CollectionFactory as ListCollectionFactory;
 
 class WishlistManagement implements WishlistManagementInterface
 {
@@ -55,6 +55,9 @@ class WishlistManagement implements WishlistManagementInterface
         $this->tokenFactory = $tokenFactory;
     }
 
+    /**
+     * @return array<int, \Tmdt\Wishlist\Api\Data\WishlistListInterface>
+     */
     public function getLists()
     {
         $customerId = $this->getCustomerId();
@@ -64,24 +67,28 @@ class WishlistManagement implements WishlistManagementInterface
 
         $lists = [];
         foreach ($collection as $listModel) {
-            $listId = (string)$listModel->getData('list_id');
+            $listId = (string) $listModel->getData('list_id');
             $itemCount = $this->itemCollectionFactory->create()
                 ->addFieldToFilter('list_id', $listId)
                 ->getSize();
 
             $listData = $this->listDataFactory->create();
             $listData->setId($listId);
-            $listData->setName((string)$listModel->getData('name'));
-            $listData->setItemCount((int)$itemCount);
+            $listData->setName((string) $listModel->getData('name'));
+            $listData->setItemCount((int) $itemCount);
             $lists[] = $listData;
         }
 
         return $lists;
     }
 
+    /**
+     * @param string $listId
+     * @return array<int, \Tmdt\Wishlist\Api\Data\WishlistItemInterface>
+     */
     public function getListItems($listId)
     {
-        $this->assertListOwner($listId);
+        $this->assertListOwner((string) $listId);
 
         $collection = $this->itemCollectionFactory->create();
         $collection->addFieldToFilter('list_id', $listId);
@@ -90,24 +97,28 @@ class WishlistManagement implements WishlistManagementInterface
         $items = [];
         foreach ($collection as $itemModel) {
             $itemData = $this->itemDataFactory->create();
-            $itemData->setId((string)$itemModel->getData('item_id'));
-            $itemData->setListId((string)$itemModel->getData('list_id'));
-            $itemData->setSku((string)$itemModel->getData('sku'));
-            $itemData->setName((string)$itemModel->getData('name'));
-            $itemData->setPrice((float)$itemModel->getData('price'));
-            $itemData->setUnit((string)$itemModel->getData('unit'));
-            $itemData->setImage((string)$itemModel->getData('image'));
-            $itemData->setCategory((string)$itemModel->getData('category'));
+            $itemData->setId((string) $itemModel->getData('item_id'));
+            $itemData->setListId((string) $itemModel->getData('list_id'));
+            $itemData->setSku((string) $itemModel->getData('sku'));
+            $itemData->setName((string) $itemModel->getData('name'));
+            $itemData->setPrice((float) $itemModel->getData('price'));
+            $itemData->setUnit((string) $itemModel->getData('unit'));
+            $itemData->setImage($itemModel->getData('image'));
+            $itemData->setCategory($itemModel->getData('category'));
             $items[] = $itemData;
         }
 
         return $items;
     }
 
+    /**
+     * @param string $name
+     * @return \Tmdt\Wishlist\Api\Data\WishlistListInterface
+     */
     public function createList($name)
     {
         $customerId = $this->getCustomerId();
-        $name = trim((string)$name);
+        $name = trim((string) $name);
         if ($name === '') {
             throw new LocalizedException(new Phrase('Tên danh sách không được để trống.'));
         }
@@ -118,12 +129,16 @@ class WishlistManagement implements WishlistManagementInterface
         $this->listResource->save($model);
 
         $listData = $this->listDataFactory->create();
-        $listData->setId((string)$model->getData('list_id'));
+        $listData->setId((string) $model->getData('list_id'));
         $listData->setName($name);
         $listData->setItemCount(0);
         return $listData;
     }
 
+    /**
+     * @param string $itemId
+     * @return bool
+     */
     public function removeItem($itemId)
     {
         $item = $this->itemFactory->create();
@@ -132,40 +147,50 @@ class WishlistManagement implements WishlistManagementInterface
             throw new LocalizedException(new Phrase('Không tìm thấy sản phẩm trong wishlist.'));
         }
 
-        $listId = (string)$item->getData('list_id');
+        $listId = (string) $item->getData('list_id');
         $this->assertListOwner($listId);
         $this->itemResource->delete($item);
         return true;
     }
 
+    /**
+     * @param string $listId
+     * @param string $sku
+     * @param string $name
+     * @param float $price
+     * @param string $unit
+     * @param string|null $image
+     * @param string|null $category
+     * @return \Tmdt\Wishlist\Api\Data\WishlistItemInterface
+     */
     public function addItem($listId, $sku, $name, $price, $unit, $image = null, $category = null)
     {
-        $this->assertListOwner((string)$listId);
-        $sku = trim((string)$sku);
-        $name = trim((string)$name);
+        $this->assertListOwner((string) $listId);
+        $sku = trim((string) $sku);
+        $name = trim((string) $name);
         if ($sku === '' || $name === '') {
             throw new LocalizedException(new Phrase('SKU và tên sản phẩm là bắt buộc.'));
         }
 
         $model = $this->itemFactory->create();
-        $model->setData('list_id', (int)$listId);
+        $model->setData('list_id', (int) $listId);
         $model->setData('sku', $sku);
         $model->setData('name', $name);
-        $model->setData('price', (float)$price);
-        $model->setData('unit', (string)$unit);
-        $model->setData('image', (string)$image);
-        $model->setData('category', (string)$category);
+        $model->setData('price', (float) $price);
+        $model->setData('unit', (string) $unit);
+        $model->setData('image', $image);
+        $model->setData('category', $category);
         $this->itemResource->save($model);
 
         $itemData = $this->itemDataFactory->create();
-        $itemData->setId((string)$model->getData('item_id'));
-        $itemData->setListId((string)$model->getData('list_id'));
+        $itemData->setId((string) $model->getData('item_id'));
+        $itemData->setListId((string) $model->getData('list_id'));
         $itemData->setSku($sku);
         $itemData->setName($name);
-        $itemData->setPrice((float)$price);
-        $itemData->setUnit((string)$unit);
-        $itemData->setImage((string)$image);
-        $itemData->setCategory((string)$category);
+        $itemData->setPrice((float) $price);
+        $itemData->setUnit((string) $unit);
+        $itemData->setImage($image);
+        $itemData->setCategory($category);
         return $itemData;
     }
 
@@ -186,7 +211,7 @@ class WishlistManagement implements WishlistManagementInterface
             return $customerId;
         }
 
-        return (int)$this->userContext->getUserId();
+        return (int) $this->userContext->getUserId();
     }
 
     private function resolveBearerToken(): string
@@ -212,7 +237,7 @@ class WishlistManagement implements WishlistManagementInterface
         $customerId = $this->getCustomerId();
         $list = $this->listFactory->create();
         $this->listResource->load($list, $listId);
-        if (!$list->getId() || (int)$list->getData('customer_id') !== $customerId) {
+        if (!$list->getId() || (int) $list->getData('customer_id') !== $customerId) {
             throw new AuthorizationException(new Phrase('Không có quyền truy cập danh sách này.'));
         }
     }

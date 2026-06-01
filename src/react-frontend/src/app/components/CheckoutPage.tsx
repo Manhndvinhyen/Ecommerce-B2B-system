@@ -7,6 +7,7 @@ const checkoutPayloadKey = 'freso_checkout_payload';
 const checkoutAddressKey = 'freso_checkout_address';
 const checkoutInvoiceKey = 'freso_checkout_invoice';
 const checkoutDraftKey = 'freso_checkout_draft';
+const preferredRegionStorageKey = 'freso_preferred_region';
 
 type CheckoutItem = {
   id: string;
@@ -52,6 +53,7 @@ const getAuthToken = () =>
   window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
 
 const isValidPhone = (value: string) => /^(\+?84|0)\d{9,10}$/.test(value.replace(/\s/g, ''));
+const getRegionFromBranch = (branch: string) => branch.replace(/^Chi nhánh\s+/i, '').trim();
 
 type MagentoCartItem = {
   id: number | string;
@@ -374,6 +376,28 @@ export function CheckoutPage() {
       note: shippingInfo.note,
       invoiceInfo
     };
+    const purchaseHistoryPayload = {
+      customerEmail: getCustomerEmail(),
+      orderReference: `TMDT-${Date.now()}`,
+      customerRegion: getRegionFromBranch(shippingInfo.branch),
+      items: checkoutItems.map((item) => ({
+        sku: item.sku,
+        name: item.name,
+        category: item.category,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        unit: item.unit,
+        image: item.image
+      })),
+      supplier,
+      subtotal,
+      totalAmount,
+      deliveryDate,
+      deliveryTime,
+      shippingAddress: `${shippingInfo.branch} - ${shippingInfo.address}`,
+      note: shippingInfo.note,
+      invoiceInfo
+    };
 
     try {
       setIsSubmitting(true);
@@ -389,6 +413,29 @@ export function CheckoutPage() {
       if (!response.ok) {
         const text = await response.text().catch(() => '');
         throw new Error(text || `HTTP ${response.status}`);
+      }
+
+      const token = getAuthToken();
+      if (token) {
+        const historyResponse = await fetch('/rest/V1/tmdt-search/purchase-history', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify(purchaseHistoryPayload)
+        });
+
+        if (!historyResponse.ok) {
+          const text = await historyResponse.text().catch(() => '');
+          throw new Error(text || `Purchase history HTTP ${historyResponse.status}`);
+        }
+      }
+
+      const preferredRegion = getRegionFromBranch(shippingInfo.branch);
+      if (preferredRegion) {
+        window.localStorage.setItem(preferredRegionStorageKey, preferredRegion);
+        window.sessionStorage.setItem(preferredRegionStorageKey, preferredRegion);
       }
 
       showToast('Đặt hàng thành công! Đang chờ xác nhận thanh toán.');

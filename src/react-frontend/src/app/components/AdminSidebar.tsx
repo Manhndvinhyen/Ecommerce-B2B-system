@@ -3,7 +3,8 @@ import type { Dispatch, SetStateAction } from 'react';
 import { 
   CircleUserRound, 
   LayoutDashboard, 
-  FileText, 
+  FileText,
+  History,
   Handshake, 
   UserRoundSearch, 
   PieChart, 
@@ -24,6 +25,7 @@ export const adminMenuItems: AdminMenuItem[] = [
   { id: 'tai-khoan', label: 'Tài khoản của tôi', icon: CircleUserRound },
   { id: 'thong-tin', label: 'Thông tin chung', icon: LayoutDashboard },
   { id: 'don-hang', label: 'Quản lý đơn hàng', icon: FileText },
+  { id: 'lich-su-mua-hang', label: 'Lịch sử mua hàng', icon: History },
   { id: 'bao-gia', label: 'Đàm phán giá', icon: Handshake },
   {
     id: 'nhan-vien',

@@ -421,7 +421,7 @@ export function Header() {
 
               {/* Actions */}
               <div className="flex items-center gap-3">
-                <a href="/customer/account" className="p-2 hover:bg-gray-100 rounded-full transition-colors hidden md:block">
+                <a href={isLoggedIn ? '/customer/account' : '/?view=login'} className="p-2 hover:bg-gray-100 rounded-full transition-colors hidden md:block">
                   <User className="size-6 text-gray-700" />
                 </a>
                 <div

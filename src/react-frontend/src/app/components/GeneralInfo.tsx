@@ -307,7 +307,7 @@ export const GeneralInfo = () => {
   }, []);
 
   const statusTone = data.statusLabel.toLowerCase().includes('chờ')
-    ? 'bg-amber-50 text-amber-700'
+    ? 'bg-blue-50 text-blue-700'
     : data.statusLabel.toLowerCase().includes('từ chối')
       ? 'bg-rose-50 text-rose-600'
       : 'bg-[#E9F8EF] text-[#00b14f]';
@@ -320,7 +320,7 @@ export const GeneralInfo = () => {
         {/* Seller Header Summary */}
         <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-gradient-to-br from-orange-400 to-orange-600 rounded-2xl flex items-center justify-center text-white shadow-md shadow-orange-500/10 shrink-0">
+            <div className="w-16 h-16 bg-gradient-to-br from-emerald-400 to-green-600 rounded-2xl flex items-center justify-center text-white shadow-md shadow-emerald-500/10 shrink-0">
               <ImageIcon size={32} />
             </div>
             <div>
@@ -334,52 +334,10 @@ export const GeneralInfo = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button className="px-5 py-2 bg-orange-500 text-white rounded-full text-[13px] font-bold hover:bg-orange-600 transition-all flex items-center gap-1.5 shadow-sm">
+            <button className="px-5 py-2 bg-emerald-600 text-white rounded-full text-[13px] font-bold hover:bg-emerald-700 transition-all flex items-center gap-1.5 shadow-sm">
               <PlusCircle size={15} />
               <span>Đăng sản phẩm mới</span>
             </button>
-          </div>
-        </div>
-
-        {/* Business Metrics Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-all">
-            <div className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center text-[#00b14f] shrink-0">
-              <TrendingUp size={22} />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 font-medium mb-0.5">Doanh thu tháng này</p>
-              <h3 className="text-xl font-bold text-gray-900">142,500,000đ</h3>
-              <span className="text-[11px] text-green-600 font-bold flex items-center gap-0.5 mt-0.5">
-                +12.4% so với tháng trước
-              </span>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-all">
-            <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 shrink-0">
-              <ShoppingBag size={22} />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 font-medium mb-0.5">Đơn hàng mới</p>
-              <h3 className="text-xl font-bold text-gray-900">18 đơn hàng</h3>
-              <span className="text-[11px] text-blue-600 font-bold flex items-center gap-0.5 mt-0.5">
-                4 đơn đang chờ xử lý
-              </span>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-all">
-            <div className="w-12 h-12 bg-purple-50 rounded-2xl flex items-center justify-center text-purple-600 shrink-0">
-              <Box size={22} />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 font-medium mb-0.5">Sản phẩm đang bán</p>
-              <h3 className="text-xl font-bold text-gray-900">114 sản phẩm</h3>
-              <span className="text-[11px] text-purple-600 font-bold flex items-center gap-0.5 mt-0.5">
-                Tất cả đều hiển thị
-              </span>
-            </div>
           </div>
         </div>
 
@@ -388,7 +346,7 @@ export const GeneralInfo = () => {
           {/* General Information Card */}
           <div className="lg:col-span-2 bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
             <h2 className="text-[17px] font-bold text-gray-800 mb-5 tracking-tight flex items-center gap-2">
-              <ShieldCheck className="text-orange-500" size={20} />
+              <ShieldCheck className="text-emerald-500" size={20} />
               Thông tin kinh doanh
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-5 gap-x-12">
@@ -419,7 +377,7 @@ export const GeneralInfo = () => {
           <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm flex flex-col justify-between">
             <div>
               <h2 className="text-[17px] font-bold text-gray-800 mb-2 tracking-tight flex items-center gap-2">
-                <FileBadge className="text-orange-500" size={20} />
+                <FileBadge className="text-emerald-500" size={20} />
                 Giấy phép kinh doanh
               </h2>
               <p className="text-xs text-gray-400 leading-relaxed mb-6">
@@ -427,7 +385,7 @@ export const GeneralInfo = () => {
               </p>
               
               <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center gap-3">
-                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-orange-500 border border-gray-100 shadow-sm shrink-0">
+                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-emerald-500 border border-gray-100 shadow-sm shrink-0">
                   <FileBadge size={20} />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -444,8 +402,8 @@ export const GeneralInfo = () => {
                 if (!canOpenLicense) return;
                 window.open(data.licenseUrl, '_blank', 'noopener,noreferrer');
               }}
-              className={`w-full mt-6 py-3 border border-orange-500 text-orange-500 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                canOpenLicense ? 'hover:bg-orange-50 cursor-pointer' : 'opacity-50 cursor-not-allowed'
+              className={`w-full mt-6 py-3 border border-emerald-500 text-emerald-600 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                canOpenLicense ? 'hover:bg-emerald-50 cursor-pointer' : 'opacity-50 cursor-not-allowed'
               }`}
             >
               <span>Xem chi tiết tài liệu</span>
@@ -474,7 +432,7 @@ export const GeneralInfo = () => {
       <hr className="border-gray-100 mb-5" />
 
       {errorMessage && (
-        <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800 text-sm">
+        <div className="mb-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-800 text-sm">
           {errorMessage}
         </div>
       )}

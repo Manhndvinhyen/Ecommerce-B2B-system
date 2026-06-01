@@ -240,7 +240,9 @@ export function Header() {
   };
 
   const displayedUserName = customerName || customerEmail || 'Tài khoản';
-  const dashboardBase = `${reactHomePath}?view=dashboard`;
+  const dashboardBase = userRole === 'seller'
+    ? `${reactHomePath}?view=seller-dashboard`
+    : `${reactHomePath}?view=dashboard`;
   const getDashboardHref = (tabLabel: string) => `${dashboardBase}&tab=${encodeURIComponent(tabLabel)}`;
   const activeDashboardTab = new URLSearchParams(window.location.search).get('tab');
 
@@ -516,7 +518,7 @@ export function Header() {
                 ) : userRole === 'seller' ? (
                   <>
                     <a
-                      href="/react/index.html?view=seller-dashboard"
+                      href={`${reactHomePath}?view=seller-dashboard`}
                       className="px-3 py-1 text-xs bg-orange-500 text-white rounded-full hover:bg-orange-600 transition-colors font-bold whitespace-nowrap shadow-sm"
                     >
                       Trang người bán
@@ -546,7 +548,7 @@ export function Header() {
                       <div className="px-3 py-2 text-sm font-semibold text-gray-900">{displayedUserName}</div>
                       <div className="grid grid-cols-1 gap-1 text-sm">
                         {adminMenuItems
-                          .filter((item) => item.id !== 'thong-tin')
+                          .filter((item) => userRole === 'seller' ? true : item.id !== 'thong-tin')
                           .map((item) => {
                             const isActive = activeDashboardTab === item.label;
                             return (

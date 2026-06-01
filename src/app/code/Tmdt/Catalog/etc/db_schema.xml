@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<schema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Setup/Declaration/Schema/etc/db_schema.xsd">
+    <table name="tmdt_inventory_log" resource="default" engine="innodb" comment="Tmdt Inventory Adjustment Logs">
+        <column xsi:type="int" name="log_id" padding="10" unsigned="true" nullable="false" identity="true" comment="Log ID"/>
+        <column xsi:type="varchar" name="sku" length="64" nullable="false" comment="Product SKU"/>
+        <column xsi:type="varchar" name="action_type" length="32" nullable="false" comment="Action Type: inbound, outbound, system_adjust"/>
+        <column xsi:type="decimal" name="qty_change" scale="4" precision="12" nullable="false" comment="Quantity Change"/>
+        <column xsi:type="decimal" name="qty_after" scale="4" precision="12" nullable="false" comment="Quantity After Adjustment"/>
+        <column xsi:type="text" name="note" nullable="true" comment="Adjustment Note"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Log Creation Time"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="log_id"/>
+        </constraint>
+        <index referenceId="TMDT_INVENTORY_LOG_SKU" indexType="btree">
+            <column name="sku"/>
+        </index>
+    </table>
+</schema>

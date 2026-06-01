@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AdminSidebar, adminMenuItems } from './AdminSidebar';
-import { ProfileContent } from './ProfileContent';
-import { GeneralInfo } from './GeneralInfo';
-import { CreateBranchManager } from './CreateBranchManager';
-import { EmployeeList } from './EmployeeList';
+import { SellerProfile } from './SellerProfile';
+import { SellerOverviewDashboard } from './SellerOverviewDashboard';
+import { SellerProductManager } from './SellerProductManager';
+import { SellerInventoryManager } from './SellerInventoryManager';
+import { SellerCartManager } from './SellerCartManager';
 import { SellerHeader } from './SellerHeader';
 import { AuthPageFooter } from './auth/AuthPageFooter';
 import { ChatbotWidget } from './ChatbotWidget';
@@ -85,13 +86,13 @@ export function SellerDashboardPage() {
 
   const params = new URLSearchParams(window.location.search);
   const tabFromQuery = params.get('tab');
+
   const tabLabels = new Set([
     ...menuItems.map((item) => item.label),
     ...menuItems.flatMap((item) => item.subItems ?? []),
   ]);
   
-  // For sellers, the default home view is the store dashboard overview ("Thông tin chung")
-  const initialTab = tabFromQuery && tabLabels.has(tabFromQuery) ? tabFromQuery : 'Thông tin chung';
+  const initialTab = tabFromQuery && tabLabels.has(tabFromQuery) ? tabFromQuery : 'Dashboard';
   const [activeTab, setActiveTab] = useState(initialTab);
   const [openMenus, setOpenMenus] = useState(() => {
     const defaults: Record<string, boolean> = { 'nhan-vien': false, 'bao-cao': false };
@@ -107,13 +108,13 @@ export function SellerDashboardPage() {
   });
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-[#F5FAF6]">
       <SellerHeader />
 
-      <main className="bg-white py-0 px-6">
-        <div className="max-w-[1200px] mx-auto flex items-start">
+      <main className="bg-[#F5FAF6] py-6 px-6">
+        <div className="max-w-[1200px] mx-auto flex items-start gap-6">
           {/* Left sidebar */}
-          <div className="w-[255px] flex-none border-r border-gray-200 pr-5">
+          <div className="w-[255px] flex-none border-r border-gray-100 pr-5">
             <AdminSidebar
               activeTab={activeTab}
               setActiveTab={setActiveTab}
@@ -124,18 +125,17 @@ export function SellerDashboardPage() {
           </div>
 
           {/* Right content area */}
-          <div className="flex-1">
-            {activeTab === 'Tài khoản của tôi' && <ProfileContent />}
-            {activeTab === 'Thông tin chung' && <GeneralInfo />}
-            {(activeTab === 'Quản lý nhân viên' || activeTab === 'Tạo mới nhân viên') && (
-              <CreateBranchManager isSuperAdmin={isSuperAdmin} />
-            )}
-            {activeTab === 'Danh sách nhân viên' && <EmployeeList isSuperAdmin={isSuperAdmin} />}
-            {activeTab !== 'Tài khoản của tôi' &&
-              activeTab !== 'Thông tin chung' &&
-              activeTab !== 'Danh sách nhân viên' &&
-              activeTab !== 'Tạo mới nhân viên' &&
-              activeTab !== 'Quản lý nhân viên' && (
+          <div className="flex-1 min-w-0">
+            {activeTab === 'Dashboard' && <SellerOverviewDashboard />}
+            {activeTab === 'Thông tin hồ sơ' && <SellerProfile />}
+            {activeTab === 'Quản lý sản phẩm' && <SellerProductManager />}
+            {activeTab === 'Quản lý giỏ hàng' && <SellerCartManager />}
+            {activeTab === 'Quản lý kho hàng' && <SellerInventoryManager />}
+            {activeTab !== 'Dashboard' &&
+              activeTab !== 'Thông tin hồ sơ' &&
+              activeTab !== 'Quản lý sản phẩm' &&
+              activeTab !== 'Quản lý giỏ hàng' &&
+              activeTab !== 'Quản lý kho hàng' && (
               <div className="p-8">Nội dung cho: {activeTab}</div>
             )}
           </div>

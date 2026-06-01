@@ -1,0 +1,55 @@
+<?xml version="1.0"?>
+<schema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Setup/Declaration/Schema/etc/schema.xsd">
+    <table name="tmdt_purchase_history" resource="default" engine="innodb" comment="TMDT Purchase History">
+        <column xsi:type="int" name="history_id" padding="10" unsigned="true" nullable="false" identity="true" comment="History ID" />
+        <column xsi:type="int" name="customer_id" padding="10" unsigned="true" nullable="false" comment="Customer ID" />
+        <column xsi:type="varchar" name="customer_email" nullable="false" length="255" comment="Customer Email" />
+        <column xsi:type="varchar" name="customer_region" nullable="true" length="255" comment="Customer Region" />
+        <column xsi:type="varchar" name="order_reference" nullable="false" length="64" comment="Order Reference" />
+        <column xsi:type="varchar" name="supplier" nullable="true" length="255" comment="Supplier" />
+        <column xsi:type="decimal" name="subtotal" scale="4" precision="12" unsigned="false" nullable="false" default="0" comment="Subtotal" />
+        <column xsi:type="decimal" name="total_amount" scale="4" precision="12" unsigned="false" nullable="false" default="0" comment="Total Amount" />
+        <column xsi:type="date" name="delivery_date" nullable="true" comment="Delivery Date" />
+        <column xsi:type="varchar" name="delivery_time" nullable="true" length="64" comment="Delivery Time" />
+        <column xsi:type="text" name="shipping_address" nullable="true" comment="Shipping Address" />
+        <column xsi:type="text" name="note" nullable="true" comment="Note" />
+        <column xsi:type="text" name="invoice_json" nullable="true" comment="Invoice JSON" />
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At" />
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="history_id" />
+        </constraint>
+        <index referenceId="TMDT_PURCHASE_HISTORY_CUSTOMER_ID_CREATED_AT_IDX">
+            <column name="customer_id" />
+            <column name="created_at" />
+        </index>
+        <index referenceId="TMDT_PURCHASE_HISTORY_ORDER_REFERENCE_IDX">
+            <column name="order_reference" />
+        </index>
+        <index referenceId="TMDT_PURCHASE_HISTORY_CUSTOMER_REGION_IDX">
+            <column name="customer_region" />
+        </index>
+    </table>
+    <table name="tmdt_purchase_history_item" resource="default" engine="innodb" comment="TMDT Purchase History Items">
+        <column xsi:type="int" name="item_id" padding="10" unsigned="true" nullable="false" identity="true" comment="Item ID" />
+        <column xsi:type="int" name="history_id" padding="10" unsigned="true" nullable="false" comment="History ID" />
+        <column xsi:type="varchar" name="sku" nullable="false" length="64" comment="SKU" />
+        <column xsi:type="varchar" name="product_name" nullable="false" length="255" comment="Product Name" />
+        <column xsi:type="varchar" name="category" nullable="true" length="255" comment="Category" />
+        <column xsi:type="varchar" name="unit" nullable="true" length="64" comment="Unit" />
+        <column xsi:type="decimal" name="quantity" scale="4" precision="12" unsigned="false" nullable="false" default="1" comment="Quantity" />
+        <column xsi:type="decimal" name="unit_price" scale="4" precision="12" unsigned="false" nullable="false" default="0" comment="Unit Price" />
+        <column xsi:type="decimal" name="row_total" scale="4" precision="12" unsigned="false" nullable="false" default="0" comment="Row Total" />
+        <column xsi:type="varchar" name="image" nullable="true" length="1024" comment="Image" />
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At" />
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="item_id" />
+        </constraint>
+        <constraint xsi:type="foreign" referenceId="TMDT_PURCHASE_HISTORY_ITEM_HISTORY_ID_FK" table="tmdt_purchase_history_item" column="history_id" referenceTable="tmdt_purchase_history" referenceColumn="history_id" onDelete="CASCADE" />
+        <index referenceId="TMDT_PURCHASE_HISTORY_ITEM_HISTORY_ID_IDX">
+            <column name="history_id" />
+        </index>
+        <index referenceId="TMDT_PURCHASE_HISTORY_ITEM_SKU_IDX">
+            <column name="sku" />
+        </index>
+    </table>
+</schema>

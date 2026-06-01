@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ShoppingCart, User, Menu, Search, ChevronRight, Heart, Bell, HelpCircle, Store } from 'lucide-react';
 import { categoryMenu, getCategoryPageLink } from '../data/categories';
 import { getDefaultWishlistList, hasWishlistAuth } from '../utils/wishlistApi';
-import { adminMenuItems } from './AdminSidebar';
+import { adminMenuItems } from './SidebarMenu';
 import { useCart } from '../cart/CartProvider';
 
 export function Header() {
@@ -240,11 +240,15 @@ export function Header() {
   };
 
   const displayedUserName = customerName || customerEmail || 'Tài khoản';
-  const dashboardBase = userRole === 'seller'
+  const currentView = new URLSearchParams(window.location.search).get('view');
+  const dashboardBase = currentView === 'seller-dashboard'
     ? `${reactHomePath}?view=seller-dashboard`
     : `${reactHomePath}?view=dashboard`;
   const getDashboardHref = (tabLabel: string) => `${dashboardBase}&tab=${encodeURIComponent(tabLabel)}`;
   const activeDashboardTab = new URLSearchParams(window.location.search).get('tab');
+  const visibleMenuItems = currentView === 'dashboard'
+    ? adminMenuItems.filter((item) => item.id === 'profile-seller' || item.id === 'nhan-vien')
+    : adminMenuItems.filter((item) => userRole === 'seller' ? true : item.id !== 'thong-tin');
 
   const logoutAndBackHome = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -479,9 +483,6 @@ export function Header() {
     );
   }
 
-  const params = new URLSearchParams(window.location.search);
-  const currentView = params.get('view');
-
   return (
   <header className="sticky top-0 z-50 bg-white shadow-sm" onClickCapture={handleTopLevelNavigation}>
       {/* Top Bar - Tầng 1 */}
@@ -547,9 +548,7 @@ export function Header() {
                     <div className="absolute right-0 mt-2 w-[280px] bg-white border border-gray-200 rounded-2xl shadow-xl p-2 z-50">
                       <div className="px-3 py-2 text-sm font-semibold text-gray-900">{displayedUserName}</div>
                       <div className="grid grid-cols-1 gap-1 text-sm">
-                        {adminMenuItems
-                          .filter((item) => userRole === 'seller' ? true : item.id !== 'thong-tin')
-                          .map((item) => {
+                        {visibleMenuItems.map((item) => {
                             const isActive = activeDashboardTab === item.label;
                             return (
                               <a

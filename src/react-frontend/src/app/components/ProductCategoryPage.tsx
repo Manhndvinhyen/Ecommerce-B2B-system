@@ -751,7 +751,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
               unit: p.unit || 'kg',
               image: p.image || fallbackImageByCategory[p.categoryLabel] || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop',
               categoryLabel: p.categoryLabel,
-              supplierName: supplier.name,
+              supplierName: p.store_name || supplier.name,
               supplierRegion: supplier.region
             };
           });
@@ -978,7 +978,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
             unit: p.unit || 'kg',
             image: p.image || fallbackImageByCategory[p.categoryLabel] || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop',
             categoryLabel: subcat,
-            supplierName: supplier.name,
+            supplierName: p.store_name || supplier.name,
             supplierRegion: supplier.region
           };
         });

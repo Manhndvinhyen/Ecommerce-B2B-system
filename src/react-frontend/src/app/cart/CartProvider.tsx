@@ -295,22 +295,43 @@ export function CartProvider({ children }: PropsWithChildren) {
   }, [getAuthToken, graphqlRequest]);
 
   const mapMagentoCartItems = useCallback((items: MagentoCartItem[] = []): CartLineItem[] => {
+    const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
+    let customLocalProducts: any[] = [];
+    if (customLocalRaw) {
+      try {
+        customLocalProducts = JSON.parse(customLocalRaw);
+      } catch (e) {
+        customLocalProducts = [];
+      }
+    }
+
     return items.map((item) => {
       const product = item.product ?? {};
-      const unitPrice = Number(product.price_range?.minimum_price?.final_price?.value ?? 0);
-      const category = product.categories?.find((cat) => cat?.name)?.name ?? '';
+      const qty = clampQuantity(item.quantity ?? 1);
+      const matchingProduct = customLocalProducts.find(p => p.sku === product.sku);
+      
+      const originalPrice = matchingProduct ? Number(matchingProduct.price) : Number(product.price_range?.minimum_price?.final_price?.value ?? 0);
+      const tiers = matchingProduct?.wholesale_tiers || [];
+      const activeTier = tiers
+        .filter((t: any) => qty >= t.qty)
+        .sort((a: any, b: any) => b.qty - a.qty)[0];
+
+      const discountPercent = activeTier ? activeTier.discount : 0;
+      const unitPrice = originalPrice * (1 - discountPercent / 100);
+      const category = product.categories?.find((cat) => cat?.name)?.name ?? (matchingProduct?.categoryLabel || '');
+      const unit = matchingProduct?.unit || 'kg';
 
       return {
         id: String(item.id),
         cartItemId: String(item.id),
         sku: product.sku ?? '',
-        name: product.name ?? 'Sản phẩm',
+        name: product.name ?? (matchingProduct?.name || 'Sản phẩm'),
         category,
-        unit: 'SP',
+        unit,
         unitPrice,
-        image: product.small_image?.url || product.thumbnail?.url || '',
+        image: product.small_image?.url || product.thumbnail?.url || (matchingProduct?.image || ''),
         priceText: formatCurrency(unitPrice),
-        quantity: clampQuantity(item.quantity ?? 1),
+        quantity: qty,
         selected: true,
         note: '',
       };
@@ -585,11 +606,11 @@ export function CartProvider({ children }: PropsWithChildren) {
       await runFlyToCartAnimation(selectedProduct.image);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setToastMessage('Không thể thêm sản phẩm vào giỏ hàng. Vui lòng thử lại.');
+      setToastMessage(`Không thể thêm vào giỏ hàng: ${message}`);
       if (isAuthSessionError(message)) {
         setIsLoginPromptOpen(true);
       }
-      toastTimerRef.current = window.setTimeout(() => setToastMessage(''), 2400);
+      toastTimerRef.current = window.setTimeout(() => setToastMessage(''), 3500);
       return;
     }
 
@@ -617,11 +638,11 @@ export function CartProvider({ children }: PropsWithChildren) {
         await runFlyToCartAnimation(product.image);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        setToastMessage('Không thể thêm sản phẩm vào giỏ hàng. Vui lòng thử lại.');
+        setToastMessage(`Không thể thêm vào giỏ hàng: ${message}`);
         if (isAuthSessionError(message)) {
           setIsLoginPromptOpen(true);
         }
-        toastTimerRef.current = window.setTimeout(() => setToastMessage(''), 2400);
+        toastTimerRef.current = window.setTimeout(() => setToastMessage(''), 3500);
         return;
       }
 

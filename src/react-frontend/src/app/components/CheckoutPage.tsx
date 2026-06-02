@@ -95,19 +95,40 @@ const buildCheckoutPayload = (items: CheckoutItem[]): CheckoutPayload => {
 };
 
 const mapMagentoCartItems = (items: MagentoCartItem[] = []): CheckoutItem[] => {
+  const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
+  let customLocalProducts: any[] = [];
+  if (customLocalRaw) {
+    try {
+      customLocalProducts = JSON.parse(customLocalRaw);
+    } catch {
+      customLocalProducts = [];
+    }
+  }
+
   return items.map((item) => {
     const product = item.product ?? {};
-    const unitPrice = Number(product.price_range?.minimum_price?.final_price?.value ?? 0);
-    const category = product.categories?.find((cat) => cat?.name)?.name ?? '';
+    const qty = Math.max(1, Math.floor(item.quantity ?? 1));
+    const matchingProduct = customLocalProducts.find(p => p.sku === product.sku);
+    
+    const originalPrice = matchingProduct ? Number(matchingProduct.price) : Number(product.price_range?.minimum_price?.final_price?.value ?? 0);
+    const tiers = matchingProduct?.wholesale_tiers || [];
+    const activeTier = tiers
+      .filter((t: any) => qty >= t.qty)
+      .sort((a: any, b: any) => b.qty - a.qty)[0];
+
+    const discountPercent = activeTier ? activeTier.discount : 0;
+    const unitPrice = originalPrice * (1 - discountPercent / 100);
+    const category = product.categories?.find((cat) => cat?.name)?.name ?? (matchingProduct?.categoryLabel || '');
+    const unit = matchingProduct?.unit || 'kg';
 
     return {
       id: String(item.id),
       sku: product.sku ?? '',
-      name: product.name ?? 'Sản phẩm',
-      quantity: Math.max(1, Math.floor(item.quantity ?? 1)),
+      name: product.name ?? (matchingProduct?.name || 'Sản phẩm'),
+      quantity: qty,
       unitPrice,
-      unit: 'SP',
-      image: product.small_image?.url || product.thumbnail?.url || '',
+      unit,
+      image: product.small_image?.url || product.thumbnail?.url || (matchingProduct?.image || ''),
       category
     };
   });
@@ -475,20 +496,55 @@ export function CheckoutPage() {
                 Tóm tắt đơn hàng
               </div>
               <div className="space-y-4">
-                {checkoutItems.map((item) => (
-                  <div key={item.id} className="flex items-center gap-4 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
-                    <img src={item.image} alt={item.name} className="size-14 rounded-xl object-cover" />
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-gray-900">{item.name}</p>
-                      <p className="text-xs text-gray-500">
-                        {item.quantity} {item.unit} • {toCurrencyTextFromNumber(item.unitPrice)}
-                      </p>
+                {checkoutItems.map((item) => {
+                  const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
+                  let customLocalProducts: any[] = [];
+                  if (customLocalRaw) {
+                    try {
+                      customLocalProducts = JSON.parse(customLocalRaw);
+                    } catch {
+                      customLocalProducts = [];
+                    }
+                  }
+                  const matchingProduct = customLocalProducts.find(p => p.sku === item.sku);
+                  const originalPrice = matchingProduct ? Number(matchingProduct.price) : item.unitPrice;
+                  const tiers = matchingProduct?.wholesale_tiers || [];
+                  const activeTier = tiers
+                    .filter((t: any) => item.quantity >= t.qty)
+                    .sort((a: any, b: any) => b.qty - a.qty)[0];
+                  const discountPercent = activeTier ? activeTier.discount : 0;
+                  const hasDiscount = discountPercent > 0;
+
+                  return (
+                    <div key={item.id} className="flex items-center gap-4 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+                      <img src={item.image} alt={item.name} className="size-14 rounded-xl object-cover" />
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-gray-900">{item.name}</p>
+                        <div className="text-xs text-gray-500 flex flex-wrap items-center gap-1.5 mt-0.5">
+                          <span>{item.quantity} {item.unit} •</span>
+                          {hasDiscount ? (
+                            <>
+                              <span className="line-through text-gray-400">
+                                {toCurrencyTextFromNumber(originalPrice)}
+                              </span>
+                              <span className="px-1 py-0.2 bg-red-50 text-red-600 rounded text-[9px] font-bold">
+                                -{discountPercent}% sỉ
+                              </span>
+                              <span className="text-green-700 font-bold">
+                                {toCurrencyTextFromNumber(item.unitPrice)}
+                              </span>
+                            </>
+                          ) : (
+                            <span>{toCurrencyTextFromNumber(item.unitPrice)}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-sm font-semibold text-gray-900">
+                        {toCurrencyTextFromNumber(item.quantity * item.unitPrice)}
+                      </div>
                     </div>
-                    <div className="text-sm font-semibold text-gray-900">
-                      {toCurrencyTextFromNumber(item.quantity * item.unitPrice)}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-gray-600">

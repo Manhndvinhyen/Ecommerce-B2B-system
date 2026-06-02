@@ -91,8 +91,34 @@ export function WishlistPage() {
       try {
         setIsLoadingItems(true);
         const mapped = await getWishlistItems(activeListId);
-        setItems(mapped);
-        setItemsByList((prev) => ({ ...prev, [activeListId]: mapped }));
+
+        const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
+        let customLocalProducts: any[] = [];
+        if (customLocalRaw) {
+          try {
+            customLocalProducts = JSON.parse(customLocalRaw);
+          } catch (e) {
+            // Ignore
+          }
+        }
+
+        const merged = mapped.map((item) => {
+          const localMatch = customLocalProducts.find((p) => p.sku === item.sku);
+          if (localMatch) {
+            return {
+              ...item,
+              name: localMatch.name || item.name,
+              price: localMatch.price || item.price,
+              unit: localMatch.unit || item.unit,
+              image: localMatch.image || item.image,
+              category: localMatch.categoryLabel || item.category
+            };
+          }
+          return item;
+        });
+
+        setItems(merged);
+        setItemsByList((prev) => ({ ...prev, [activeListId]: merged }));
       } catch (_error) {
         setItems([]);
       } finally {

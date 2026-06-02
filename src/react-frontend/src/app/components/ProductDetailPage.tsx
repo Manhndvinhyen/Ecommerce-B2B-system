@@ -6,6 +6,11 @@ import { useCart, toCurrencyTextFromNumber, toUnitPriceFromLooseValue } from '..
 import { toQuerySlug } from '../data/categories';
 import { applySeo, buildBreadcrumbJsonLd, buildProductJsonLd, getSiteName } from '../utils/seo';
 
+type WholesaleTier = {
+  qty: number;
+  discount: number;
+};
+
 type MagentoProduct = {
   id: string;
   name: string;
@@ -22,6 +27,8 @@ type MagentoProduct = {
     storage: string;
     expiry: string;
   };
+  wholesale_tiers?: WholesaleTier[];
+  store_name?: string;
 };
 
 const fallbackProduct: MagentoProduct = {
@@ -119,6 +126,17 @@ export function ProductDetailPage() {
   const [wishlistProduct, setWishlistProduct] = useState<WishlistModalProduct | null>(null);
   const holdTimerRef = useRef<number | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
+
+  const activeTier = useMemo(() => {
+    if (!product || !product.wholesale_tiers) return null;
+    return product.wholesale_tiers
+      .filter((t) => quantity >= t.qty)
+      .sort((a, b) => b.qty - a.qty)[0] || null;
+  }, [product, quantity]);
+
+  const discountPercent = activeTier ? activeTier.discount : 0;
+  const currentUnitPrice = product ? product.price * (1 - discountPercent / 100) : 0;
+  const subtotalPrice = product ? currentUnitPrice * quantity : 0;
 
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const querySku = getQueryParam(params, 'sku');
@@ -248,28 +266,80 @@ export function ProductDetailPage() {
   const parsed = parseDescriptionSections(descriptionHtml);
   const combinedDescription = descriptionText || shortDescriptionText || fallbackProduct.description.features;
 
+        // Check if there is a local custom configuration for this SKU
+        let localCustomFields: any = {};
+        const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
+        if (customLocalRaw) {
+          try {
+            const customLocalProducts = JSON.parse(customLocalRaw);
+            const localProd = customLocalProducts.find((p: any) => p.sku === item.sku);
+            if (localProd) {
+              localCustomFields = localProd;
+            }
+          } catch (e) {
+            // Ignore
+          }
+        }
+
         setProduct({
           id: String(item.id ?? fallbackProduct.id),
           name: item.name ?? fallbackProduct.name,
           sku: item.sku ?? fallbackProduct.sku,
-          unit: fallbackProduct.unit,
-          origin: item.country_of_manufacture || fallbackProduct.origin,
-          note: shortDescriptionText || fallbackProduct.note,
-          price,
+          unit: localCustomFields.unit || fallbackProduct.unit,
+          origin: localCustomFields.origin || item.country_of_manufacture || fallbackProduct.origin,
+          note: localCustomFields.note || shortDescriptionText || fallbackProduct.note,
+          price: localCustomFields.price || price,
           category: pickCategoryName(item.categories),
-          image: imageUrl,
+          image: localCustomFields.image || imageUrl,
           description: {
-            ...fallbackProduct.description,
-            features: parsed.features || combinedDescription,
-            benefits: parsed.benefits || shortDescriptionText || fallbackProduct.description.benefits,
-            storage: parsed.storage || fallbackProduct.description.storage,
-            expiry: parsed.expiry || fallbackProduct.description.expiry
-          }
+            features: localCustomFields.description?.features || parsed.features || combinedDescription,
+            benefits: localCustomFields.description?.benefits || parsed.benefits || shortDescriptionText || fallbackProduct.description.benefits,
+            storage: localCustomFields.description?.storage || parsed.storage || fallbackProduct.description.storage,
+            expiry: localCustomFields.description?.expiry || parsed.expiry || fallbackProduct.description.expiry
+          },
+          wholesale_tiers: localCustomFields.wholesale_tiers || item.wholesale_tiers || [],
+          store_name: localCustomFields.store_name
         });
       } catch (error) {
         if (controller.signal.aborted) {
           return;
         }
+
+        // Check if the product sku/name exists in the custom local products (localStorage)
+        const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
+        if (customLocalRaw) {
+          try {
+            const customLocalProducts = JSON.parse(customLocalRaw);
+            const localProd = customLocalProducts.find((p: any) =>
+              (querySku && p.sku === querySku) || (queryName && p.name === queryName)
+            );
+            if (localProd) {
+              setProduct({
+                id: String(localProd.id || localProd.sku),
+                name: localProd.name,
+                sku: localProd.sku,
+                unit: localProd.unit || 'kg',
+                origin: localProd.origin || 'Việt Nam',
+                note: localProd.note || 'Sản phẩm sỉ B2B',
+                price: localProd.price,
+                category: localProd.categoryLabel || 'Sản phẩm sỉ',
+                image: localProd.image || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop',
+                description: {
+                  features: localProd.description?.features || 'Sản phẩm nông sản/thực phẩm sỉ chất lượng cao cung cấp trực tiếp bởi nhà vườn/nhà phân phối uy tín.',
+                  benefits: localProd.description?.benefits || 'Cung cấp nguồn hàng sỉ ổn định cho nhà hàng, cửa hàng kinh doanh ăn uống với giá cả cạnh tranh nhất.',
+                  storage: localProd.description?.storage || 'Bảo quản ở điều kiện nhiệt độ phòng hoặc ngăn mát tủ lạnh tùy thuộc vào chủng loại sản phẩm.',
+                  expiry: localProd.description?.expiry || 'Sử dụng tốt nhất trong vòng 3 - 7 ngày kể từ ngày giao hàng.'
+                },
+                wholesale_tiers: localProd.wholesale_tiers || [],
+                store_name: localProd.store_name || 'Cửa hàng sỉ Freso'
+              });
+              return;
+            }
+          } catch (e) {
+            console.error('Error parsing local custom products in fallback', e);
+          }
+        }
+
         setLoadError('Không tải được dữ liệu sản phẩm từ Magento. Vui lòng thử lại.');
         console.error('[ProductDetailPage] fetchProduct failed', {
           error,
@@ -348,9 +418,9 @@ export function ProductDetailPage() {
           sku: product.sku,
           name: product.name,
           category: product.category,
-          priceText: toCurrencyTextFromNumber(product.price),
+          priceText: toCurrencyTextFromNumber(currentUnitPrice),
           unit: product.unit,
-          unitPrice: toUnitPriceFromLooseValue(product.price),
+          unitPrice: currentUnitPrice,
           image: product.image
         },
         quantity,
@@ -460,6 +530,12 @@ export function ProductDetailPage() {
                       <dt className="text-gray-500">Xuất xứ</dt>
                       <dd className="font-semibold text-gray-800">{product.origin}</dd>
                     </div>
+                    {product.store_name && (
+                      <div className="flex justify-between border-b border-dashed border-gray-200 pb-2">
+                        <dt className="text-gray-500">Bán bởi</dt>
+                        <dd className="font-extrabold text-green-700">{product.store_name}</dd>
+                      </div>
+                    )}
                     <div className="flex items-start justify-between gap-4">
                       <dt className="text-gray-500">Ghi chú</dt>
                       <dd className="flex-1 text-right font-semibold text-gray-800">
@@ -469,24 +545,62 @@ export function ProductDetailPage() {
                   </dl>
 
                   <div className="mt-6 rounded-2xl bg-green-50/60 p-4">
-                    <div className="flex items-end gap-3">
-                      <span className="text-3xl font-bold text-green-700">
-                        {toCurrencyTextFromNumber(product.price)}
-                      </span>
-                      <span className="text-sm text-gray-500">/{product.unit}</span>
-                    </div>
-                    {!isLoggedIn && (
-                      <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-gray-500">
-                        <span>Vui lòng đăng nhập/đăng ký để đặt hàng ngay</span>
-                        <a
-                          href="/react/index.html?view=login"
-                          className="rounded-full border border-green-600 px-4 py-1.5 text-sm font-semibold text-green-600 hover:bg-green-600 hover:text-white transition-colors"
-                        >
-                          Đăng nhập
-                        </a>
+                    <div className="flex flex-col gap-1">
+                      {discountPercent > 0 ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm line-through text-gray-400">
+                            {toCurrencyTextFromNumber(product.price)}
+                          </span>
+                        </div>
+                      ) : null}
+                      <div className="flex items-center gap-3">
+                        <span className="text-3xl font-bold text-green-700">
+                          {toCurrencyTextFromNumber(currentUnitPrice)}
+                        </span>
+                        {discountPercent > 0 ? (
+                          <span className="px-2 py-0.5 bg-red-100 text-red-600 rounded text-xs font-bold">
+                            -{discountPercent}% sỉ
+                          </span>
+                        ) : null}
+                        <span className="text-sm text-gray-500">/{product.unit}</span>
                       </div>
-                    )}
+                      {quantity > 1 ? (
+                        <div className="text-xs text-gray-500 font-semibold mt-1">
+                          Thành tiền tạm tính: <span className="text-green-700 font-bold">{toCurrencyTextFromNumber(subtotalPrice)}</span>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
+
+                  {/* Wholesale Pricing Table */}
+                  {product.wholesale_tiers && product.wholesale_tiers.length > 0 ? (
+                    <div className="mt-4 p-4 border border-slate-100 bg-slate-50/50 rounded-2xl">
+                      <h4 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2">
+                        Bảng chiết khấu sỉ theo số lượng
+                      </h4>
+                      <div className="space-y-1.5">
+                        {product.wholesale_tiers.map((t, idx) => {
+                          const tierPrice = product.price * (1 - t.discount / 100);
+                          const isActive = quantity >= t.qty && (!product.wholesale_tiers![idx+1] || quantity < product.wholesale_tiers![idx+1].qty);
+                          return (
+                            <div key={idx} className={`flex justify-between items-center px-3 py-2 rounded-xl text-xs ${
+                              isActive ? 'bg-green-100 text-green-800 font-bold border border-green-200' : 'bg-white text-slate-600 border border-slate-100'
+                            }`}>
+                              <span>Mua từ <strong className={isActive ? 'text-green-800' : 'text-slate-800'}>{t.qty}</strong> {product.unit}</span>
+                              <div className="flex items-center gap-2">
+                                <span className={isActive ? 'text-green-700 font-black' : 'text-slate-500'}>
+                                  {toCurrencyTextFromNumber(tierPrice)}/{product.unit}
+                                </span>
+                                <span className="px-1.5 py-0.2 bg-emerald-50 text-emerald-600 rounded font-bold text-[10px]">
+                                  -{t.discount}%
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
 
                   <div className="mt-6 flex flex-wrap items-center gap-4">
                     <div className="inline-flex items-center rounded-full border border-gray-300 bg-white">

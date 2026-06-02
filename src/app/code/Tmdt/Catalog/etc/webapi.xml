@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Webapi:etc/webapi.xsd">
+    <!-- Product Management Routes -->
+    <route url="/V1/tmdt-catalog/product" method="POST">
+        <service class="Tmdt\Catalog\Api\ProductManagementInterface" method="createProduct"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+    <route url="/V1/tmdt-catalog/product/:sku" method="PUT">
+        <service class="Tmdt\Catalog\Api\ProductManagementInterface" method="updateProduct"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+    <route url="/V1/tmdt-catalog/product/:sku" method="DELETE">
+        <service class="Tmdt\Catalog\Api\ProductManagementInterface" method="deleteProduct"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+    <route url="/V1/tmdt-catalog/products" method="GET">
+        <service class="Tmdt\Catalog\Api\ProductManagementInterface" method="getSellerProducts"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+
+    <!-- Inventory Management Routes -->
+    <route url="/V1/tmdt-catalog/inventory/adjust" method="POST">
+        <service class="Tmdt\Catalog\Api\InventoryManagementInterface" method="adjustStock"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+    <route url="/V1/tmdt-catalog/inventory/logs" method="GET">
+        <service class="Tmdt\Catalog\Api\InventoryManagementInterface" method="getAdjustmentLogs"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+</routes>

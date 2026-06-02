@@ -702,7 +702,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
             count: items.length,
             skus: items.map((item) => item.sku)
           });
-          const mappedProducts = items.map((item) => {
+          const mappedGraphQlProducts = items.map((item) => {
             const imageUrl = item.small_image?.url ?? '';
             const isPlaceholderImage = imageUrl.includes('/placeholder/');
             const inferred = inferCategoryFromSku(item.sku);
@@ -726,7 +726,46 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
               supplierName: supplier.name,
               supplierRegion: supplier.region
             };
-          })
+          });
+
+          // Load local custom products
+          const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
+          let customLocalProducts: any[] = [];
+          if (customLocalRaw) {
+            try {
+              customLocalProducts = JSON.parse(customLocalRaw);
+            } catch (e) {
+              customLocalProducts = [];
+            }
+          }
+
+          const mappedCustomProducts: ProductItem[] = customLocalProducts.map((p) => {
+            const priceValue = p.special_price ?? p.price;
+            const supplier = getMockSupplierForProduct(p.sku, p.categoryLabel);
+            return {
+              id: p.id || p.sku,
+              sku: p.sku,
+              name: p.name,
+              price: formatPrice(priceValue),
+              priceValue,
+              unit: p.unit || 'kg',
+              image: p.image || fallbackImageByCategory[p.categoryLabel] || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop',
+              categoryLabel: p.categoryLabel,
+              supplierName: supplier.name,
+              supplierRegion: supplier.region
+            };
+          });
+
+          // Combine and deduplicate by SKU (local storage products take priority if same SKU)
+          const allProducts = [...mappedCustomProducts];
+          const localSkus = new Set(mappedCustomProducts.map((p) => p.sku));
+          mappedGraphQlProducts.forEach((p) => {
+            if (!localSkus.has(p.sku)) {
+              allProducts.push(p);
+            }
+          });
+
+          const mappedProducts = allProducts
             .map((product) => ({
               product,
               searchScore: scoreProductForSearch(product, searchQuery, expandedSearchTerms)
@@ -856,48 +895,104 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
         const items: GraphQlProductItem[] = json?.data?.products?.items ?? [];
         const uniqueItems = dedupeByKey(items, (item) => item.sku || String(item.id));
 
-        const mappedProducts = dedupeProductsByName(
-          dedupeByKey(
-            uniqueItems
-              .map((item) => {
-            const imageUrl = item.small_image?.url ?? '';
-            const isPlaceholderImage = imageUrl.includes('/placeholder/');
-            const fallbackImage =
-              fallbackImageByCategory[category.name] ??
-              'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop';
+        const mappedGraphQlProducts = dedupeByKey(
+          uniqueItems
+            .map((item) => {
+              const imageUrl = item.small_image?.url ?? '';
+              const isPlaceholderImage = imageUrl.includes('/placeholder/');
+              const fallbackImage =
+                fallbackImageByCategory[category.name] ??
+                'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop';
 
-            const inferred = inferCategoryFromSku(item.sku);
-            const productCategory = inferred?.category ?? category.name;
-            const priceValue = Number(item.price_range?.minimum_price?.final_price?.value ?? 0);
-            const supplier = getMockSupplierForProduct(item.sku, productCategory);
+              const inferred = inferCategoryFromSku(item.sku);
+              const productCategory = inferred?.category ?? category.name;
+              const priceValue = Number(item.price_range?.minimum_price?.final_price?.value ?? 0);
+              const supplier = getMockSupplierForProduct(item.sku, productCategory);
 
-            if (isUsingSkuFallback) {
-              const categoryMatched = inferred?.category === category.name;
-              const subcategoryMatched =
-                activeSubcategory === 'Tất cả' || inferred?.subcategory === activeSubcategory;
+              if (isUsingSkuFallback) {
+                const categoryMatched = inferred?.category === category.name;
+                const subcategoryMatched =
+                  activeSubcategory === 'Tất cả' || inferred?.subcategory === activeSubcategory;
 
-              if (!categoryMatched || !subcategoryMatched) {
-                return null;
+                if (!categoryMatched || !subcategoryMatched) {
+                  return null;
+                }
               }
-            }
 
-            return {
-              id: item.id,
-              sku: item.sku,
-              name: item.name,
-              price: formatPrice(priceValue),
-              priceValue,
-              unit: inferUnitByCategory(productCategory),
-              image: !imageUrl || isPlaceholderImage ? fallbackImage : imageUrl,
-              categoryLabel: getCategoryDisplayLabel(item),
-              supplierName: supplier.name,
-              supplierRegion: supplier.region
-            };
+              return {
+                id: item.id,
+                sku: item.sku,
+                name: item.name,
+                price: formatPrice(priceValue),
+                priceValue,
+                unit: inferUnitByCategory(productCategory),
+                image: !imageUrl || isPlaceholderImage ? fallbackImage : imageUrl,
+                categoryLabel: getCategoryDisplayLabel(item),
+                supplierName: supplier.name,
+                supplierRegion: supplier.region
+              };
             })
             .filter((item): item is NonNullable<typeof item> => item !== null),
-            (product) => product.sku || `${product.name}|${product.price}|${product.categoryLabel}`
-          )
+          (product) => product.sku || `${product.name}|${product.price}|${product.categoryLabel}`
         );
+
+        // Load local custom products
+        const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
+        let customLocalProducts: any[] = [];
+        if (customLocalRaw) {
+          try {
+            customLocalProducts = JSON.parse(customLocalRaw);
+          } catch (e) {
+            customLocalProducts = [];
+          }
+        }
+
+        const filteredCustomProducts = customLocalProducts.filter((p) => {
+          // Check if parent category matches
+          const parentCategoryMatched = p.categoryLabel === category.name;
+          if (!parentCategoryMatched) {
+            return false;
+          }
+
+          // Check if subcategory matches
+          if (activeSubcategory !== 'Tất cả') {
+            const inferred = inferCategoryFromSku(p.sku);
+            const subcat = inferred?.subcategory ?? (category.subcategories[0] || 'Tất cả');
+            return subcat === activeSubcategory || p.categoryLabel === activeSubcategory;
+          }
+
+          return true;
+        });
+
+        const mappedCustomProducts: ProductItem[] = filteredCustomProducts.map((p) => {
+          const priceValue = p.special_price ?? p.price;
+          const supplier = getMockSupplierForProduct(p.sku, p.categoryLabel);
+          const inferred = inferCategoryFromSku(p.sku);
+          const subcat = inferred?.subcategory ?? p.categoryLabel;
+          return {
+            id: p.id || p.sku,
+            sku: p.sku,
+            name: p.name,
+            price: formatPrice(priceValue),
+            priceValue,
+            unit: p.unit || 'kg',
+            image: p.image || fallbackImageByCategory[p.categoryLabel] || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop',
+            categoryLabel: subcat,
+            supplierName: supplier.name,
+            supplierRegion: supplier.region
+          };
+        });
+
+        // Combine and deduplicate by SKU (local storage products take priority)
+        const allProducts = [...mappedCustomProducts];
+        const localSkus = new Set(mappedCustomProducts.map((p) => p.sku));
+        mappedGraphQlProducts.forEach((p) => {
+          if (!localSkus.has(p.sku)) {
+            allProducts.push(p);
+          }
+        });
+
+        const mappedProducts = dedupeProductsByName(allProducts);
 
         if (latestRequestRef.current !== requestId) {
           return;

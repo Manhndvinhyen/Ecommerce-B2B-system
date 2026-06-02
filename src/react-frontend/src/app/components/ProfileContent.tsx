@@ -26,10 +26,10 @@ type CustomerMeResponse = {
 };
 
 type ProfileContentProps = {
-  canManageBranches?: boolean;
+  showBusinessInfo?: boolean;
 };
 
-export const ProfileContent = ({ canManageBranches = false }: ProfileContentProps) => {
+export const ProfileContent = ({ showBusinessInfo = true }: ProfileContentProps) => {
   const readStorageValue = (key: string) =>
     window.localStorage.getItem(key) || window.sessionStorage.getItem(key) || '';
 
@@ -473,31 +473,38 @@ export const ProfileContent = ({ canManageBranches = false }: ProfileContentProp
               <p className="text-[14.5px] font-bold text-gray-800 tracking-tight">{profile.email}</p>
             )}
           </div>
+          {!showBusinessInfo && (
+            <div>
+              <p className="text-[12.5px] text-black mb-0.5 font-light tracking-tight">Vai trò</p>
+              <p className="text-[14.5px] font-bold text-gray-800 tracking-tight">{profile.role}</p>
+            </div>
+          )}
         </div>
       </section>
 
       <hr className="border-gray-100 mb-6" />
 
-      {/* Thông tin tài khoản */}
-      <section>
-        <h2 className="text-[17px] font-bold text-gray-800 mb-3 tracking-tight">Thông tin tài khoản</h2>
-        <div className="grid grid-cols-2 gap-y-3.5 gap-x-16">
-          <div>
-            <p className="text-[12.5px] text-black mb-1.5 font-light tracking-tight">Chi nhánh trực thuộc</p>
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 bg-gray-800 rounded-full" />
-              <p className="text-[14.5px] font-bold text-gray-800 tracking-tight">{profile.branch}</p>
+      {showBusinessInfo && (
+        <section>
+          <h2 className="text-[17px] font-bold text-gray-800 mb-3 tracking-tight">Thông tin tài khoản</h2>
+          <div className="grid grid-cols-2 gap-y-3.5 gap-x-16">
+            <div>
+              <p className="text-[12.5px] text-black mb-1.5 font-light tracking-tight">Chi nhánh trực thuộc</p>
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 bg-gray-800 rounded-full" />
+                <p className="text-[14.5px] font-bold text-gray-800 tracking-tight">{profile.branch}</p>
+              </div>
+            </div>
+            <div>
+              <p className="text-[12.5px] text-black mb-1.5 font-light tracking-tight">Vai trò</p>
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 bg-gray-800 rounded-full" />
+                <p className="text-[14.5px] font-bold text-gray-800 tracking-tight">{profile.role}</p>
+              </div>
             </div>
           </div>
-          <div>
-            <p className="text-[12.5px] text-black mb-1.5 font-light tracking-tight">Vai trò</p>
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 bg-gray-800 rounded-full" />
-              <p className="text-[14.5px] font-bold text-gray-800 tracking-tight">{profile.role}</p>
-            </div>
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* Password Modal */}
       {showPasswordModal && (

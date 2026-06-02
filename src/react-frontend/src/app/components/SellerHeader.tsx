@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { User, Bell, HelpCircle } from 'lucide-react';
-import { adminMenuItems } from './AdminSidebar';
+import { adminMenuItems } from './SidebarMenu';
 
 export function SellerHeader() {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -222,13 +222,13 @@ export function SellerHeader() {
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.03)] transition-all duration-300" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }} onClickCapture={handleTopLevelNavigation}>
       {/* Top visual gradient border */}
-      <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-orange-500 via-amber-500 to-rose-500" />
+      <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-green-500 via-[#00b14f] to-emerald-500" />
       
       <div className="container mx-auto px-6 py-4 flex items-center justify-between gap-4">
         {/* Left Side: Logo & Badge */}
         <div className="flex items-center gap-4">
-          <a href={reactHomePath} className="flex items-center gap-2 group">
-            <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-rose-500 tracking-tight group-hover:opacity-90 transition-opacity">
+          <a href={`${reactHomePath}?view=seller-dashboard`} className="flex items-center gap-2 group">
+            <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#00b14f] to-emerald-500 tracking-tight group-hover:opacity-90 transition-opacity">
               Freso
             </span>
             <span className="text-gray-300 font-light text-xl">|</span>
@@ -252,9 +252,9 @@ export function SellerHeader() {
           {/* Back to Shopping Website Button */}
           <a
             href={reactHomePath}
-            className="group flex items-center gap-2 px-4 py-2 border border-gray-200 hover:border-orange-500 hover:bg-orange-50/20 text-gray-600 hover:text-orange-600 rounded-full text-xs font-bold transition-all duration-300 shadow-sm bg-white whitespace-nowrap"
+            className="group flex items-center gap-2 px-4 py-2 border border-gray-200 hover:border-[#00b14f] hover:bg-green-50/20 text-gray-600 hover:text-[#00b14f] rounded-full text-xs font-bold transition-all duration-300 shadow-sm bg-white whitespace-nowrap"
           >
-            <svg className="size-4 text-gray-400 group-hover:text-orange-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="size-4 text-gray-400 group-hover:text-[#00b14f] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
             </svg>
             <span>Đến trang mua sắm</span>
@@ -277,7 +277,7 @@ export function SellerHeader() {
           <div className="hidden sm:flex items-center gap-1.5">
             <button 
               type="button" 
-              className="p-2 hover:bg-gray-50 rounded-full transition-colors text-gray-500 hover:text-orange-500 group" 
+              className="p-2 hover:bg-gray-50 rounded-full transition-colors text-gray-500 hover:text-[#00b14f] group" 
               title="Hỗ trợ & Tài liệu"
             >
               <HelpCircle className="size-5 transition-transform group-hover:scale-105" />
@@ -285,7 +285,7 @@ export function SellerHeader() {
             
             <button 
               type="button" 
-              className="relative p-2 hover:bg-gray-50 rounded-full transition-colors text-gray-500 hover:text-orange-500 group" 
+              className="relative p-2 hover:bg-gray-50 rounded-full transition-colors text-gray-500 hover:text-[#00b14f] group" 
               title="Thông báo"
             >
               <Bell className="size-5 transition-transform group-hover:scale-105" />
@@ -300,9 +300,9 @@ export function SellerHeader() {
             <button
               type="button"
               onClick={() => setIsUserMenuOpen((prev) => !prev)}
-              className="flex items-center gap-2 text-xs font-black text-gray-700 hover:text-orange-600 transition-colors p-1.5 hover:bg-gray-50 rounded-xl transition-all"
+              className="flex items-center gap-2 text-xs font-black text-gray-700 hover:text-[#00b14f] transition-colors p-1.5 hover:bg-gray-50 rounded-xl transition-all"
             >
-              <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-rose-500 text-white rounded-full flex items-center justify-center font-black shadow-sm ring-2 ring-orange-100 group-hover:ring-orange-200 transition-all">
+              <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 text-white rounded-full flex items-center justify-center font-black shadow-sm ring-2 ring-green-100 group-hover:ring-green-200 transition-all">
                 {displayedUserName.charAt(0).toUpperCase()}
               </div>
               <span className="hidden md:inline font-bold text-gray-800">{displayedUserName}</span>
@@ -322,8 +322,8 @@ export function SellerHeader() {
                         href={getDashboardHref(item.label)}
                         className={`w-full rounded-xl px-4 py-2.5 text-[13.5px] font-semibold transition-colors ${
                           isActive
-                            ? 'bg-orange-50 text-orange-600 font-bold'
-                            : 'text-gray-700 hover:bg-orange-50 hover:text-orange-600'
+                            ? 'bg-green-50 text-[#00b14f] font-bold'
+                            : 'text-gray-700 hover:bg-green-50 hover:text-[#00b14f]'
                         }`}
                       >
                         {item.label}

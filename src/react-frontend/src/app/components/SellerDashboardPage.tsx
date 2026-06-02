@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AdminSidebar, adminMenuItems } from './AdminSidebar';
-import { ProfileContent } from './ProfileContent';
-import { GeneralInfo } from './GeneralInfo';
+import { SellerSidebar } from './SellerSidebar';
+import { adminMenuItems } from './SidebarMenu';
+import { SellerProfile } from './SellerProfile';
+import { SellerOverviewDashboard } from './SellerOverviewDashboard';
+import { SellerProductManager } from './SellerProductManager';
+import { SellerInventoryManager } from './SellerInventoryManager';
+import { SellerCartManager } from './SellerCartManager';
 import { BranchManagementPanel } from './BranchManagementPanel';
-import { PurchaseHistoryContent } from './PurchaseHistoryContent';
 import { SellerHeader } from './SellerHeader';
 import { AuthPageFooter } from './auth/AuthPageFooter';
 import { ChatbotWidget } from './ChatbotWidget';
@@ -75,44 +78,34 @@ export function SellerDashboardPage() {
       });
   }, []);
 
-  const menuItems = useMemo(() => adminMenuItems.filter((item) => canManageBranches || item.id !== 'nhan-vien'), [canManageBranches]);
-  const accountLabel = adminMenuItems.find((item) => item.id === 'tai-khoan')?.label ?? 'Tai khoan cua toi';
-  const generalInfoLabel = adminMenuItems.find((item) => item.id === 'thong-tin')?.label ?? 'Thong tin chung';
-  const branchLabel = adminMenuItems.find((item) => item.id === 'nhan-vien')?.label ?? 'Quan ly co so';
-  const branchSubLabels = adminMenuItems.find((item) => item.id === 'nhan-vien')?.subItems ?? [];
-  const orderLabel = adminMenuItems.find((item) => item.id === 'don-hang')?.label ?? 'Quan ly don hang';
-  const purchaseHistoryLabel = adminMenuItems.find((item) => item.id === 'lich-su-mua-hang')?.label ?? 'Lich su mua hang';
-  const quoteLabel = adminMenuItems.find((item) => item.id === 'bao-gia')?.label ?? 'Dam phan gia';
+  const menuItems = useMemo(() => {
+    return adminMenuItems.filter((item) => canManageBranches || item.id !== 'nhan-vien');
+  }, [canManageBranches]);
+
+  const dashboardLabel = adminMenuItems.find((item) => item.id === 'dashboard')?.label ?? 'Dashboard';
+  const profileLabel = adminMenuItems.find((item) => item.id === 'profile-seller')?.label ?? 'Thông tin hồ sơ';
+  const branchLabel = adminMenuItems.find((item) => item.id === 'nhan-vien')?.label ?? 'Quản lý cơ sở';
+  const productLabel = adminMenuItems.find((item) => item.id === 'quan-ly-san-pham')?.label ?? 'Quản lý sản phẩm';
+  const cartLabel = adminMenuItems.find((item) => item.id === 'quan-ly-gio-hang')?.label ?? 'Quản lý giỏ hàng';
+  const inventoryLabel = adminMenuItems.find((item) => item.id === 'quan-ly-kho')?.label ?? 'Quản lý kho hàng';
+  const orderLabel = adminMenuItems.find((item) => item.id === 'don-hang')?.label ?? 'Quản lý đơn hàng';
+  const quoteLabel = adminMenuItems.find((item) => item.id === 'bao-gia')?.label ?? 'Đàm phán giá';
 
   const params = new URLSearchParams(window.location.search);
   const tabFromQuery = params.get('tab');
-  const tabLabels = new Set([
-    ...menuItems.map((item) => item.label),
-    ...menuItems.flatMap((item) => item.subItems ?? []),
-  ]);
-  const initialTab = tabFromQuery && tabLabels.has(tabFromQuery) ? tabFromQuery : generalInfoLabel;
+  const tabLabels = new Set(menuItems.map((item) => item.label));
+  const initialTab = tabFromQuery && tabLabels.has(tabFromQuery) ? tabFromQuery : dashboardLabel;
   const [activeTab, setActiveTab] = useState(initialTab);
-  const [openMenus, setOpenMenus] = useState(() => {
-    const defaults: Record<string, boolean> = { 'nhan-vien': false, 'bao-cao': false };
-    return menuItems.reduce((acc, item) => {
-      if (!item.subItems) {
-        return acc;
-      }
-      if (item.label === initialTab || item.subItems.includes(initialTab)) {
-        acc[item.id] = true;
-      }
-      return acc;
-    }, defaults);
-  });
+  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({ 'nhan-vien': false, 'bao-cao': false });
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-[#F5FAF6]">
       <SellerHeader />
 
-      <main className="bg-white px-6 py-0">
-        <div className="mx-auto flex max-w-[1200px] items-start">
-          <div className="w-[255px] flex-none border-r border-gray-200 pr-5">
-            <AdminSidebar
+      <main className="bg-[#F5FAF6] py-6 px-6">
+        <div className="max-w-[1200px] mx-auto flex items-start gap-6">
+          <div className="w-[255px] flex-none border-r border-gray-100 pr-5">
+            <SellerSidebar
               activeTab={activeTab}
               setActiveTab={setActiveTab}
               openMenus={openMenus}
@@ -121,38 +114,31 @@ export function SellerDashboardPage() {
             />
           </div>
 
-          <div className="flex-1">
-            {activeTab === accountLabel && <ProfileContent canManageBranches={canManageBranches} />}
-            {activeTab === generalInfoLabel && <GeneralInfo />}
-            {(activeTab === branchLabel || branchSubLabels.includes(activeTab)) && (
-              <div className="p-8">
+          <div className="flex-1 min-w-0">
+            {activeTab === dashboardLabel && <SellerOverviewDashboard />}
+            {activeTab === profileLabel && <SellerProfile />}
+            {activeTab === productLabel && <SellerProductManager />}
+            {activeTab === cartLabel && <SellerCartManager />}
+            {activeTab === inventoryLabel && <SellerInventoryManager />}
+            {activeTab === branchLabel && (
+              <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
                 <BranchManagementPanel canManageBranches={canManageBranches} />
               </div>
             )}
-            {activeTab === purchaseHistoryLabel && <PurchaseHistoryContent />}
             {activeTab === orderLabel && (
-              <div className="p-8">
-                <h1 className="text-2xl font-bold text-gray-900">Quan ly don hang</h1>
-                <p className="mt-2 text-sm text-gray-500">
-                  Muc nay chua duoc noi voi API don hang Magento. Can them endpoint lay sales_order theo customer/co so.
-                </p>
-              </div>
+              <div className="p-8">Nội dung cho: {activeTab}</div>
             )}
             {activeTab === quoteLabel && (
-              <div className="p-8">
-                <h1 className="text-2xl font-bold text-gray-900">Dam phan gia</h1>
-                <p className="mt-2 text-sm text-gray-500">
-                  Muc nay chua co module bao gia/thuong luong. Can thiet ke bang du lieu va API truoc khi hien thi.
-                </p>
-              </div>
+              <div className="p-8">Nội dung cho: {activeTab}</div>
             )}
-            {activeTab !== accountLabel &&
-              activeTab !== generalInfoLabel &&
+            {activeTab !== dashboardLabel &&
+              activeTab !== profileLabel &&
+              activeTab !== productLabel &&
+              activeTab !== cartLabel &&
+              activeTab !== inventoryLabel &&
               activeTab !== branchLabel &&
-              !branchSubLabels.includes(activeTab) &&
-              activeTab !== purchaseHistoryLabel &&
               activeTab !== orderLabel &&
-              activeTab !== quoteLabel && <div className="p-8">Noi dung cho: {activeTab}</div>}
+              activeTab !== quoteLabel && <div className="p-8">Nội dung cho: {activeTab}</div>}
           </div>
         </div>
       </main>

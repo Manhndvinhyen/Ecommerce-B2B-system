@@ -30,11 +30,11 @@ class BranchManagerDeleteManagement implements BranchManagerDeleteInterface
         $ownerId = $this->getCustomerIdFromRequest();
         $owner = $this->customerRepository->getById($ownerId);
         if (!$this->isOwnerCustomer($owner)) {
-            throw new AuthorizationException(__('Ban khong co quyen xoa nhan vien.'));
+            throw new AuthorizationException(__('Ban khong co quyen vo hieu hoa co so.'));
         }
 
         if ($managerId <= 0 || $managerId === $ownerId) {
-            throw new InputException(__('Thong tin nhan vien khong hop le.'));
+            throw new InputException(__('Thong tin co so khong hop le.'));
         }
 
         $ownerRegistration = $this->getRegistrationByCustomerId($ownerId);
@@ -49,12 +49,12 @@ class BranchManagerDeleteManagement implements BranchManagerDeleteInterface
 
         $managerRegistration = $this->getRegistrationByCustomerId($managerId);
         if (!$managerRegistration) {
-            throw new InputException(__('Khong tim thay nhan vien.'));
+            throw new InputException(__('Khong tim thay co so.'));
         }
 
         $managerLoginCode = trim((string) ($managerRegistration['login_code'] ?? ''));
         if ($managerLoginCode !== $loginCode) {
-            throw new AuthorizationException(__('Ban khong co quyen xoa nhan vien nay.'));
+            throw new AuthorizationException(__('Ban khong co quyen vo hieu hoa co so nay.'));
         }
 
         $connection = $this->resourceConnection->getConnection();
@@ -67,7 +67,7 @@ class BranchManagerDeleteManagement implements BranchManagerDeleteInterface
 
         return [
             'success' => true,
-            'message' => (string) __('Da danh dau nhan vien khong hoat dong.'),
+            'message' => (string) __('Da danh dau co so khong hoat dong.'),
         ];
     }
 
@@ -91,7 +91,7 @@ class BranchManagerDeleteManagement implements BranchManagerDeleteInterface
     {
         $token = $this->extractToken();
         if ($token === '') {
-            throw new AuthorizationException(__('Ban can dang nhap de xoa nhan vien.'));
+            throw new AuthorizationException(__('Ban can dang nhap de vo hieu hoa co so.'));
         }
 
         $tokenModel = $this->tokenFactory->create()->loadByToken($token);
@@ -129,9 +129,11 @@ class BranchManagerDeleteManagement implements BranchManagerDeleteInterface
     {
         $isOwnerAttr = $customer->getCustomAttribute('is_owner');
         $isSuperAttr = $customer->getCustomAttribute('is_super_admin');
+        $roleAttr = $customer->getCustomAttribute('tmdt_role');
         $isOwner = $isOwnerAttr ? $this->normalizeBool($isOwnerAttr->getValue()) : false;
         $isSuper = $isSuperAttr ? $this->normalizeBool($isSuperAttr->getValue()) : false;
-        return $isOwner || $isSuper;
+        $role = $roleAttr ? strtolower(trim((string) $roleAttr->getValue())) : '';
+        return $role !== 'branch' && ($isOwner || $isSuper || $role === '' || $role === 'manager' || $role === 'seller');
     }
 
     private function normalizeBool(mixed $value): bool

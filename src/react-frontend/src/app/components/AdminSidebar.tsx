@@ -29,9 +29,9 @@ export const adminMenuItems: AdminMenuItem[] = [
   { id: 'bao-gia', label: 'Đàm phán giá', icon: Handshake },
   {
     id: 'nhan-vien',
-    label: 'Quản lý nhân viên',
+    label: 'Quản lý cơ sở',
     icon: UserRoundSearch,
-    subItems: ['Danh sách nhân viên', 'Tạo mới nhân viên'],
+    subItems: ['Danh sách cơ sở', 'Tạo mới cơ sở'],
   },
   {
     id: 'bao-cao',

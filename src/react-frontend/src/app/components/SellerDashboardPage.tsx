@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AdminSidebar, adminMenuItems } from './AdminSidebar';
 import { ProfileContent } from './ProfileContent';
 import { GeneralInfo } from './GeneralInfo';
-import { CreateBranchManager } from './CreateBranchManager';
-import { EmployeeList } from './EmployeeList';
+import { BranchManagementPanel } from './BranchManagementPanel';
+import { PurchaseHistoryContent } from './PurchaseHistoryContent';
 import { SellerHeader } from './SellerHeader';
 import { AuthPageFooter } from './auth/AuthPageFooter';
 import { ChatbotWidget } from './ChatbotWidget';
@@ -17,14 +17,15 @@ export function SellerDashboardPage() {
     return normalized === '1' || normalized === 'true' || normalized === 'yes';
   };
 
-  const getStoredSuperAdmin = () => {
+  const getStoredCanManageBranches = () => {
     const isOwner = readStorageValue('freso_is_owner');
     const isSuperAdmin = readStorageValue('freso_is_super_admin');
-    return parseBoolFlag(isOwner) || parseBoolFlag(isSuperAdmin);
+    const role = readStorageValue('freso_role').trim().toLowerCase();
+    return role !== 'branch' && (parseBoolFlag(isOwner) || parseBoolFlag(isSuperAdmin) || role === '' || role === 'manager' || role === 'seller');
   };
 
-  const [isSuperAdmin, setIsSuperAdmin] = useState(getStoredSuperAdmin());
-  const [userRole, setUserRole] = useState('seller');
+  const [canManageBranches, setCanManageBranches] = useState(getStoredCanManageBranches());
+  const [, setUserRole] = useState('seller');
 
   useEffect(() => {
     const token = readStorageValue('freso_customer_token');
@@ -47,41 +48,41 @@ export function SellerDashboardPage() {
         const superAdminAttr = customAttributes.find((attr) => attr?.attribute_code === 'is_super_admin');
         const roleAttr = customAttributes.find((attr) => attr?.attribute_code === 'tmdt_role');
 
-        const hasOwnerAttr = Boolean(ownerAttr);
-        const hasSuperAdminAttr = Boolean(superAdminAttr);
-
-        if (hasOwnerAttr || hasSuperAdminAttr) {
+        if (ownerAttr || superAdminAttr) {
           const nextValue =
             parseBoolFlag(String(ownerAttr?.value ?? '')) || parseBoolFlag(String(superAdminAttr?.value ?? ''));
           window.localStorage.setItem('freso_is_owner', nextValue ? '1' : '0');
           window.sessionStorage.setItem('freso_is_owner', nextValue ? '1' : '0');
           window.localStorage.setItem('freso_is_super_admin', nextValue ? '1' : '0');
           window.sessionStorage.setItem('freso_is_super_admin', nextValue ? '1' : '0');
-          setIsSuperAdmin(nextValue);
         }
 
+        let resolvedRole = readStorageValue('freso_role').trim().toLowerCase();
         if (roleAttr) {
           const nextRole = String(roleAttr.value ?? '').trim().toLowerCase();
           window.localStorage.setItem('freso_role', nextRole);
           window.sessionStorage.setItem('freso_role', nextRole);
           setUserRole(nextRole);
+          resolvedRole = nextRole;
           window.dispatchEvent(new CustomEvent('freso:profile-updated'));
         }
+        const hasPrivilege =
+          parseBoolFlag(String(ownerAttr?.value ?? '')) || parseBoolFlag(String(superAdminAttr?.value ?? ''));
+        setCanManageBranches(resolvedRole !== 'branch' && (hasPrivilege || resolvedRole === '' || resolvedRole === 'manager' || resolvedRole === 'seller'));
       })
       .catch(() => {
         // ignore permission fetch failures
       });
   }, []);
 
-  const menuItems = useMemo(() => {
-    let items = adminMenuItems;
-
-    if (!isSuperAdmin) {
-      items = items.filter((item) => item.id !== 'nhan-vien');
-    }
-
-    return items;
-  }, [isSuperAdmin]);
+  const menuItems = useMemo(() => adminMenuItems.filter((item) => canManageBranches || item.id !== 'nhan-vien'), [canManageBranches]);
+  const accountLabel = adminMenuItems.find((item) => item.id === 'tai-khoan')?.label ?? 'Tai khoan cua toi';
+  const generalInfoLabel = adminMenuItems.find((item) => item.id === 'thong-tin')?.label ?? 'Thong tin chung';
+  const branchLabel = adminMenuItems.find((item) => item.id === 'nhan-vien')?.label ?? 'Quan ly co so';
+  const branchSubLabels = adminMenuItems.find((item) => item.id === 'nhan-vien')?.subItems ?? [];
+  const orderLabel = adminMenuItems.find((item) => item.id === 'don-hang')?.label ?? 'Quan ly don hang';
+  const purchaseHistoryLabel = adminMenuItems.find((item) => item.id === 'lich-su-mua-hang')?.label ?? 'Lich su mua hang';
+  const quoteLabel = adminMenuItems.find((item) => item.id === 'bao-gia')?.label ?? 'Dam phan gia';
 
   const params = new URLSearchParams(window.location.search);
   const tabFromQuery = params.get('tab');
@@ -89,9 +90,7 @@ export function SellerDashboardPage() {
     ...menuItems.map((item) => item.label),
     ...menuItems.flatMap((item) => item.subItems ?? []),
   ]);
-  
-  // For sellers, the default home view is the store dashboard overview ("Thông tin chung")
-  const initialTab = tabFromQuery && tabLabels.has(tabFromQuery) ? tabFromQuery : 'Thông tin chung';
+  const initialTab = tabFromQuery && tabLabels.has(tabFromQuery) ? tabFromQuery : generalInfoLabel;
   const [activeTab, setActiveTab] = useState(initialTab);
   const [openMenus, setOpenMenus] = useState(() => {
     const defaults: Record<string, boolean> = { 'nhan-vien': false, 'bao-cao': false };
@@ -110,9 +109,8 @@ export function SellerDashboardPage() {
     <div className="min-h-screen bg-white">
       <SellerHeader />
 
-      <main className="bg-white py-0 px-6">
-        <div className="max-w-[1200px] mx-auto flex items-start">
-          {/* Left sidebar */}
+      <main className="bg-white px-6 py-0">
+        <div className="mx-auto flex max-w-[1200px] items-start">
           <div className="w-[255px] flex-none border-r border-gray-200 pr-5">
             <AdminSidebar
               activeTab={activeTab}
@@ -123,21 +121,38 @@ export function SellerDashboardPage() {
             />
           </div>
 
-          {/* Right content area */}
           <div className="flex-1">
-            {activeTab === 'Tài khoản của tôi' && <ProfileContent />}
-            {activeTab === 'Thông tin chung' && <GeneralInfo />}
-            {(activeTab === 'Quản lý nhân viên' || activeTab === 'Tạo mới nhân viên') && (
-              <CreateBranchManager isSuperAdmin={isSuperAdmin} />
+            {activeTab === accountLabel && <ProfileContent canManageBranches={canManageBranches} />}
+            {activeTab === generalInfoLabel && <GeneralInfo />}
+            {(activeTab === branchLabel || branchSubLabels.includes(activeTab)) && (
+              <div className="p-8">
+                <BranchManagementPanel canManageBranches={canManageBranches} />
+              </div>
             )}
-            {activeTab === 'Danh sách nhân viên' && <EmployeeList isSuperAdmin={isSuperAdmin} />}
-            {activeTab !== 'Tài khoản của tôi' &&
-              activeTab !== 'Thông tin chung' &&
-              activeTab !== 'Danh sách nhân viên' &&
-              activeTab !== 'Tạo mới nhân viên' &&
-              activeTab !== 'Quản lý nhân viên' && (
-              <div className="p-8">Nội dung cho: {activeTab}</div>
+            {activeTab === purchaseHistoryLabel && <PurchaseHistoryContent />}
+            {activeTab === orderLabel && (
+              <div className="p-8">
+                <h1 className="text-2xl font-bold text-gray-900">Quan ly don hang</h1>
+                <p className="mt-2 text-sm text-gray-500">
+                  Muc nay chua duoc noi voi API don hang Magento. Can them endpoint lay sales_order theo customer/co so.
+                </p>
+              </div>
             )}
+            {activeTab === quoteLabel && (
+              <div className="p-8">
+                <h1 className="text-2xl font-bold text-gray-900">Dam phan gia</h1>
+                <p className="mt-2 text-sm text-gray-500">
+                  Muc nay chua co module bao gia/thuong luong. Can thiet ke bang du lieu va API truoc khi hien thi.
+                </p>
+              </div>
+            )}
+            {activeTab !== accountLabel &&
+              activeTab !== generalInfoLabel &&
+              activeTab !== branchLabel &&
+              !branchSubLabels.includes(activeTab) &&
+              activeTab !== purchaseHistoryLabel &&
+              activeTab !== orderLabel &&
+              activeTab !== quoteLabel && <div className="p-8">Noi dung cho: {activeTab}</div>}
           </div>
         </div>
       </main>

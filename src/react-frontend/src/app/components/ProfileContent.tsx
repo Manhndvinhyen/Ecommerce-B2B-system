@@ -25,7 +25,11 @@ type CustomerMeResponse = {
   unit_nickname?: string;
 };
 
-export const ProfileContent = () => {
+type ProfileContentProps = {
+  canManageBranches?: boolean;
+};
+
+export const ProfileContent = ({ canManageBranches = false }: ProfileContentProps) => {
   const readStorageValue = (key: string) =>
     window.localStorage.getItem(key) || window.sessionStorage.getItem(key) || '';
 
@@ -49,6 +53,9 @@ export const ProfileContent = () => {
     }
     if (roleAttr === 'seller') {
       return 'Người bán';
+    }
+    if (roleAttr === 'branch') {
+      return 'Cơ sở/chi nhánh';
     }
     const isOwner = parseBoolFlag(readStorageValue('freso_is_owner'));
     const isSuperAdmin = parseBoolFlag(readStorageValue('freso_is_super_admin'));
@@ -132,6 +139,8 @@ export const ProfileContent = () => {
         role = 'Khách hàng';
       } else if (roleVal === 'seller') {
         role = 'Người bán';
+      } else if (roleVal === 'branch') {
+        role = 'Cơ sở/chi nhánh';
       }
 
       setProfile((prev) => ({
@@ -225,6 +234,8 @@ export const ProfileContent = () => {
         roleLabel = 'Khách hàng';
       } else if (roleVal === 'seller') {
         roleLabel = 'Người bán';
+      } else if (roleVal === 'branch') {
+        roleLabel = 'Cơ sở/chi nhánh';
       }
 
       setProfile((prev) => ({

@@ -1,0 +1,154 @@
+DU AN: DOI "QUAN LY NHAN VIEN" THANH "QUAN LY CO SO"
+
+Ngay tao: 2026-06-01
+Pham vi: khu vuc tai khoan khach hang/quan ly trong React frontend va module Magento Tmdt_Registration.
+
+1. Ket luan kiem tra hien trang
+
+- Phan "Quan ly nhan vien" hien da ton tai trong React, duoc khai bao tai:
+  src/react-frontend/src/app/components/AdminSidebar.tsx
+- Man hinh tao tai khoan hien la:
+  src/react-frontend/src/app/components/CreateBranchManager.tsx
+- Man hinh danh sach hien la:
+  src/react-frontend/src/app/components/EmployeeList.tsx
+- API backend da co san:
+  POST /rest/V1/tmdt-registration/addusers
+  GET /rest/V1/tmdt-registration/branch-managers
+  PUT /rest/V1/tmdt-registration/branch-managers/:customerId
+  DELETE /rest/V1/tmdt-registration/branch-managers/:customerId
+- Backend dang tao customer con voi cung login_code cua chu so huu, luu branchName vao unit_nickname.
+- Backend dang chi cho tai khoan co is_owner=1 hoac is_super_admin=1 tao/xem/sua/xoa tai khoan chi nhanh.
+
+2. Nguyen nhan hien tai tai khoan quan ly khong thay "Quan ly nhan vien"
+
+- UserDashboardPage dang filter menu theo bien isSuperAdmin.
+- isSuperAdmin duoc tinh tu localStorage/sessionStorage va API /rest/V1/customers/me qua 2 custom attribute:
+  freso_is_owner
+  freso_is_super_admin
+- Neu tai khoan dang dang nhap khong co is_owner=1 hoac is_super_admin=1, menu id "nhan-vien" bi an.
+- UserDashboardPage cung dang loai item id "thong-tin", nen khu "Thong tin chung" khong hien trong dashboard khach hang.
+- Vi vay, neu "tai khoan quan ly" la tai khoan chi nhanh duoc tao boi chu so huu, no se bi set is_owner=0 va is_super_admin=0 trong AddUsersManagement.php, nen khong co quyen xem menu nay.
+
+3. Dinh nghia nghiep vu moi
+
+- Doi ten "Quan ly nhan vien" thanh "Quan ly co so".
+- Chuyen phan "Quan ly co so" vao trong khu "Thong tin ca nhan" thay vi la menu doc lap.
+- Tai khoan chu so huu/quan ly cap tren co the tao tai khoan cho cac co so/chi nhanh.
+- Tai khoan co so co the dang nhap he thong va thuc hien mua/ban hang nhu mot customer binh thuong, nhung khong duoc quan ly cac co so khac neu khong duoc cap quyen.
+- Can bo quan ly co the xem dashboard/chart tinh trang kinh doanh cac co so.
+
+4. De xuat mo hinh quyen
+
+- Owner/Super Admin:
+  Co quyen quan ly toan bo co so, tao tai khoan co so, sua/xoa/vo hieu hoa tai khoan co so, xem chart tong hop.
+- Branch Manager/Co so:
+  Co quyen dang nhap, mua/ban hang, xem thong tin cua co so minh, xem don hang cua co so minh.
+- Neu can "can bo quan ly" khac voi Owner, can bo sung role rieng:
+  tmdt_role = owner | manager | branch
+  hoac custom attribute:
+  is_branch_manager
+  parent_customer_id
+  managed_login_code
+
+5. Ke hoach trien khai
+
+Checkpoint 1 - Chuan hoa ngon ngu UI
+- Doi label trong AdminSidebar:
+  "Quan ly nhan vien" -> "Quan ly co so"
+  "Danh sach nhan vien" -> "Danh sach co so"
+  "Tao moi nhan vien" -> "Tao moi co so"
+- Doi text trong CreateBranchManager va EmployeeList tu "nhan vien/quan ly chi nhanh" sang "co so/chi nhanh".
+- Doi ten component neu co thoi gian:
+  EmployeeList -> BranchLocationList
+  CreateBranchManager -> CreateBranchLocationAccount
+
+Checkpoint 2 - Dua quan ly co so vao Thong tin ca nhan
+- Mo rong ProfileContent de co tab/section "Quan ly co so".
+- Hien thi section nay chi khi customer co quyen owner/super admin/manager duoc phep.
+- Trong section gom:
+  + Tong quan co so
+  + Danh sach co so
+  + Tao moi co so
+  + Bieu do kinh doanh co so
+- Sau khi tich hop xong, co the bo menu doc lap "nhan-vien" khoi sidebar.
+
+Checkpoint 3 - Chuan hoa backend domain
+- Doi message backend tu "nhan vien/quan ly chi nhanh" thanh "co so/chi nhanh".
+- Kiem tra lai API list/update/delete dang lay theo login_code, tranh hien nham customer khac cung ma.
+- Bo sung field neu can:
+  parent_customer_id
+  branch_code
+  branch_status
+  branch_role
+- Dam bao tai khoan co so duoc tao co tmdt_login_code giong owner de dang nhap bang ma nha hang.
+
+Checkpoint 4 - Login va phan quyen tai khoan co so
+- Kiem tra LoginManagement/GoogleLoginManagement co tra token va role dung cho tai khoan co so.
+- Khi co so dang nhap:
+  + Khong hien "Quan ly co so"
+  + Duoc mua/ban hang theo pham vi co so
+  + Don hang/san pham/lich su gan voi branch/customer_id hien tai
+
+Checkpoint 5 - Chart tinh trang kinh doanh cac co so
+- Tao API tong hop theo login_code cua owner:
+  + Doanh thu theo co so
+  + So don hang theo co so
+  + Gia tri trung binh don hang
+  + Trang thai don hang
+  + Top san pham theo co so
+- Frontend dung chart trong dashboard "Quan ly co so".
+- Can xac dinh nguon du lieu don hang:
+  + Magento sales_order/sales_order_item
+  + Hoac custom table neu co module rieng cho B2B order.
+
+6. Rủi ro va diem can xac nhan
+
+- Ten "quan ly" dang bi dung lan giua role nguoi quan ly va tai khoan co so.
+- Hien tai AddUsersManagement tao customer con voi is_owner=0, is_super_admin=0, nen customer con khong the quan ly co so khac. Dieu nay dung neu day la tai khoan co so.
+- Neu "can bo quan ly" cung can tao co so, can bo sung role moi thay vi dung is_super_admin.
+- Cac file TSX hien co bi mojibake o mot so text tieng Viet, can can than khi sua de khong lam hong them encoding.
+
+7. Checklist keep track
+
+[x] Xac nhan role hien tai: owner/super_admin quan ly co so; tai khoan co so khong quan ly co so khac.
+[x] Chot diem dat UI: nam trong "Tai khoan cua toi" / thong tin ca nhan.
+[x] Doi label sidebar va text UI sang "co so".
+[x] Chuyen UI danh sach/tao co so vao ProfileContent.
+[x] An menu "Quan ly co so" doc lap vi da nam trong ProfileContent.
+[x] Chuan hoa API message backend tu "nhan vien/quan ly chi nhanh" sang "co so".
+[x] Them API/report chart doanh thu/don hang that theo co so.
+[x] Them frontend chart ban dau cho owner/manager dua tren trang thai tai khoan co so.
+[x] Dua "Quan ly co so" ra sidebar nhu Quan ly don hang / Lich su mua hang.
+[ ] Test owner tao co so.
+[ ] Test co so dang nhap.
+[ ] Test co so mua/ban hang.
+[ ] Test owner/manager xem chart tung co so.
+[ ] Build React va flush Magento cache.
+
+8. Lo trinh hoan thien Quan ly don hang va Lich su mua hang
+
+Hien trang:
+- Lich su mua hang da co component PurchaseHistoryContent va API /rest/V1/tmdt-search/purchase-history, nhung dashboard truoc do chua render component nay theo tab sidebar.
+- Quan ly don hang va Dam phan gia dang rong vi dashboard chi co fallback "Noi dung cho: ...", chua co component va API nghiep vu rieng.
+
+Checkpoint Order 1 - Quan ly don hang co ban
+- Tao API lay sales_order theo customer hien tai va theo co so neu la owner/manager.
+- Tao component OrderManagementContent gom filter: trang thai, ngay dat, co so, ma don.
+- Hien thi danh sach don: ma don, co so, tong tien, trang thai, ngay tao, hanh dong xem chi tiet.
+- Chi nhanh role branch chi xem don cua minh.
+
+Checkpoint Order 2 - Chi tiet va thao tac don hang
+- Tao man hinh chi tiet don: item, dia chi giao, thanh toan, ghi chu, trang thai.
+- Them hanh dong phu hop: huy don neu con cho xu ly, dat lai, in/xuat hoa don neu co.
+- Dong bo voi Magento sales_order/sales_order_item.
+
+Checkpoint History 1 - Lich su mua hang
+- Da noi tab sidebar voi PurchaseHistoryContent.
+- Chuan hoa API ghi purchase history sau checkout de dam bao don thanh cong luu vao bang lich su.
+- Them filter theo nha cung cap, danh muc, ngay mua.
+- Them nut "Dat lai" dua san pham vao gio hang.
+
+Checkpoint Quote 1 - Dam phan gia
+- Can thiet ke module rieng: quote_request, quote_request_item, message/thread.
+- Flow de xuat: buyer gui yeu cau gia -> seller/owner phan hoi -> buyer chap nhan -> tao cart/order voi gia da chap nhan.
+- Sau khi co API, tao component QuoteNegotiationContent va noi vao tab Dam phan gia.

@@ -40,7 +40,7 @@ class AddUsersManagement implements AddUsersInterface
         $ownerId = $this->getCustomerIdFromRequest();
         $owner = $this->customerRepository->getById($ownerId);
         if (!$this->isOwnerCustomer($owner)) {
-            throw new AuthorizationException(__('Ban khong co quyen tao quan ly chi nhanh.'));
+            throw new AuthorizationException(__('Ban khong co quyen tao co so.'));
         }
 
         $bodyParams = $this->request->getBodyParams();
@@ -100,6 +100,7 @@ class AddUsersManagement implements AddUsersInterface
         $customer->setCustomAttribute('tmdt_unit_nickname', $branchName);
         $customer->setCustomAttribute('is_owner', 0);
         $customer->setCustomAttribute('is_super_admin', 0);
+        $customer->setCustomAttribute('tmdt_role', 'branch');
 
         try {
             $createdCustomer = $this->accountManagement->createAccount($customer, $password);
@@ -107,9 +108,9 @@ class AddUsersManagement implements AddUsersInterface
             throw new InputException(__('Email da ton tai.'));
         } catch (LocalizedException $exception) {
             $message = trim((string) $exception->getMessage());
-            throw new InputException(__($message !== '' ? $message : 'Khong the tao tai khoan quan ly chi nhanh.'));
+            throw new InputException(__($message !== '' ? $message : 'Khong the tao tai khoan co so.'));
         } catch (\Throwable) {
-            throw new InputException(__('Khong the tao tai khoan quan ly chi nhanh.'));
+            throw new InputException(__('Khong the tao tai khoan co so.'));
         }
 
         $connection = $this->resourceConnection->getConnection();
@@ -137,12 +138,13 @@ class AddUsersManagement implements AddUsersInterface
                 'email' => $email,
             ]),
             'status' => 'approved',
+            'role' => 'branch',
             'notes' => null,
         ]);
 
         return [
             'success' => true,
-            'message' => (string) __('Tao tai khoan quan ly chi nhanh thanh cong.'),
+            'message' => (string) __('Tao tai khoan co so thanh cong.'),
             'customer_id' => (int) $createdCustomer->getId(),
         ];
     }
@@ -244,9 +246,11 @@ class AddUsersManagement implements AddUsersInterface
     {
         $isOwnerAttr = $customer->getCustomAttribute('is_owner');
         $isSuperAttr = $customer->getCustomAttribute('is_super_admin');
+        $roleAttr = $customer->getCustomAttribute('tmdt_role');
         $isOwner = $isOwnerAttr ? $this->normalizeBool($isOwnerAttr->getValue()) : false;
         $isSuper = $isSuperAttr ? $this->normalizeBool($isSuperAttr->getValue()) : false;
-        return $isOwner || $isSuper;
+        $role = $roleAttr ? strtolower(trim((string) $roleAttr->getValue())) : '';
+        return $role !== 'branch' && ($isOwner || $isSuper || $role === '' || $role === 'manager' || $role === 'seller');
     }
 
     private function normalizeBool(mixed $value): bool

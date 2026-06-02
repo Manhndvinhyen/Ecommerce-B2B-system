@@ -11,4 +11,5 @@
     <preference for="Tmdt\Registration\Api\BranchManagerListInterface" type="Tmdt\Registration\Model\BranchManagerListManagement" />
     <preference for="Tmdt\Registration\Api\BranchManagerUpdateInterface" type="Tmdt\Registration\Model\BranchManagerUpdateManagement" />
     <preference for="Tmdt\Registration\Api\BranchManagerDeleteInterface" type="Tmdt\Registration\Model\BranchManagerDeleteManagement" />
+    <preference for="Tmdt\Registration\Api\BranchPerformanceInterface" type="Tmdt\Registration\Model\BranchPerformanceManagement" />
 </config>

@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { CustomerSidebar } from './CustomerSidebar';
 import { adminMenuItems } from './SidebarMenu';
 import { ProfileContent } from './ProfileContent';
-import { CreateBranchManager } from './CreateBranchManager';
-import { EmployeeList } from './EmployeeList';
+import { BranchManagementPanel } from './BranchManagementPanel';
+import { PurchaseHistoryContent } from './PurchaseHistoryContent';
 import { Header } from './Header';
 import { AuthPageFooter } from './auth/AuthPageFooter';
 import { ChatbotWidget } from './ChatbotWidget';
@@ -17,13 +17,14 @@ export function UserDashboardPage() {
     return normalized === '1' || normalized === 'true' || normalized === 'yes';
   };
 
-  const getStoredSuperAdmin = () => {
+  const getStoredCanManageBranches = () => {
     const isOwner = readStorageValue('freso_is_owner');
     const isSuperAdmin = readStorageValue('freso_is_super_admin');
-    return parseBoolFlag(isOwner) || parseBoolFlag(isSuperAdmin);
+    const role = readStorageValue('freso_role').trim().toLowerCase();
+    return role !== 'branch' && (parseBoolFlag(isOwner) || parseBoolFlag(isSuperAdmin) || role === '' || role === 'manager' || role === 'seller');
   };
 
-  const [isSuperAdmin, setIsSuperAdmin] = useState(getStoredSuperAdmin());
+  const [canManageBranches, setCanManageBranches] = useState(getStoredCanManageBranches());
 
   useEffect(() => {
     const token = readStorageValue('freso_customer_token');
@@ -44,19 +45,24 @@ export function UserDashboardPage() {
           : [];
         const ownerAttr = customAttributes.find((attr) => attr?.attribute_code === 'is_owner');
         const superAdminAttr = customAttributes.find((attr) => attr?.attribute_code === 'is_super_admin');
+        const roleAttr = customAttributes.find((attr) => attr?.attribute_code === 'tmdt_role');
 
-        const hasOwnerAttr = Boolean(ownerAttr);
-        const hasSuperAdminAttr = Boolean(superAdminAttr);
-
-        if (hasOwnerAttr || hasSuperAdminAttr) {
+        if (ownerAttr || superAdminAttr) {
           const nextValue =
             parseBoolFlag(String(ownerAttr?.value ?? '')) || parseBoolFlag(String(superAdminAttr?.value ?? ''));
           window.localStorage.setItem('freso_is_owner', nextValue ? '1' : '0');
           window.sessionStorage.setItem('freso_is_owner', nextValue ? '1' : '0');
           window.localStorage.setItem('freso_is_super_admin', nextValue ? '1' : '0');
           window.sessionStorage.setItem('freso_is_super_admin', nextValue ? '1' : '0');
-          setIsSuperAdmin(nextValue);
         }
+        const nextRole = roleAttr ? String(roleAttr.value ?? '').trim().toLowerCase() : readStorageValue('freso_role').trim().toLowerCase();
+        if (roleAttr) {
+          window.localStorage.setItem('freso_role', nextRole);
+          window.sessionStorage.setItem('freso_role', nextRole);
+        }
+        const hasPrivilege =
+          parseBoolFlag(String(ownerAttr?.value ?? '')) || parseBoolFlag(String(superAdminAttr?.value ?? ''));
+        setCanManageBranches(nextRole !== 'branch' && (hasPrivilege || nextRole === '' || nextRole === 'manager' || nextRole === 'seller'));
       })
       .catch(() => {
         // ignore permission fetch failures
@@ -64,25 +70,28 @@ export function UserDashboardPage() {
   }, []);
 
   const menuItems = useMemo(() => {
-    return adminMenuItems.filter((item) => item.id === 'profile-seller' || item.id === 'nhan-vien');
-  }, []);
+    const visibleIds = new Set(['profile-seller', 'nhan-vien', 'don-hang', 'lich-su-mua-hang', 'bao-gia']);
+    return adminMenuItems.filter((item) => visibleIds.has(item.id) && (canManageBranches || item.id !== 'nhan-vien'));
+  }, [canManageBranches]);
+
+  const profileLabel = adminMenuItems.find((item) => item.id === 'profile-seller')?.label ?? 'Thông tin hồ sơ';
+  const branchLabel = adminMenuItems.find((item) => item.id === 'nhan-vien')?.label ?? 'Quản lý cơ sở';
+  const orderLabel = adminMenuItems.find((item) => item.id === 'don-hang')?.label ?? 'Quản lý đơn hàng';
+  const purchaseHistoryLabel = adminMenuItems.find((item) => item.id === 'lich-su-mua-hang')?.label ?? 'Lịch sử mua hàng';
+  const quoteLabel = adminMenuItems.find((item) => item.id === 'bao-gia')?.label ?? 'Đàm phán giá';
 
   const params = new URLSearchParams(window.location.search);
   const tabFromQuery = params.get('tab');
-  const tabLabels = new Set([
-    ...menuItems.map((item) => item.label),
-    ...menuItems.flatMap((item) => item.subItems ?? []),
-  ]);
-  const initialTab = tabFromQuery && tabLabels.has(tabFromQuery) ? tabFromQuery : 'Thông tin hồ sơ';
+  const tabLabels = new Set(menuItems.map((item) => item.label));
+  const initialTab = tabFromQuery && tabLabels.has(tabFromQuery) ? tabFromQuery : profileLabel;
   const [activeTab, setActiveTab] = useState(initialTab);
 
   return (
     <div className="min-h-screen bg-white">
       <Header />
 
-      <main className="bg-white py-0 px-6">
-        <div className="max-w-[1200px] mx-auto flex items-start">
-          {/* Left sidebar */}
+      <main className="bg-white px-6 py-0">
+        <div className="mx-auto flex max-w-[1200px] items-start">
           <div className="w-[255px] flex-none border-r border-gray-200 pr-5">
             <CustomerSidebar
               activeTab={activeTab}
@@ -91,15 +100,35 @@ export function UserDashboardPage() {
             />
           </div>
 
-          {/* Right content area */}
           <div className="flex-1">
-            {activeTab === 'Thông tin hồ sơ' && <ProfileContent />}
-            {activeTab === 'Quản lý nhân viên' && (
-              <div className="space-y-6">
-                <CreateBranchManager isSuperAdmin={isSuperAdmin} />
-                <EmployeeList isSuperAdmin={isSuperAdmin} />
+            {activeTab === profileLabel && <ProfileContent />}
+            {activeTab === branchLabel && (
+              <div className="p-8">
+                <BranchManagementPanel canManageBranches={canManageBranches} />
               </div>
             )}
+            {activeTab === purchaseHistoryLabel && <PurchaseHistoryContent />}
+            {activeTab === orderLabel && (
+              <div className="p-8">
+                <h1 className="text-2xl font-bold text-gray-900">Quản lý đơn hàng</h1>
+                <p className="mt-2 text-sm text-gray-500">
+                  Mục này chưa được nối với API đơn hàng Magento. Cần thêm endpoint lấy sales_order theo customer/cơ sở.
+                </p>
+              </div>
+            )}
+            {activeTab === quoteLabel && (
+              <div className="p-8">
+                <h1 className="text-2xl font-bold text-gray-900">Đàm phán giá</h1>
+                <p className="mt-2 text-sm text-gray-500">
+                  Mục này chưa có module báo giá/thương lượng. Cần thiết kế bảng dữ liệu và API trước khi hiển thị.
+                </p>
+              </div>
+            )}
+            {activeTab !== profileLabel &&
+              activeTab !== branchLabel &&
+              activeTab !== purchaseHistoryLabel &&
+              activeTab !== orderLabel &&
+              activeTab !== quoteLabel && <div className="p-8">Nội dung cho: {activeTab}</div>}
           </div>
         </div>
       </main>

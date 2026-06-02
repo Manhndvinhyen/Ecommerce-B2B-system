@@ -53,7 +53,7 @@ const formatCurrency = (value: number) =>
   }).format(Math.round(value || 0));
 
 export const BranchManagementPanel = ({ canManageBranches }: BranchManagementPanelProps) => {
-  const [activeView, setActiveView] = useState<'list' | 'create'>('list');
+  const [activeView, setActiveView] = useState<'overview' | 'directory'>('overview');
   const [branches, setBranches] = useState<BranchLocationItem[]>([]);
   const [performanceItems, setPerformanceItems] = useState<BranchPerformanceItem[]>([]);
   const [performanceSummary, setPerformanceSummary] = useState<BranchPerformanceResponse['summary'] | null>(null);
@@ -188,107 +188,109 @@ export const BranchManagementPanel = ({ canManageBranches }: BranchManagementPan
           </button>
           <button
             type="button"
-            onClick={() => setActiveView('create')}
+            onClick={() => setActiveView('directory')}
             className="inline-flex items-center gap-2 rounded-full bg-[#00b14f] px-4 py-2 text-xs font-bold text-white hover:bg-[#009845]"
           >
             <Plus className="size-3.5" />
-            Tao co so
+            Danh sach co so
           </button>
         </div>
-      </div>
-
-      <div className="mb-5 grid gap-4 md:grid-cols-5">
-        <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold text-gray-500">Tong co so</p>
-          <p className="mt-2 text-2xl font-bold text-gray-900">{stats.total}</p>
-        </div>
-        <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
-          <p className="text-xs font-semibold text-emerald-700">Dang hoat dong</p>
-          <p className="mt-2 text-2xl font-bold text-emerald-800">{stats.active}</p>
-        </div>
-        <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold text-gray-500">Ty le hoat dong</p>
-          <p className="mt-2 text-2xl font-bold text-gray-900">{stats.activePercent}%</p>
-        </div>
-        <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold text-gray-500">Tong don hang</p>
-          <p className="mt-2 text-2xl font-bold text-gray-900">{stats.orderCount}</p>
-        </div>
-        <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold text-gray-500">Doanh thu</p>
-          <p className="mt-2 text-lg font-bold text-gray-900">{formatCurrency(stats.revenue)}</p>
-        </div>
-      </div>
-
-      <div className="mb-5 rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-bold text-gray-900">Tinh trang kinh doanh co so</h3>
-            <p className="text-xs text-gray-500">
-              {performanceItems.length > 0
-                ? `Doanh thu theo co so, AOV trung binh ${formatCurrency(stats.averageOrderValue)}.`
-                : 'Chua co don hang cho co so, tam hien thi theo trang thai tai khoan.'}
-            </p>
-          </div>
-          {isLoading && <span className="text-xs font-semibold text-gray-400">Dang tai...</span>}
-        </div>
-        <div className="space-y-3">
-          {chartRows.map((row) => {
-            const width = chartTotal ? Math.max(8, Math.round((Number(row.value) / chartTotal) * 100)) : 0;
-            return (
-              <div key={row.label}>
-                <div className="mb-1 flex justify-between text-xs font-semibold text-gray-600">
-                  <span>{row.label}</span>
-                  <span>
-                    {performanceItems.length > 0 ? formatCurrency(Number(row.value)) : row.value} {row.helper}
-                  </span>
-                </div>
-                <div className="h-3 overflow-hidden rounded-full bg-gray-100">
-                  <div className={`h-full rounded-full ${row.color}`} style={{ width: `${width}%` }} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        {errorMessage && (
-          <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {errorMessage}
-          </div>
-        )}
       </div>
 
       <div className="mb-4 inline-flex rounded-full border border-gray-200 bg-gray-50 p-1">
         <button
           type="button"
-          onClick={() => setActiveView('list')}
+          onClick={() => setActiveView('overview')}
           className={`rounded-full px-4 py-2 text-xs font-bold ${
-            activeView === 'list' ? 'bg-white text-[#00b14f] shadow-sm' : 'text-gray-500'
+            activeView === 'overview' ? 'bg-white text-[#00b14f] shadow-sm' : 'text-gray-500'
+          }`}
+        >
+          Quan ly co so
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveView('directory')}
+          className={`rounded-full px-4 py-2 text-xs font-bold ${
+            activeView === 'directory' ? 'bg-white text-[#00b14f] shadow-sm' : 'text-gray-500'
           }`}
         >
           Danh sach co so
         </button>
-        <button
-          type="button"
-          onClick={() => setActiveView('create')}
-          className={`rounded-full px-4 py-2 text-xs font-bold ${
-            activeView === 'create' ? 'bg-white text-[#00b14f] shadow-sm' : 'text-gray-500'
-          }`}
-        >
-          Tao moi co so
-        </button>
       </div>
 
-      {activeView === 'list' ? (
-        <EmployeeList isSuperAdmin={canManageBranches} compact onChanged={() => setRefreshKey((value) => value + 1)} />
+      {activeView === 'overview' ? (
+        <>
+          <div className="mb-5 grid gap-4 md:grid-cols-5">
+            <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+              <p className="text-xs font-semibold text-gray-500">Tong co so</p>
+              <p className="mt-2 text-2xl font-bold text-gray-900">{stats.total}</p>
+            </div>
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+              <p className="text-xs font-semibold text-emerald-700">Dang hoat dong</p>
+              <p className="mt-2 text-2xl font-bold text-emerald-800">{stats.active}</p>
+            </div>
+            <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+              <p className="text-xs font-semibold text-gray-500">Ty le hoat dong</p>
+              <p className="mt-2 text-2xl font-bold text-gray-900">{stats.activePercent}%</p>
+            </div>
+            <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+              <p className="text-xs font-semibold text-gray-500">Tong don hang</p>
+              <p className="mt-2 text-2xl font-bold text-gray-900">{stats.orderCount}</p>
+            </div>
+            <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+              <p className="text-xs font-semibold text-gray-500">Doanh thu</p>
+              <p className="mt-2 text-lg font-bold text-gray-900">{formatCurrency(stats.revenue)}</p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Tinh trang kinh doanh co so</h3>
+                <p className="text-xs text-gray-500">
+                  {performanceItems.length > 0
+                    ? `Doanh thu theo co so, AOV trung binh ${formatCurrency(stats.averageOrderValue)}.`
+                    : 'Chua co don hang cho co so, tam hien thi theo trang thai tai khoan.'}
+                </p>
+              </div>
+              {isLoading && <span className="text-xs font-semibold text-gray-400">Dang tai...</span>}
+            </div>
+            <div className="space-y-3">
+              {chartRows.map((row) => {
+                const width = chartTotal ? Math.max(8, Math.round((Number(row.value) / chartTotal) * 100)) : 0;
+                return (
+                  <div key={row.label}>
+                    <div className="mb-1 flex justify-between text-xs font-semibold text-gray-600">
+                      <span>{row.label}</span>
+                      <span>
+                        {performanceItems.length > 0 ? formatCurrency(Number(row.value)) : row.value} {row.helper}
+                      </span>
+                    </div>
+                    <div className="h-3 overflow-hidden rounded-full bg-gray-100">
+                      <div className={`h-full rounded-full ${row.color}`} style={{ width: `${width}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {errorMessage && (
+              <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {errorMessage}
+              </div>
+            )}
+          </div>
+        </>
       ) : (
-        <CreateBranchManager
-          isSuperAdmin={canManageBranches}
-          compact
-          onCreated={() => {
-            setActiveView('list');
-            setRefreshKey((value) => value + 1);
-          }}
-        />
+        <div className="space-y-6">
+          <EmployeeList isSuperAdmin={canManageBranches} compact onChanged={() => setRefreshKey((value) => value + 1)} />
+          <CreateBranchManager
+            isSuperAdmin={canManageBranches}
+            compact
+            onCreated={() => {
+              setRefreshKey((value) => value + 1);
+            }}
+          />
+        </div>
       )}
     </section>
   );

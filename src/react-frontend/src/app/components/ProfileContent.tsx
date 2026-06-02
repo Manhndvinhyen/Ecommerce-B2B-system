@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { User } from 'lucide-react';
+import { clearStoredAuthSession, revokeCurrentToken } from '../utils/authSession';
 
 type Profile = {
   name: string;
@@ -180,8 +181,7 @@ export const ProfileContent = ({ showBusinessInfo = true }: ProfileContentProps)
       });
 
       if (res.status === 401) {
-        window.localStorage.removeItem('freso_customer_token');
-        window.sessionStorage.removeItem('freso_customer_token');
+        clearStoredAuthSession();
         return;
       }
 
@@ -373,13 +373,8 @@ export const ProfileContent = ({ showBusinessInfo = true }: ProfileContentProps)
       setPwCurrent('');
       setPwNew('');
       setPwConfirm('');
-      try {
-        window.localStorage.removeItem('freso_customer_token');
-        window.sessionStorage.removeItem('freso_customer_token');
-        window.localStorage.setItem('freso_last_logout', String(Date.now()));
-      } catch (_err) {
-        // ignore
-      }
+      await revokeCurrentToken(token);
+      clearStoredAuthSession();
       alert('Đổi mật khẩu thành công. Vui lòng đăng nhập lại.');
       window.location.replace('/react/index.html?view=login');
     } catch (err) {

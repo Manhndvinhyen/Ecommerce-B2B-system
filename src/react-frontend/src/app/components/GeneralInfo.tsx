@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { clearStoredAuthSession } from '../utils/authSession';
 import { Image as ImageIcon, FileBadge, TrendingUp, ShoppingBag, Box, PlusCircle, ArrowRight, ShieldCheck } from 'lucide-react';
 
 const readStorageValue = (key: string) =>
@@ -116,8 +117,7 @@ export const GeneralInfo = () => {
     });
 
     if (res.status === 401) {
-      window.localStorage.removeItem('freso_customer_token');
-      window.sessionStorage.removeItem('freso_customer_token');
+      clearStoredAuthSession();
       throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
     }
 
@@ -188,8 +188,7 @@ export const GeneralInfo = () => {
 
       //  ĐOẠN CODE MỚI (Thay thế vào vị trí trên):
       if (res.status === 401) {
-        window.localStorage.removeItem('freso_customer_token');
-        window.sessionStorage.removeItem('freso_customer_token');
+        clearStoredAuthSession();
         throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
       }
 

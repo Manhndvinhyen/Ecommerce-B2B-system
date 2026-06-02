@@ -70,7 +70,7 @@ export function UserDashboardPage() {
   }, []);
 
   const menuItems = useMemo(() => {
-    const visibleIds = new Set(['profile-seller', 'nhan-vien', 'don-hang', 'lich-su-mua-hang', 'bao-gia']);
+    const visibleIds = new Set(['profile-seller', 'nhan-vien', 'lich-su-mua-hang', 'bao-gia']);
     return adminMenuItems.filter((item) => visibleIds.has(item.id) && (canManageBranches || item.id !== 'nhan-vien'));
   }, [canManageBranches]);
 

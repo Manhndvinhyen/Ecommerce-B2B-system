@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { PropsWithChildren } from 'react';
 import { CheckCircle2, Minus, Plus, X } from 'lucide-react';
+import { clearStoredAuthSession } from '../utils/authSession';
 
 export type AddToCartProduct = {
   id: string;
@@ -85,19 +86,7 @@ const clearCustomerAuthSession = () => {
     return;
   }
 
-  const keys = [
-    'freso_customer_token',
-    'freso_login_token',
-    'freso_customer_cart_id',
-    'freso_customer_cart_token',
-  ];
-
-  keys.forEach((key) => {
-    window.localStorage.removeItem(key);
-    window.sessionStorage.removeItem(key);
-  });
-
-  window.localStorage.setItem('freso_last_logout', String(Date.now()));
+  clearStoredAuthSession();
 };
 
 let activeCustomerCartIdRequest: Promise<string> | null = null;

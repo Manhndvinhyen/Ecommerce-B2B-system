@@ -8,21 +8,21 @@ interface ProductManagementInterface
     /**
      * Create product for the authenticated B2B seller.
      *
-     * @param mixed $productData
+     * @param string $productData
      * @return string
      * @throws \Magento\Framework\Exception\LocalizedException
      */
-    public function createProduct($productData): string;
+    public function createProduct(string $productData): string;
 
     /**
      * Update product details by SKU for the authenticated B2B seller.
      *
      * @param string $sku
-     * @param mixed $productData
+     * @param string $productData
      * @return string
      * @throws \Magento\Framework\Exception\LocalizedException
      */
-    public function updateProduct(string $sku, $productData): string;
+    public function updateProduct(string $sku, string $productData): string;
 
     /**
      * Delete product by SKU for the authenticated B2B seller.

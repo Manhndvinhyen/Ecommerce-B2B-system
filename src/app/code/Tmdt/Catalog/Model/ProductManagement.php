@@ -18,17 +18,21 @@ class ProductManagement implements ProductManagementInterface
         private readonly ProductFactory $productFactory,
         private readonly CustomerSession $customerSession,
         private readonly StockRegistryInterface $stockRegistry,
-        private readonly ResourceConnection $resourceConnection
+        private readonly ResourceConnection $resourceConnection,
+        private readonly \Magento\Store\Model\StoreManagerInterface $storeManager
     ) {
     }
 
     /**
      * @inheritDoc
      */
-    public function createProduct($productData): string
+    public function createProduct(string $productData): string
     {
         $sellerId = $this->getSellerIdFromSession();
-        $data = (array) $productData;
+        $data = json_decode($productData, true);
+        if (!is_array($data)) {
+            $data = [];
+        }
 
         if (empty($data['name']) || empty($data['sku']) || empty($data['price'])) {
             throw new LocalizedException(__('Tên, SKU và giá sỉ là bắt buộc.'));
@@ -44,6 +48,10 @@ class ProductManagement implements ProductManagementInterface
             $product->setStatus(\Magento\Catalog\Model\Product\Attribute\Source\Status::STATUS_ENABLED);
             $product->setVisibility(\Magento\Catalog\Model\Product\Visibility::VISIBILITY_BOTH);
             
+            // Assign to current website
+            $websiteId = $this->storeManager->getStore()->getWebsiteId();
+            $product->setWebsiteIds([$websiteId]);
+
             if (!empty($data['special_price'])) {
                 $product->setSpecialPrice((float) $data['special_price']);
             }
@@ -88,10 +96,13 @@ class ProductManagement implements ProductManagementInterface
     /**
      * @inheritDoc
      */
-    public function updateProduct(string $sku, $productData): string
+    public function updateProduct(string $sku, string $productData): string
     {
         $this->verifyProductOwnership($sku);
-        $data = (array) $productData;
+        $data = json_decode($productData, true);
+        if (!is_array($data)) {
+            $data = [];
+        }
 
         try {
             $product = $this->productRepository->get($sku);
@@ -281,7 +292,7 @@ class ProductManagement implements ProductManagementInterface
                 ? (string) $product->getCustomAttribute('tmdt_seller_id')->getValue() 
                 : '';
 
-            if ($prodSellerId !== $sellerId) {
+            if ($prodSellerId !== '' && $prodSellerId !== 'NONE' && $prodSellerId !== $sellerId) {
                 throw new LocalizedException(__('Bạn không có quyền sửa sản phẩm này.'));
             }
         } catch (\Exception $e) {

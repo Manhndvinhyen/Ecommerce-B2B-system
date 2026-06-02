@@ -19,7 +19,9 @@ class ProductManagement implements ProductManagementInterface
         private readonly CustomerSession $customerSession,
         private readonly StockRegistryInterface $stockRegistry,
         private readonly ResourceConnection $resourceConnection,
-        private readonly \Magento\Store\Model\StoreManagerInterface $storeManager
+        private readonly \Magento\Store\Model\StoreManagerInterface $storeManager,
+        private readonly \Magento\Framework\Indexer\IndexerRegistry $indexerRegistry,
+        private readonly \Magento\Framework\App\Cache\TypeListInterface $cacheTypeList
     ) {
     }
 
@@ -42,6 +44,10 @@ class ProductManagement implements ProductManagementInterface
             $product = $this->productFactory->create();
             $product->setSku($data['sku']);
             $product->setName($data['name']);
+            
+            // Set unique URL key
+            $product->setUrlKey($this->generateUniqueUrlKey($data['name'], $data['sku']));
+
             $product->setPrice((float) $data['price']);
             $product->setTypeId(\Magento\Catalog\Model\Product\Type::TYPE_SIMPLE);
             $product->setAttributeSetId(4); // Default Attribute Set
@@ -63,8 +69,18 @@ class ProductManagement implements ProductManagementInterface
             }
 
             // Category assignment
+            $categoryIds = [];
             if (!empty($data['category_ids']) && is_array($data['category_ids'])) {
-                $product->setCategoryIds($data['category_ids']);
+                $categoryIds = $data['category_ids'];
+            } elseif (!empty($data['categoryLabel'])) {
+                $resolvedId = $this->resolveCategoryIdByName($data['categoryLabel']);
+                if ($resolvedId !== null) {
+                    $categoryIds[] = $resolvedId;
+                }
+            }
+
+            if (!empty($categoryIds)) {
+                $product->setCategoryIds($categoryIds);
             }
 
             // Save Product
@@ -82,6 +98,9 @@ class ProductManagement implements ProductManagementInterface
             $stockItem->setIsInStock($qty > 0);
             $stockItem->setQty($qty);
             $this->stockRegistry->updateStockItemBySku($product->getSku(), $stockItem);
+
+            // Reindex and clean cache
+            $this->reindexAndCleanCache($product);
 
             return json_encode([
                 'success' => true,
@@ -109,6 +128,7 @@ class ProductManagement implements ProductManagementInterface
             
             if (isset($data['name'])) {
                 $product->setName($data['name']);
+                $product->setUrlKey($this->generateUniqueUrlKey($data['name'], $sku));
             }
             if (isset($data['price'])) {
                 $product->setPrice((float) $data['price']);
@@ -121,6 +141,11 @@ class ProductManagement implements ProductManagementInterface
             }
             if (isset($data['category_ids']) && is_array($data['category_ids'])) {
                 $product->setCategoryIds($data['category_ids']);
+            } elseif (isset($data['categoryLabel'])) {
+                $resolvedId = $this->resolveCategoryIdByName($data['categoryLabel']);
+                if ($resolvedId !== null) {
+                    $product->setCategoryIds([$resolvedId]);
+                }
             }
 
             // Handle Base64 image upload if set
@@ -137,6 +162,9 @@ class ProductManagement implements ProductManagementInterface
                 $stockItem->setQty($qty);
                 $this->stockRegistry->updateStockItemBySku($sku, $stockItem);
             }
+
+            // Reindex and clean cache
+            $this->reindexAndCleanCache($product);
 
             return json_encode([
                 'success' => true,
@@ -158,6 +186,17 @@ class ProductManagement implements ProductManagementInterface
         try {
             // Delete product
             $this->productRepository->deleteById($sku);
+
+            // Clean cache types on deletion
+            try {
+                $cacheTypes = ['full_page', 'block_html', 'collections', 'graphql_query_resolver_result'];
+                foreach ($cacheTypes as $type) {
+                    $this->cacheTypeList->cleanType($type);
+                }
+            } catch (\Exception $e) {
+                // Ignore
+            }
+
             return json_encode([
                 'success' => true,
                 'message' => 'Đã xóa sản phẩm thành công khỏi catalog.'
@@ -298,5 +337,142 @@ class ProductManagement implements ProductManagementInterface
         } catch (\Exception $e) {
             throw new LocalizedException(__('Không tìm thấy sản phẩm.'));
         }
+    }
+
+    /**
+     * Resolve category ID by name.
+     */
+    private function resolveCategoryIdByName(string $categoryName): ?int
+    {
+        $categoryMap = [
+            'Rau củ quả' => 6,
+            'Trái cây' => 10,
+            'Thực phẩm tươi sống' => 13,
+            'Thuỷ hải sản' => 17,
+            'Thực phẩm đông lạnh' => 21,
+            'Thực phẩm khô' => 25,
+            'Tiện ích bếp' => 29
+        ];
+
+        if (isset($categoryMap[$categoryName])) {
+            return $categoryMap[$categoryName];
+        }
+
+        // Accentless normalization mapping
+        $normalizedMap = [
+            'rau cu qua' => 6,
+            'trai cay' => 10,
+            'thuc pham tuoi song' => 13,
+            'thuy hai san' => 17,
+            'thuc pham dong lanh' => 21,
+            'thuc pham kho' => 25,
+            'tien ich bep' => 29
+        ];
+
+        $normalizedName = strtolower($this->removeVietnameseAccents($categoryName));
+        if (isset($normalizedMap[$normalizedName])) {
+            return $normalizedMap[$normalizedName];
+        }
+
+        try {
+            // Dynamic DB lookup in catalog_category_entity_varchar to support other environments
+            $connection = $this->resourceConnection->getConnection();
+            $select = $connection->select()
+                ->from(['cce' => $connection->getTableName('catalog_category_entity')], ['entity_id'])
+                ->join(
+                    ['ccev' => $connection->getTableName('catalog_category_entity_varchar')],
+                    'cce.entity_id = ccev.entity_id',
+                    []
+                )
+                ->where('ccev.attribute_id = (SELECT attribute_id FROM eav_attribute WHERE attribute_code = \'name\' AND entity_type_id = 3 LIMIT 1)')
+                ->where('ccev.value = ? OR LOWER(ccev.value) = ?', [$categoryName, $normalizedName])
+                ->limit(1);
+
+            $result = $connection->fetchOne($select);
+            if ($result) {
+                return (int)$result;
+            }
+        } catch (\Exception $e) {
+            // Ignore DB lookup error, fall back to default
+        }
+
+        return null;
+    }
+
+    /**
+     * Helper to remove Vietnamese accents.
+     */
+    private function removeVietnameseAccents(string $str): string
+    {
+        $str = preg_replace("/(à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ)/", "a", $str);
+        $str = preg_replace("/(è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ)/", "e", $str);
+        $str = preg_replace("/(ì|í|ị|ỉ|ĩ)/", "i", $str);
+        $str = preg_replace("/(ò|ó|ọ|ỏ|õ|ô|ồ|ố|ộ|ổ|ỗ|ơ|ờ|ớ|ợ|ở|ỡ)/", "o", $str);
+        $str = preg_replace("/(ù|ú|ụ|ủ|ũ|ư|ừ|ứ|ự|ử|ữ)/", "u", $str);
+        $str = preg_replace("/(ỳ|ý|ỵ|ỷ|ỹ)/", "y", $str);
+        $str = preg_replace("/(đ)/", "d", $str);
+        $str = preg_replace("/(À|Á|Ạ|Ả|Ã|Â|Ầ|Ấ|Ậ|Ẩ|Ẫ|Ă|Ằ|Ắ|Ặ|Ẳ|Ẵ)/", "A", $str);
+        $str = preg_replace("/(È|É|Ẹ|Ẻ|E|Ê|Ề|Ế|Ệ|Ể|Ễ)/", "E", $str);
+        $str = preg_replace("/(Ì|Í|Ị|Ỉ|Ĩ)/", "I", $str);
+        $str = preg_replace("/(Ò|Ó|Ọ|Ỏ|Õ|Ô|Ồ|Ố|Ộ|Ổ|Ỗ|Ơ|Ờ|Ớ|Ợ|Ở|Ỡ)/", "O", $str);
+        $str = preg_replace("/(Ù|Ú|Ụ|Ủ|Ũ|Ư|Ừ|Ứ|Ự|Ử|Ữ)/", "U", $str);
+        $str = preg_replace("/(Ý|Ý|Ý|Ý|Ý)/", "Y", $str);
+        $str = preg_replace("/(Đ)/", "D", $str);
+        return $str;
+    }
+
+    /**
+     * Reindex product and clear relevant caches.
+     *
+     * @param \Magento\Catalog\Model\Product $product
+     * @return void
+     */
+    private function reindexAndCleanCache($product): void
+    {
+        try {
+            $productId = (int)$product->getId();
+            
+            // Reindex specific product row for key indexers
+            $indexers = [
+                'catalog_category_product',
+                'catalog_product_category',
+                'catalog_product_price',
+                'catalogsearch_fulltext'
+            ];
+            
+            foreach ($indexers as $indexerId) {
+                try {
+                    $indexer = $this->indexerRegistry->get($indexerId);
+                    $indexer->reindexRow($productId);
+                } catch (\Exception $e) {
+                    // Ignore indexer errors
+                }
+            }
+
+            // Flush relevant cache types
+            $cacheTypes = ['full_page', 'block_html', 'collections', 'graphql_query_resolver_result'];
+            foreach ($cacheTypes as $type) {
+                $this->cacheTypeList->cleanType($type);
+            }
+        } catch (\Exception $e) {
+            // Silently ignore to avoid breaking the main request
+        }
+    }
+
+    /**
+     * Generate a unique URL key based on name and SKU.
+     *
+     * @param string $name
+     * @param string $sku
+     * @return string
+     */
+    private function generateUniqueUrlKey(string $name, string $sku): string
+    {
+        $normalized = $this->removeVietnameseAccents($name);
+        $slug = strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $normalized), '-'));
+        $slug = preg_replace('/-+/', '-', $slug);
+        
+        $suffix = substr(md5($sku . '_' . time()), 0, 8);
+        return $slug . '-' . $suffix;
     }
 }

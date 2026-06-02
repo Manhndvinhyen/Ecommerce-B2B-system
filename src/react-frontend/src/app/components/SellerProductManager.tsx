@@ -454,13 +454,26 @@ export function SellerProductManager() {
 
     const finalImage = image.trim() || fallbackImages[categoryLabel] || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop';
 
-    const newProductData: Product = {
+    const CATEGORY_ID_MAP: Record<string, number> = {
+      'Rau củ quả': 6,
+      'Trái cây': 10,
+      'Thực phẩm tươi sống': 13,
+      'Thuỷ hải sản': 17,
+      'Thực phẩm đông lạnh': 21,
+      'Thực phẩm khô': 25,
+      'Tiện ích bếp': 29
+    };
+    const categoryId = CATEGORY_ID_MAP[categoryLabel];
+    const category_ids = categoryId ? [categoryId] : [];
+
+    const newProductData: Product & { category_ids?: number[] } = {
       id: editingSku ? (products.find((p) => p.sku === editingSku)?.id || String(Date.now())) : String(Date.now()),
       sku: sku.trim(),
       name: name.trim(),
       price: priceNum,
       qty: isNaN(qtyNum) ? 0 : qtyNum,
       categoryLabel,
+      category_ids,
       unit,
       image: finalImage,
       variants,
@@ -604,7 +617,6 @@ export function SellerProductManager() {
               <th className="px-5 py-4">Mã SKU</th>
               <th className="px-5 py-4">Danh mục</th>
               <th className="px-5 py-4 text-right">Đơn giá bán sỉ</th>
-              <th className="px-5 py-4 text-right">Giá Khuyến mãi</th>
               <th className="px-5 py-4 text-center">Tồn kho khả dụng</th>
               <th className="px-5 py-4 text-center">Tác vụ</th>
             </tr>
@@ -612,13 +624,13 @@ export function SellerProductManager() {
           <tbody className="divide-y divide-gray-50 text-slate-700 font-semibold">
             {isLoading ? (
               <tr>
-                <td colSpan={7} className="px-5 py-8 text-center text-slate-400 font-medium">
+                <td colSpan={6} className="px-5 py-8 text-center text-slate-400 font-medium">
                   Đang đồng bộ dữ liệu catalog từ Magento DB...
                 </td>
               </tr>
             ) : filteredProducts.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-5 py-8 text-center text-slate-400 font-medium">
+                <td colSpan={6} className="px-5 py-8 text-center text-slate-400 font-medium">
                   Không tìm thấy sản phẩm sỉ nào khớp với bộ lọc.
                 </td>
               </tr>
@@ -646,18 +658,6 @@ export function SellerProductManager() {
                     </td>
                     <td className="px-5 py-3.5 text-right font-black text-slate-800 text-[13px]">
                       {p.price.toLocaleString()}đ
-                    </td>
-                    <td className="px-5 py-3.5 text-right font-black text-green-600">
-                      {p.special_price ? (
-                        <div className="flex flex-col items-end">
-                          <span>{p.special_price.toLocaleString()}đ</span>
-                          <span className="text-[9px] font-black bg-rose-50 text-rose-600 px-1 py-0.2 rounded mt-0.5">
-                            -{discount}%
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-slate-300 font-bold text-[11px]">Không áp dụng</span>
-                      )}
                     </td>
                     <td className="px-5 py-3.5 text-center">
                       <span className={`px-2.5 py-0.8 rounded-full text-[10px] font-black ${

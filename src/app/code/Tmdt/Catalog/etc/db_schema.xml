@@ -15,4 +15,29 @@
             <column name="sku"/>
         </index>
     </table>
+
+    <table name="tmdt_orders" resource="default" engine="innodb" comment="Tmdt B2B Orders">
+        <column xsi:type="int" name="id" padding="10" unsigned="true" nullable="false" identity="true" comment="Order ID"/>
+        <column xsi:type="varchar" name="order_code" length="32" nullable="false" comment="Order Code e.g. DH-100293"/>
+        <column xsi:type="varchar" name="status" length="32" nullable="false" default="pending" comment="pending|paid|cancelled|expired"/>
+        <column xsi:type="decimal" name="total_amount" scale="2" precision="14" nullable="false" comment="Total Amount VND"/>
+        <column xsi:type="text" name="items_json" nullable="true" comment="Cart items JSON"/>
+        <column xsi:type="varchar" name="customer_email" length="255" nullable="true" comment="Customer Email"/>
+        <column xsi:type="varchar" name="customer_name" length="255" nullable="true" comment="Customer Name"/>
+        <column xsi:type="text" name="shipping_json" nullable="true" comment="Shipping Info JSON"/>
+        <column xsi:type="varchar" name="transaction_id" length="128" nullable="true" comment="Bank Transaction ID"/>
+        <column xsi:type="timestamp" name="expires_at" on_update="false" nullable="true" comment="Order Expiry Time (15 min hold)"/>
+        <column xsi:type="timestamp" name="paid_at" on_update="false" nullable="true" comment="Payment Confirmed Time"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="id"/>
+        </constraint>
+        <constraint xsi:type="unique" referenceId="TMDT_ORDERS_ORDER_CODE">
+            <column name="order_code"/>
+        </constraint>
+        <index referenceId="TMDT_ORDERS_STATUS" indexType="btree">
+            <column name="status"/>
+        </index>
+    </table>
 </schema>
+

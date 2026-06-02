@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { AuthPageFooter } from './auth/AuthPageFooter';
 import { AuthPageHeader } from './auth/AuthPageHeader';
+import { persistAuthSession, persistAuthValue } from '../utils/authSession';
 
 declare const __FRESO_GOOGLE_CLIENT_ID__: string;
 
@@ -101,12 +102,6 @@ const defaultFormData: LoginFormData = {
   rememberMe: false,
 };
 
-const syncAuthStorage = (key: string, value: string) => {
-  if (!value) return;
-  window.localStorage.setItem(key, value);
-  window.sessionStorage.setItem(key, value);
-};
-
 const startCustomerSession = async (token: string, storage: Storage): Promise<string | null> => {
   if (!token) {
     return null;
@@ -132,15 +127,15 @@ const startCustomerSession = async (token: string, storage: Storage): Promise<st
   const normalizedBranchName = typeof data.branch_name === 'string' ? data.branch_name.trim() : '';
 
   if (normalizedEmail) {
-    storage.setItem('freso_customer_email', normalizedEmail);
+    persistAuthValue(storage, 'freso_customer_email', normalizedEmail);
   }
 
   if (normalizedFullName) {
-    storage.setItem('freso_customer_name', normalizedFullName);
+    persistAuthValue(storage, 'freso_customer_name', normalizedFullName);
   }
 
   if (normalizedBranchName) {
-    storage.setItem('freso_branch_name', normalizedBranchName);
+    persistAuthValue(storage, 'freso_branch_name', normalizedBranchName);
   }
 
   const redirectUrl = typeof data.redirect_url === 'string' ? data.redirect_url.trim() : '';
@@ -330,20 +325,15 @@ export function LoginPage() {
           tokenStored: Boolean(customerToken),
           tokenPreview: customerToken.slice(0, 8)
         });
-        primaryStorage.setItem('freso_customer_token', customerToken);
-        primaryStorage.setItem('freso_login_token', data.token);
-        secondaryStorage.setItem('freso_customer_token', customerToken);
-        primaryStorage.setItem('freso_customer_email', fallbackEmail);
+        persistAuthSession(primaryStorage, secondaryStorage, {
+          customerToken,
+          loginToken: data.token,
+          email: fallbackEmail,
+          fullName: data.full_name,
+          branchName: data.branch_name,
+        });
 
-        if (data.full_name?.trim()) {
-          primaryStorage.setItem('freso_customer_name', data.full_name.trim());
-        }
-
-        if (data.branch_name?.trim()) {
-          primaryStorage.setItem('freso_branch_name', data.branch_name.trim());
-        }
-
-    const sessionRedirect = await startCustomerSession(data.token, primaryStorage);
+        const sessionRedirect = await startCustomerSession(data.token, primaryStorage);
         window.location.href = sessionRedirect || getPostLoginRedirect(data.redirect_url);
       })
       .catch((error: unknown) => {
@@ -402,34 +392,16 @@ export function LoginPage() {
           tokenStored: Boolean(data.token),
           tokenPreview: data.token.slice(0, 8)
         });
-        primaryStorage.setItem('freso_customer_token', data.token);
-        secondaryStorage.setItem('freso_customer_token', data.token);
-        primaryStorage.setItem('freso_customer_email', data.email || '');
+        persistAuthSession(primaryStorage, secondaryStorage, {
+          customerToken: data.token,
+          loginToken: data.token,
+          email: data.email,
+          fullName: data.full_name,
+          branchName: data.branch_name,
+        });
 
-        if (data.full_name?.trim()) {
-          primaryStorage.setItem('freso_customer_name', data.full_name.trim());
-        }
-
-        if (data.branch_name?.trim()) {
-          primaryStorage.setItem('freso_branch_name', data.branch_name.trim());
-        }
-
-  const sessionRedirect = await startCustomerSession(data.token, primaryStorage);
+        const sessionRedirect = await startCustomerSession(data.token, primaryStorage);
         window.location.href = sessionRedirect || getPostLoginRedirect(data.redirect_url);
-        const storage = formData.rememberMe ? window.localStorage : window.sessionStorage;
-        syncAuthStorage('freso_customer_token', data.token);
-        syncAuthStorage('freso_customer_email', data.email || '');
-
-        if (data.full_name?.trim()) {
-          syncAuthStorage('freso_customer_name', data.full_name.trim());
-        }
-
-        if (data.branch_name?.trim()) {
-          syncAuthStorage('freso_branch_name', data.branch_name.trim());
-        }
-
-        void startCustomerSession(data.token, storage).catch(() => null);
-        window.location.href = getPostLoginRedirect(data.redirect_url);
       })
       .catch((error: unknown) => {
         setSubmitError(error instanceof Error ? error.message : 'Không thể đăng nhập bằng Google.');

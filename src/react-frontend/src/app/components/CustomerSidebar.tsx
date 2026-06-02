@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { ChevronRight, CircleUserRound, LogOut } from 'lucide-react';
 import { adminMenuItems, AdminMenuItem } from './SidebarMenu';
+import { logoutCurrentDevice } from '../utils/authSession';
 
 type OpenMenus = Record<string, boolean>;
 
@@ -43,31 +44,7 @@ export function CustomerSidebar(props: CustomerSidebarProps = {}) {
   }, []);
 
   const handleLogout = () => {
-    const keysToClear = [
-      'freso_customer_token',
-      'freso_login_token',
-      'freso_customer_email',
-      'freso_customer_name',
-      'freso_customer_phone',
-      'freso_branch_name',
-      'freso_login_code',
-      'freso_is_owner',
-      'freso_is_super_admin',
-    ];
-
-    keysToClear.forEach((key) => {
-      window.localStorage.removeItem(key);
-      window.sessionStorage.removeItem(key);
-    });
-
-    const params = new URLSearchParams(window.location.search);
-    params.delete('view');
-    params.delete('tab');
-    params.delete('category');
-    params.delete('subcategory');
-    const query = params.toString();
-    const target = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`;
-    window.location.href = target;
+    void logoutCurrentDevice();
   };
 
   const menuItems = propMenuItems ?? adminMenuItems;

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { AuthPageFooter } from './auth/AuthPageFooter';
 import { AuthPageHeader } from './auth/AuthPageHeader';
+import { persistAuthSession } from '../utils/authSession';
 
 type FormDataState = {
   taxCode: string;
@@ -336,33 +337,23 @@ export function RegisterPage() {
       const ownerFlag = window.localStorage.getItem('freso_is_owner') || window.sessionStorage.getItem('freso_is_owner');
       const superAdminFlag =
         window.localStorage.getItem('freso_is_super_admin') || window.sessionStorage.getItem('freso_is_super_admin');
-      if (!ownerFlag && !superAdminFlag) {
-        window.localStorage.setItem('freso_is_owner', '1');
-        window.sessionStorage.setItem('freso_is_owner', '1');
-        window.localStorage.setItem('freso_is_super_admin', '1');
-        window.sessionStorage.setItem('freso_is_super_admin', '1');
-      }
-
       if (data && 'token' in data && data.token) {
         const token = data.token;
         const email = data.email || formData.email;
         const fullName = data.full_name || formData.fullName;
         const branchName = data.branch_name || formData.unitNickname;
 
-        window.localStorage.setItem('freso_customer_token', token);
-        window.localStorage.setItem('freso_login_token', token);
-        window.sessionStorage.setItem('freso_customer_token', token);
-        window.localStorage.setItem('freso_customer_email', email);
-        if (fullName) {
-          window.localStorage.setItem('freso_customer_name', fullName);
-        }
-        if (branchName) {
-          window.localStorage.setItem('freso_branch_name', branchName);
-        }
-        
-        if (isSeller) {
-          window.localStorage.setItem('freso_role', 'seller');
-          window.sessionStorage.setItem('freso_role', 'seller');
+        persistAuthSession(window.localStorage, window.sessionStorage, {
+          customerToken: token,
+          loginToken: token,
+          email,
+          fullName,
+          branchName,
+        });
+        window.localStorage.setItem('freso_role', isSeller ? 'seller' : 'customer');
+        window.sessionStorage.setItem('freso_role', isSeller ? 'seller' : 'customer');
+
+        if (isSeller || (!ownerFlag && !superAdminFlag)) {
           window.localStorage.setItem('freso_is_owner', '1');
           window.sessionStorage.setItem('freso_is_owner', '1');
           window.localStorage.setItem('freso_is_super_admin', '1');

@@ -39,4 +39,24 @@
             <resource ref="self"/>
         </resources>
     </route>
+
+    <!-- Order Management Routes -->
+    <route url="/V1/tmdt-orders/create" method="POST">
+        <service class="Tmdt\Catalog\Api\OrderManagementInterface" method="createOrder"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+    <route url="/V1/tmdt-orders/status/:orderCode" method="GET">
+        <service class="Tmdt\Catalog\Api\OrderManagementInterface" method="getOrderStatus"/>
+        <resources>
+            <resource ref="anonymous"/>
+        </resources>
+    </route>
+    <route url="/V1/tmdt-orders/webhook" method="POST">
+        <service class="Tmdt\Catalog\Api\OrderManagementInterface" method="handleWebhook"/>
+        <resources>
+            <resource ref="anonymous"/>
+        </resources>
+    </route>
 </routes>

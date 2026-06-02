@@ -193,7 +193,8 @@ export function ShoppingCartPage() {
                 customLocalProducts = [];
               }
             }
-            const matchingProduct = customLocalProducts.find(p => p.sku === item.sku);
+            const sku = (item.sku ?? '').trim().toLowerCase();
+const matchingProduct = customLocalProducts.find(p => (p.sku ?? '').trim().toLowerCase() === sku);
             const originalPrice = matchingProduct ? Number(matchingProduct.price) : item.unitPrice;
             const tiers = matchingProduct?.wholesale_tiers || [];
             const activeTier = tiers

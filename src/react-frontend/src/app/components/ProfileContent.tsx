@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { User } from 'lucide-react';
+import { clearStoredAuthSession, revokeCurrentToken } from '../utils/authSession';
 
 type Profile = {
   name: string;
@@ -25,7 +26,11 @@ type CustomerMeResponse = {
   unit_nickname?: string;
 };
 
-export const ProfileContent = () => {
+type ProfileContentProps = {
+  showBusinessInfo?: boolean;
+};
+
+export const ProfileContent = ({ showBusinessInfo = true }: ProfileContentProps) => {
   const readStorageValue = (key: string) =>
     window.localStorage.getItem(key) || window.sessionStorage.getItem(key) || '';
 
@@ -49,6 +54,9 @@ export const ProfileContent = () => {
     }
     if (roleAttr === 'seller') {
       return 'Người bán';
+    }
+    if (roleAttr === 'branch') {
+      return 'Cơ sở/chi nhánh';
     }
     const isOwner = parseBoolFlag(readStorageValue('freso_is_owner'));
     const isSuperAdmin = parseBoolFlag(readStorageValue('freso_is_super_admin'));
@@ -132,6 +140,8 @@ export const ProfileContent = () => {
         role = 'Khách hàng';
       } else if (roleVal === 'seller') {
         role = 'Người bán';
+      } else if (roleVal === 'branch') {
+        role = 'Cơ sở/chi nhánh';
       }
 
       setProfile((prev) => ({
@@ -171,8 +181,7 @@ export const ProfileContent = () => {
       });
 
       if (res.status === 401) {
-        window.localStorage.removeItem('freso_customer_token');
-        window.sessionStorage.removeItem('freso_customer_token');
+        clearStoredAuthSession();
         return;
       }
 
@@ -225,6 +234,8 @@ export const ProfileContent = () => {
         roleLabel = 'Khách hàng';
       } else if (roleVal === 'seller') {
         roleLabel = 'Người bán';
+      } else if (roleVal === 'branch') {
+        roleLabel = 'Cơ sở/chi nhánh';
       }
 
       setProfile((prev) => ({
@@ -362,13 +373,8 @@ export const ProfileContent = () => {
       setPwCurrent('');
       setPwNew('');
       setPwConfirm('');
-      try {
-        window.localStorage.removeItem('freso_customer_token');
-        window.sessionStorage.removeItem('freso_customer_token');
-        window.localStorage.setItem('freso_last_logout', String(Date.now()));
-      } catch (_err) {
-        // ignore
-      }
+      await revokeCurrentToken(token);
+      clearStoredAuthSession();
       alert('Đổi mật khẩu thành công. Vui lòng đăng nhập lại.');
       window.location.replace('/react/index.html?view=login');
     } catch (err) {
@@ -462,31 +468,38 @@ export const ProfileContent = () => {
               <p className="text-[14.5px] font-bold text-gray-800 tracking-tight">{profile.email}</p>
             )}
           </div>
+          {!showBusinessInfo && (
+            <div>
+              <p className="text-[12.5px] text-black mb-0.5 font-light tracking-tight">Vai trò</p>
+              <p className="text-[14.5px] font-bold text-gray-800 tracking-tight">{profile.role}</p>
+            </div>
+          )}
         </div>
       </section>
 
       <hr className="border-gray-100 mb-6" />
 
-      {/* Thông tin tài khoản */}
-      <section>
-        <h2 className="text-[17px] font-bold text-gray-800 mb-3 tracking-tight">Thông tin tài khoản</h2>
-        <div className="grid grid-cols-2 gap-y-3.5 gap-x-16">
-          <div>
-            <p className="text-[12.5px] text-black mb-1.5 font-light tracking-tight">Chi nhánh trực thuộc</p>
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 bg-gray-800 rounded-full" />
-              <p className="text-[14.5px] font-bold text-gray-800 tracking-tight">{profile.branch}</p>
+      {showBusinessInfo && (
+        <section>
+          <h2 className="text-[17px] font-bold text-gray-800 mb-3 tracking-tight">Thông tin tài khoản</h2>
+          <div className="grid grid-cols-2 gap-y-3.5 gap-x-16">
+            <div>
+              <p className="text-[12.5px] text-black mb-1.5 font-light tracking-tight">Chi nhánh trực thuộc</p>
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 bg-gray-800 rounded-full" />
+                <p className="text-[14.5px] font-bold text-gray-800 tracking-tight">{profile.branch}</p>
+              </div>
+            </div>
+            <div>
+              <p className="text-[12.5px] text-black mb-1.5 font-light tracking-tight">Vai trò</p>
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 bg-gray-800 rounded-full" />
+                <p className="text-[14.5px] font-bold text-gray-800 tracking-tight">{profile.role}</p>
+              </div>
             </div>
           </div>
-          <div>
-            <p className="text-[12.5px] text-black mb-1.5 font-light tracking-tight">Vai trò</p>
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 bg-gray-800 rounded-full" />
-              <p className="text-[14.5px] font-bold text-gray-800 tracking-tight">{profile.role}</p>
-            </div>
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* Password Modal */}
       {showPasswordModal && (

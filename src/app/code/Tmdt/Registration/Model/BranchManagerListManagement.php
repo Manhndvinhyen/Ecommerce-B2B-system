@@ -30,7 +30,7 @@ class BranchManagerListManagement implements BranchManagerListInterface
         $ownerId = $this->getCustomerIdFromRequest();
         $owner = $this->customerRepository->getById($ownerId);
         if (!$this->isOwnerCustomer($owner)) {
-            throw new AuthorizationException(__('Ban khong co quyen xem danh sach nhan vien.'));
+            throw new AuthorizationException(__('Ban khong co quyen xem danh sach co so.'));
         }
 
         $ownerRegistration = $this->getRegistrationByCustomerId($ownerId);
@@ -111,7 +111,7 @@ class BranchManagerListManagement implements BranchManagerListInterface
     {
         $token = $this->extractToken();
         if ($token === '') {
-            throw new AuthorizationException(__('Ban can dang nhap de xem danh sach nhan vien.'));
+            throw new AuthorizationException(__('Ban can dang nhap de xem danh sach co so.'));
         }
 
         $tokenModel = $this->tokenFactory->create()->loadByToken($token);
@@ -149,9 +149,11 @@ class BranchManagerListManagement implements BranchManagerListInterface
     {
         $isOwnerAttr = $customer->getCustomAttribute('is_owner');
         $isSuperAttr = $customer->getCustomAttribute('is_super_admin');
+        $roleAttr = $customer->getCustomAttribute('tmdt_role');
         $isOwner = $isOwnerAttr ? $this->normalizeBool($isOwnerAttr->getValue()) : false;
         $isSuper = $isSuperAttr ? $this->normalizeBool($isSuperAttr->getValue()) : false;
-        return $isOwner || $isSuper;
+        $role = $roleAttr ? strtolower(trim((string) $roleAttr->getValue())) : '';
+        return $role !== 'branch' && ($isOwner || $isSuper || $role === '' || $role === 'manager' || $role === 'seller');
     }
 
     private function normalizeBool(mixed $value): bool

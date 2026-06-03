@@ -22,6 +22,7 @@ import { SellerDashboardPage } from './components/SellerDashboardPage';
 import { WishlistPage } from './components/WishlistPage';
 import { CheckoutPage } from './components/CheckoutPage';
 import { NewsPage } from './components/NewsPage';
+import { ThankYouPage } from './components/ThankYouPage';
 import { getCategoryNameFromQuery, getSubcategoryNameFromQuery } from './data/categories';
 import { CartProvider } from './cart/CartProvider';
 import { applySeo, buildCanonicalPath, getSiteName } from './utils/seo';
@@ -46,6 +47,7 @@ function AppContent() {
   const isDashboardView = view === 'dashboard';
   const isSellerDashboardView = view === 'seller-dashboard';
   const isNewsView = view === 'news';
+  const isThankYouView = view === 'thank-you';
 
   useEffect(() => {
     console.info('[FresoSearch][App] route detected', {
@@ -209,6 +211,10 @@ function AppContent() {
         <ChatbotWidget />
       </div>
     );
+  }
+
+  if (isThankYouView) {
+    return <ThankYouPage />;
   }
 
   return (

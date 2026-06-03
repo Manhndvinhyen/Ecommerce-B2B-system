@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ShoppingCart, User, Menu, Search, ChevronRight, Heart, Bell, HelpCircle, Store } from 'lucide-react';
 import { categoryMenu, getCategoryPageLink } from '../data/categories';
 import { getDefaultWishlistList, hasWishlistAuth } from '../utils/wishlistApi';
-import { adminMenuItems } from './AdminSidebar';
+import { adminMenuItems } from './SidebarMenu';
 import { useCart } from '../cart/CartProvider';
 
 export function Header() {
@@ -241,9 +241,15 @@ export function Header() {
   };
 
   const displayedUserName = customerName || customerEmail || 'Tài khoản';
-  const dashboardBase = `${reactHomePath}?view=dashboard`;
+  const currentView = new URLSearchParams(window.location.search).get('view');
+  const dashboardBase = currentView === 'seller-dashboard'
+    ? `${reactHomePath}?view=seller-dashboard`
+    : `${reactHomePath}?view=dashboard`;
   const getDashboardHref = (tabLabel: string) => `${dashboardBase}&tab=${encodeURIComponent(tabLabel)}`;
   const activeDashboardTab = new URLSearchParams(window.location.search).get('tab');
+  const visibleMenuItems = currentView === 'dashboard'
+    ? adminMenuItems.filter((item) => item.id === 'profile-seller' || item.id === 'nhan-vien')
+    : adminMenuItems.filter((item) => userRole === 'seller' ? true : item.id !== 'thong-tin');
 
   const logoutAndBackHome = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -429,7 +435,7 @@ export function Header() {
 
               {/* Actions */}
               <div className="flex items-center gap-3">
-                <a href="/customer/account" className="p-2 hover:bg-gray-100 rounded-full transition-colors hidden md:block">
+                <a href={isLoggedIn ? '/customer/account' : '/?view=login'} className="p-2 hover:bg-gray-100 rounded-full transition-colors hidden md:block">
                   <User className="size-6 text-gray-700" />
                 </a>
                 <div
@@ -523,7 +529,7 @@ export function Header() {
                 ) : userRole === 'seller' ? (
                   <>
                     <a
-                      href="/react/index.html?view=seller-dashboard"
+                      href={`${reactHomePath}?view=seller-dashboard`}
                       className="px-3 py-1 text-xs bg-orange-500 text-white rounded-full hover:bg-orange-600 transition-colors font-bold whitespace-nowrap shadow-sm"
                     >
                       Trang người bán
@@ -552,9 +558,7 @@ export function Header() {
                     <div className="absolute right-0 mt-2 w-[280px] bg-white border border-gray-200 rounded-2xl shadow-xl p-2 z-50">
                       <div className="px-3 py-2 text-sm font-semibold text-gray-900">{displayedUserName}</div>
                       <div className="grid grid-cols-1 gap-1 text-sm">
-                        {adminMenuItems
-                          .filter((item) => item.id !== 'thong-tin')
-                          .map((item) => {
+                        {visibleMenuItems.map((item) => {
                             const isActive = activeDashboardTab === item.label;
                             return (
                               <a

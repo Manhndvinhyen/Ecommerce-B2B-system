@@ -34,11 +34,11 @@ class BranchManagerUpdateManagement implements BranchManagerUpdateInterface
         $ownerId = $this->getCustomerIdFromRequest();
         $owner = $this->customerRepository->getById($ownerId);
         if (!$this->isOwnerCustomer($owner)) {
-            throw new AuthorizationException(__('Ban khong co quyen cap nhat nhan vien.'));
+            throw new AuthorizationException(__('Ban khong co quyen cap nhat co so.'));
         }
 
         if ($managerId <= 0 || $managerId === $ownerId) {
-            throw new InputException(__('Thong tin nhan vien khong hop le.'));
+            throw new InputException(__('Thong tin co so khong hop le.'));
         }
 
         $bodyParams = $this->request->getBodyParams();
@@ -72,12 +72,12 @@ class BranchManagerUpdateManagement implements BranchManagerUpdateInterface
 
         $managerRegistration = $this->getRegistrationByCustomerId($managerId);
         if (!$managerRegistration) {
-            throw new InputException(__('Khong tim thay nhan vien.'));
+            throw new InputException(__('Khong tim thay co so.'));
         }
 
         $managerLoginCode = trim((string) ($managerRegistration['login_code'] ?? ''));
         if ($managerLoginCode !== $loginCode) {
-            throw new AuthorizationException(__('Ban khong co quyen cap nhat nhan vien nay.'));
+            throw new AuthorizationException(__('Ban khong co quyen cap nhat co so nay.'));
         }
 
         if ($email !== '' && $this->emailExists($email, $managerId)) {
@@ -100,9 +100,9 @@ class BranchManagerUpdateManagement implements BranchManagerUpdateInterface
                 throw new InputException(__('Email da ton tai.'));
             } catch (LocalizedException $exception) {
                 $message = trim((string) $exception->getMessage());
-                throw new InputException(__($message !== '' ? $message : 'Khong the cap nhat nhan vien.'));
+                throw new InputException(__($message !== '' ? $message : 'Khong the cap nhat co so.'));
             } catch (\Throwable) {
-                throw new InputException(__('Khong the cap nhat nhan vien.'));
+                throw new InputException(__('Khong the cap nhat co so.'));
             }
         }
 
@@ -118,7 +118,7 @@ class BranchManagerUpdateManagement implements BranchManagerUpdateInterface
 
         return [
             'success' => true,
-            'message' => (string) __('Cap nhat nhan vien thanh cong.'),
+            'message' => (string) __('Cap nhat co so thanh cong.'),
         ];
     }
 
@@ -174,7 +174,7 @@ class BranchManagerUpdateManagement implements BranchManagerUpdateInterface
     {
         $token = $this->extractToken();
         if ($token === '') {
-            throw new AuthorizationException(__('Ban can dang nhap de cap nhat nhan vien.'));
+            throw new AuthorizationException(__('Ban can dang nhap de cap nhat co so.'));
         }
 
         $tokenModel = $this->tokenFactory->create()->loadByToken($token);
@@ -222,9 +222,11 @@ class BranchManagerUpdateManagement implements BranchManagerUpdateInterface
     {
         $isOwnerAttr = $customer->getCustomAttribute('is_owner');
         $isSuperAttr = $customer->getCustomAttribute('is_super_admin');
+        $roleAttr = $customer->getCustomAttribute('tmdt_role');
         $isOwner = $isOwnerAttr ? $this->normalizeBool($isOwnerAttr->getValue()) : false;
         $isSuper = $isSuperAttr ? $this->normalizeBool($isSuperAttr->getValue()) : false;
-        return $isOwner || $isSuper;
+        $role = $roleAttr ? strtolower(trim((string) $roleAttr->getValue())) : '';
+        return $role !== 'branch' && ($isOwner || $isSuper || $role === '' || $role === 'manager' || $role === 'seller');
     }
 
     private function normalizeBool(mixed $value): bool

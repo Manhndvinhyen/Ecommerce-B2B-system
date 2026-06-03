@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<schema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Setup/Declaration/Schema/etc/db_schema.xsd">
+    <table name="tmdt_inventory_log" resource="default" engine="innodb" comment="Tmdt Inventory Adjustment Logs">
+        <column xsi:type="int" name="log_id" padding="10" unsigned="true" nullable="false" identity="true" comment="Log ID"/>
+        <column xsi:type="varchar" name="sku" length="64" nullable="false" comment="Product SKU"/>
+        <column xsi:type="varchar" name="action_type" length="32" nullable="false" comment="Action Type: inbound, outbound, system_adjust"/>
+        <column xsi:type="decimal" name="qty_change" scale="4" precision="12" nullable="false" comment="Quantity Change"/>
+        <column xsi:type="decimal" name="qty_after" scale="4" precision="12" nullable="false" comment="Quantity After Adjustment"/>
+        <column xsi:type="text" name="note" nullable="true" comment="Adjustment Note"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Log Creation Time"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="log_id"/>
+        </constraint>
+        <index referenceId="TMDT_INVENTORY_LOG_SKU" indexType="btree">
+            <column name="sku"/>
+        </index>
+    </table>
+
+    <table name="tmdt_orders" resource="default" engine="innodb" comment="Tmdt B2B Orders">
+        <column xsi:type="int" name="id" padding="10" unsigned="true" nullable="false" identity="true" comment="Order ID"/>
+        <column xsi:type="varchar" name="order_code" length="32" nullable="false" comment="Order Code e.g. DH-100293"/>
+        <column xsi:type="varchar" name="status" length="32" nullable="false" default="pending" comment="pending|paid|cancelled|expired"/>
+        <column xsi:type="decimal" name="total_amount" scale="2" precision="14" nullable="false" comment="Total Amount VND"/>
+        <column xsi:type="text" name="items_json" nullable="true" comment="Cart items JSON"/>
+        <column xsi:type="varchar" name="customer_email" length="255" nullable="true" comment="Customer Email"/>
+        <column xsi:type="varchar" name="customer_name" length="255" nullable="true" comment="Customer Name"/>
+        <column xsi:type="text" name="shipping_json" nullable="true" comment="Shipping Info JSON"/>
+        <column xsi:type="varchar" name="transaction_id" length="128" nullable="true" comment="Bank Transaction ID"/>
+        <column xsi:type="timestamp" name="expires_at" on_update="false" nullable="true" comment="Order Expiry Time (15 min hold)"/>
+        <column xsi:type="timestamp" name="paid_at" on_update="false" nullable="true" comment="Payment Confirmed Time"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="id"/>
+        </constraint>
+        <constraint xsi:type="unique" referenceId="TMDT_ORDERS_ORDER_CODE">
+            <column name="order_code"/>
+        </constraint>
+        <index referenceId="TMDT_ORDERS_STATUS" indexType="btree">
+            <column name="status"/>
+        </index>
+    </table>
+
+    <table name="tmdt_order_status_history" resource="default" engine="innodb" comment="Tmdt Order Status History">
+        <column xsi:type="int" name="id" padding="10" unsigned="true" nullable="false" identity="true" comment="History ID"/>
+        <column xsi:type="varchar" name="order_code" length="32" nullable="false" comment="Order Code"/>
+        <column xsi:type="varchar" name="status" length="32" nullable="false" comment="Status"/>
+        <column xsi:type="text" name="comment" nullable="true" comment="Comment"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="id"/>
+        </constraint>
+        <index referenceId="TMDT_ORDER_STATUS_HISTORY_ORDER_CODE" indexType="btree">
+            <column name="order_code"/>
+        </index>
+    </table>
+
+    <table name="tmdt_seller_notifications" resource="default" engine="innodb" comment="Tmdt Seller Notifications">
+        <column xsi:type="int" name="id" padding="10" unsigned="true" nullable="false" identity="true" comment="Notification ID"/>
+        <column xsi:type="varchar" name="seller_id" length="32" nullable="false" comment="Seller Customer ID"/>
+        <column xsi:type="varchar" name="sku" length="64" nullable="false" comment="Product SKU"/>
+        <column xsi:type="text" name="message" nullable="false" comment="Alert Message"/>
+        <column xsi:type="smallint" name="is_read" padding="5" unsigned="true" nullable="false" default="0" comment="Read status: 0=unread, 1=read"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="id"/>
+        </constraint>
+        <index referenceId="TMDT_SELLER_NOTIFICATIONS_SELLER_ID" indexType="btree">
+            <column name="seller_id"/>
+        </index>
+    </table>
+
+    <table name="tmdt_transactions" resource="default" engine="innodb" comment="Tmdt Revenue/Payment Transactions">
+        <column xsi:type="int" name="id" padding="10" unsigned="true" nullable="false" identity="true" comment="Transaction ID"/>
+        <column xsi:type="varchar" name="order_code" length="32" nullable="false" comment="Order Code"/>
+        <column xsi:type="varchar" name="transaction_id" length="128" nullable="false" comment="Payment Gateway Transaction ID"/>
+        <column xsi:type="decimal" name="amount" scale="2" precision="14" nullable="false" comment="Transaction Amount"/>
+        <column xsi:type="varchar" name="seller_id" length="32" nullable="true" comment="Seller Customer ID"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="id"/>
+        </constraint>
+        <index referenceId="TMDT_TRANSACTIONS_ORDER_CODE" indexType="btree">
+            <column name="order_code"/>
+        </index>
+    </table>
+</schema>
+
+

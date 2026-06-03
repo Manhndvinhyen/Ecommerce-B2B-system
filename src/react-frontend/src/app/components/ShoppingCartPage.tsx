@@ -183,6 +183,26 @@ export function ShoppingCartPage() {
           {filteredItems.map((item) => {
             const lineTotal = item.quantity * item.unitPrice;
 
+            // Check if the product has wholesale tiers in local catalog
+            const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
+            let customLocalProducts: any[] = [];
+            if (customLocalRaw) {
+              try {
+                customLocalProducts = JSON.parse(customLocalRaw);
+              } catch (e) {
+                customLocalProducts = [];
+              }
+            }
+            const sku = (item.sku ?? '').trim().toLowerCase();
+const matchingProduct = customLocalProducts.find(p => (p.sku ?? '').trim().toLowerCase() === sku);
+            const originalPrice = matchingProduct ? Number(matchingProduct.price) : item.unitPrice;
+            const tiers = matchingProduct?.wholesale_tiers || [];
+            const activeTier = tiers
+              .filter((t: any) => item.quantity >= t.qty)
+              .sort((a: any, b: any) => b.qty - a.qty)[0];
+            const discountPercent = activeTier ? activeTier.discount : 0;
+            const hasDiscount = discountPercent > 0;
+
             return (
               <article key={item.id} className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
                 <div className="px-5 py-4">
@@ -208,7 +228,24 @@ export function ShoppingCartPage() {
                         <h3 className="text-base font-semibold text-gray-900">{item.name}</h3>
                         <p className="mt-1 text-sm text-gray-400">Danh mục: {item.category}</p>
                         <p className="mt-1 text-sm text-gray-400">Đơn vị tính: {item.unit}</p>
-                        <p className="mt-2 text-sm font-medium text-gray-700">Đơn giá: {toCurrencyTextFromNumber(item.unitPrice)}</p>
+                        <div className="mt-2 text-sm font-medium text-gray-700">
+                          Đơn giá:{' '}
+                          {hasDiscount ? (
+                            <div className="inline-flex flex-wrap items-center gap-1.5 mt-0.5">
+                              <span className="line-through text-gray-400">
+                                {toCurrencyTextFromNumber(originalPrice)}
+                              </span>
+                              <span className="px-1.5 py-0.2 bg-red-100 text-red-600 rounded text-[10px] font-bold">
+                                -{discountPercent}% sỉ
+                              </span>
+                              <span className="text-green-700 font-bold">
+                                {toCurrencyTextFromNumber(item.unitPrice)}
+                              </span>
+                            </div>
+                          ) : (
+                            <span>{toCurrencyTextFromNumber(item.unitPrice)}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
 

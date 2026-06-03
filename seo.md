@@ -55,6 +55,11 @@ Production domain used in code: `https://organica.click`
 
 ## Checkpoint 6 - Similar Account Recommendations
 
+- [x] Add purchase history storage tables for later recommendation work.
+- [x] Add customer purchase history REST API.
+- [x] Add dashboard purchase history UI.
+- [x] Save checkout items into purchase history after successful checkout.
+- [x] Store the customer's latest purchase region for later regional recommendations.
 - [ ] Build anonymized account segments from registration type, region, wishlist, cart/order history, and searches.
 - [ ] Store aggregate recommendations by segment, not by individual account.
 - [ ] Expose public aggregate blocks such as "Doanh nghiệp cùng khu vực thường mua".
@@ -66,6 +71,16 @@ Production domain used in code: `https://organica.click`
 - [x] Create a broad food-focused synonym dictionary for common food, grocery, fresh food, seafood, meat, vegetable, fruit, dry food, and seasoning terms.
 - [x] Connect the synonym dictionary to the current React product search flow.
 - [x] Expand a user query into related search terms and merge GraphQL product results by SKU.
+- [x] Add product-list filters for mocked supplier region and price sorting.
+- [x] Add mocked supplier names/regions until real supplier data exists.
+- [x] Re-rank/filter expanded search results to reduce synonym noise.
+- [ ] Do not treat mocked supplier data as production-ready. Current mock files/logic:
+  - `src/react-frontend/src/app/data/mockSuppliers.ts`
+  - mocked supplier fields in `ProductCategoryPage.tsx`
+  - `freso_preferred_region` local/session storage in `CheckoutPage.tsx`
+  - `customer_region` purchase-history field in `Tmdt_Search`
+  These are placeholders until supplier login/profile/product ownership is implemented.
+- [ ] Before merging to main, replace mock supplier assignment with real supplier/product-region data.
 - [x] Add Magento module `Tmdt_Search`.
 - [x] Add Magento product attribute `tmdt_search_keywords`.
 - [x] Generate `tmdt_search_keywords` from product name, SKU, category, descriptions, origin, and synonym dictionary.

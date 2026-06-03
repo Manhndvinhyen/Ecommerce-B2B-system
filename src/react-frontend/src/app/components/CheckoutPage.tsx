@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { Calendar, Clock, FileText, MapPin, PackageCheck, Phone, ShoppingBag, User, Wind, Thermometer, AlertTriangle, Truck } from 'lucide-react';
 import { toCurrencyTextFromNumber, useCart } from '../cart/CartProvider';
 
@@ -162,6 +162,7 @@ const checkoutPayloadKey = 'freso_checkout_payload';
 const checkoutAddressKey = 'freso_checkout_address';
 const checkoutInvoiceKey = 'freso_checkout_invoice';
 const checkoutDraftKey = 'freso_checkout_draft';
+const preferredRegionStorageKey = 'freso_preferred_region';
 
 type CheckoutItem = {
   id: string;
@@ -207,6 +208,7 @@ const getAuthToken = () =>
   window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
 
 const isValidPhone = (value: string) => /^(\+?84|0)\d{9,10}$/.test(value.replace(/\s/g, ''));
+const getRegionFromBranch = (branch: string) => branch.replace(/^Chi nhánh\s+/i, '').trim();
 
 type MagentoCartItem = {
   id: number | string;
@@ -248,19 +250,47 @@ const buildCheckoutPayload = (items: CheckoutItem[]): CheckoutPayload => {
 };
 
 const mapMagentoCartItems = (items: MagentoCartItem[] = []): CheckoutItem[] => {
+  const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
+  let customLocalProducts: any[] = [];
+  if (customLocalRaw) {
+    try {
+      customLocalProducts = JSON.parse(customLocalRaw);
+    } catch {
+      customLocalProducts = [];
+    }
+  }
+
   return items.map((item) => {
     const product = item.product ?? {};
-    const unitPrice = Number(product.price_range?.minimum_price?.final_price?.value ?? 0);
-    const category = product.categories?.find((cat) => cat?.name)?.name ?? '';
+    const qty = Math.max(1, Math.floor(item.quantity ?? 1));
+    const sku = (product.sku ?? '').trim().toLowerCase();
+    const matchingProduct = customLocalProducts.find(p => (p.sku ?? '').trim().toLowerCase() === sku);
+    
+    const originalPrice = matchingProduct ? Number(matchingProduct.price) : Number(product.price_range?.minimum_price?.final_price?.value ?? 0);
+    const tiers = matchingProduct?.wholesale_tiers || [];
+    const activeTier = tiers
+      .filter((t: any) => qty >= t.qty)
+      .sort((a: any, b: any) => b.qty - a.qty)[0];
+
+    const discountPercent = activeTier ? activeTier.discount : 0;
+    const unitPrice = originalPrice * (1 - discountPercent / 100);
+    const category = product.categories?.find((cat) => cat?.name)?.name ?? (matchingProduct?.categoryLabel || '');
+    const unit = matchingProduct?.unit || 'kg';
+
+    const rawImage = product.small_image?.url || product.thumbnail?.url || '';
+    const isPlaceholder = rawImage.toLowerCase().includes('placeholder');
+    const finalImage = !rawImage || isPlaceholder 
+      ? (matchingProduct?.image || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop') 
+      : rawImage;
 
     return {
       id: String(item.id),
       sku: product.sku ?? '',
-      name: product.name ?? 'Sản phẩm',
-      quantity: Math.max(1, Math.floor(item.quantity ?? 1)),
+      name: product.name ?? (matchingProduct?.name || 'Sản phẩm'),
+      quantity: qty,
       unitPrice,
-      unit: 'SP',
-      image: product.small_image?.url || product.thumbnail?.url || '',
+      unit,
+      image: finalImage,
       category
     };
   });
@@ -376,6 +406,59 @@ export function CheckoutPage() {
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
   const circleRef = useRef<any>(null);
+  // VietQR Payment Modal state
+  const [qrOrder, setQrOrder] = useState<{ orderCode: string; totalAmount: number; expiresAt: string } | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | 'expired' | 'cancelled'>('pending');
+  const [countdown, setCountdown] = useState(15 * 60); // 15 minutes in seconds
+  const pollingRef = useRef<number | null>(null);
+  const countdownRef = useRef<number | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollingRef.current) { window.clearInterval(pollingRef.current); pollingRef.current = null; }
+    if (countdownRef.current) { window.clearInterval(countdownRef.current); countdownRef.current = null; }
+  }, []);
+
+  const startPolling = useCallback((orderCode: string, expiresAt: string) => {
+    const expireMs = new Date(expiresAt).getTime();
+
+    // Countdown ticker
+    countdownRef.current = window.setInterval(() => {
+      const remaining = Math.max(0, Math.floor((expireMs - Date.now()) / 1000));
+      setCountdown(remaining);
+      if (remaining <= 0) {
+        stopPolling();
+        setPaymentStatus('expired');
+      }
+    }, 1000);
+
+    // Status polling every 5s
+    pollingRef.current = window.setInterval(async () => {
+      try {
+        const res = await fetch(`/rest/V1/tmdt-orders/status/${encodeURIComponent(orderCode)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.status === 'paid' || data?.status === 'processing') {
+          stopPolling();
+          setPaymentStatus('paid');
+          // Clear local cart
+          window.sessionStorage.removeItem(checkoutPayloadKey);
+          window.localStorage.removeItem(checkoutPayloadKey);
+          window.localStorage.removeItem('freso_local_cart_items');
+          window.setTimeout(() => {
+            window.location.href = `${reactHomePath}?view=thank-you&orderId=${orderCode}`;
+          }, 1500);
+        } else if (data?.status === 'expired' || data?.status === 'cancelled') {
+          stopPolling();
+          setPaymentStatus(data.status);
+        }
+      } catch {
+        // Ignore polling errors
+      }
+    }, 5000);
+  }, [stopPolling]);
+
+  // Cleanup on unmount
+  useEffect(() => () => stopPolling(), [stopPolling]);
 
   const subtotal = useMemo(
     () => checkoutItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
@@ -949,27 +1032,109 @@ export function CheckoutPage() {
       note: shippingInfo.note,
       invoiceInfo
     };
+    const purchaseHistoryPayload = {
+      customerEmail: getCustomerEmail(),
+      orderReference: `TMDT-${Date.now()}`,
+      customerRegion: getRegionFromBranch(shippingInfo.branch),
+      items: checkoutItems.map((item) => ({
+        sku: item.sku,
+        name: item.name,
+        category: item.category,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        unit: item.unit,
+        image: item.image
+      })),
+      supplier,
+      subtotal,
+      totalAmount,
+      deliveryDate,
+      deliveryTime,
+      shippingAddress: `${shippingInfo.branch} - ${shippingInfo.address}`,
+      note: shippingInfo.note,
+      invoiceInfo
+    };
 
     try {
       setIsSubmitting(true);
-      const response = await fetch('/api/orders', {
+
+      // Step 1: Create order in backend and get orderCode
+      const createRes = await fetch('/rest/V1/tmdt-orders/create', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {})
         },
-        body: JSON.stringify(orderPayload)
+        body: JSON.stringify({
+          // Flat params matching Magento interface (no nested array)
+          customerEmail: getCustomerEmail() || 'guest',
+          customerName: getCustomerName(),
+          totalAmount,
+          itemsJson: JSON.stringify(checkoutItems.map((item) => ({
+            sku: item.sku,
+            name: item.name,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            unit: item.unit
+          }))),
+          shippingJson: JSON.stringify({
+            branch: shippingInfo.branch,
+            address: shippingInfo.address,
+            receiver: shippingInfo.receiver,
+            phone: shippingInfo.phone,
+            note: shippingInfo.note,
+            deliveryDate,
+            deliveryTime
+          })
+        })
       });
 
-      if (!response.ok) {
-        const text = await response.text().catch(() => '');
-        throw new Error(text || `HTTP ${response.status}`);
+      let orderCode: string;
+      let expiresAt: string;
+
+      if (createRes.ok) {
+        const orderData = await createRes.json();
+        orderCode = orderData?.orderCode ?? `DH${Date.now().toString(36).toUpperCase().slice(-6)}`;
+        expiresAt = orderData?.expiresAt ?? new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      } else {
+        // Fallback: generate local order code if API fails
+        orderCode = `DH${Date.now().toString(36).toUpperCase().slice(-6)}`;
+        expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
       }
 
-      showToast('Đặt hàng thành công! Đang chờ xác nhận thanh toán.');
-      window.sessionStorage.removeItem(checkoutPayloadKey);
-      window.localStorage.removeItem(checkoutPayloadKey);
-      window.location.href = reactHomePath;
+      // Step 2: Also save purchase history
+      const token = getAuthToken();
+      if (token) {
+        fetch('/rest/V1/tmdt-search/purchase-history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            customerEmail: getCustomerEmail(),
+            orderReference: orderCode,
+            customerRegion: getRegionFromBranch(shippingInfo.branch),
+            items: checkoutItems.map((item) => ({
+              sku: item.sku, name: item.name, category: item.category,
+              quantity: item.quantity, unitPrice: item.unitPrice, unit: item.unit, image: item.image
+            })),
+            supplier, subtotal, totalAmount, deliveryDate, deliveryTime,
+            shippingAddress: `${shippingInfo.branch} - ${shippingInfo.address}`,
+            note: shippingInfo.note, invoiceInfo
+          })
+        }).catch(() => {/* ignore */});
+      }
+
+      const preferredRegion = getRegionFromBranch(shippingInfo.branch);
+      if (preferredRegion) {
+        window.localStorage.setItem(preferredRegionStorageKey, preferredRegion);
+        window.sessionStorage.setItem(preferredRegionStorageKey, preferredRegion);
+      }
+
+      // Step 3: Show VietQR modal
+      setQrOrder({ orderCode, totalAmount, expiresAt });
+      setPaymentStatus('pending');
+      setCountdown(Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000)));
+      startPolling(orderCode, expiresAt);
+
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Không thể tạo đơn hàng.';
       showToast(`Thanh toán thất bại. ${message}`);
@@ -1003,20 +1168,56 @@ export function CheckoutPage() {
                 Tóm tắt đơn hàng
               </div>
               <div className="space-y-4">
-                {checkoutItems.map((item) => (
-                  <div key={item.id} className="flex items-center gap-4 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
-                    <img src={item.image} alt={item.name} className="size-14 rounded-xl object-cover" />
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-gray-900">{item.name}</p>
-                      <p className="text-xs text-gray-500">
-                        {item.quantity} {item.unit} • {toCurrencyTextFromNumber(item.unitPrice)}
-                      </p>
+                {checkoutItems.map((item) => {
+                  const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
+                  let customLocalProducts: any[] = [];
+                  if (customLocalRaw) {
+                    try {
+                      customLocalProducts = JSON.parse(customLocalRaw);
+                    } catch {
+                      customLocalProducts = [];
+                    }
+                  }
+                  const sku = (item.sku ?? '').trim().toLowerCase();
+                  const matchingProduct = customLocalProducts.find(p => (p.sku ?? '').trim().toLowerCase() === sku);
+                  const originalPrice = matchingProduct ? Number(matchingProduct.price) : item.unitPrice;
+                  const tiers = matchingProduct?.wholesale_tiers || [];
+                  const activeTier = tiers
+                    .filter((t: any) => item.quantity >= t.qty)
+                    .sort((a: any, b: any) => b.qty - a.qty)[0];
+                  const discountPercent = activeTier ? activeTier.discount : 0;
+                  const hasDiscount = discountPercent > 0;
+
+                  return (
+                    <div key={item.id} className="flex items-center gap-4 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+                      <img src={item.image} alt={item.name} className="size-14 rounded-xl object-cover" />
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-gray-900">{item.name}</p>
+                        <div className="text-xs text-gray-500 flex flex-wrap items-center gap-1.5 mt-0.5">
+                          <span>{item.quantity} {item.unit} •</span>
+                          {hasDiscount ? (
+                            <>
+                              <span className="line-through text-gray-400">
+                                {toCurrencyTextFromNumber(originalPrice)}
+                              </span>
+                              <span className="px-1 py-0.2 bg-red-50 text-red-600 rounded text-[9px] font-bold">
+                                -{discountPercent}% sỉ
+                              </span>
+                              <span className="text-green-700 font-bold">
+                                {toCurrencyTextFromNumber(item.unitPrice)}
+                              </span>
+                            </>
+                          ) : (
+                            <span>{toCurrencyTextFromNumber(item.unitPrice)}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-sm font-semibold text-gray-900">
+                        {toCurrencyTextFromNumber(item.quantity * item.unitPrice)}
+                      </div>
                     </div>
-                    <div className="text-sm font-semibold text-gray-900">
-                      {toCurrencyTextFromNumber(item.quantity * item.unitPrice)}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-gray-600">
@@ -1415,7 +1616,7 @@ export function CheckoutPage() {
                 disabled={isSubmitting}
                 className="w-full rounded-full bg-green-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isSubmitting ? 'Đang xử lý...' : 'Thanh toán ngay'}
+                {isSubmitting ? 'Đang tạo đơn hàng...' : 'Đặt hàng & Thanh toán'}
               </button>
               <p className="text-xs text-gray-400">* Giá sẽ được hệ thống xác nhận lại trước khi tạo đơn chính thức.</p>
             </div>
@@ -1426,6 +1627,125 @@ export function CheckoutPage() {
       {toastMessage && (
         <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-green-600 px-5 py-2 text-sm font-semibold text-white shadow-lg">
           {toastMessage}
+        </div>
+      )}
+
+      {/* VietQR Payment Modal */}
+      {qrOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="relative w-full max-w-md rounded-3xl bg-white shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-green-600 to-emerald-500 px-6 py-5 text-white">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium opacity-80">Mã đơn hàng</p>
+                  <p className="text-2xl font-bold tracking-wider">{qrOrder.orderCode}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-medium opacity-80">Tổng thanh toán</p>
+                  <p className="text-xl font-bold">{toCurrencyTextFromNumber(qrOrder.totalAmount)}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-5">
+              {paymentStatus === 'pending' && (
+                <>
+                  {/* Countdown */}
+                  <div className="mb-4 flex items-center justify-between rounded-xl bg-amber-50 border border-amber-200 px-4 py-2">
+                    <span className="text-sm text-amber-700 font-medium">⏱ Giữ hàng còn lại</span>
+                    <span className={`text-lg font-bold tabular-nums ${
+                      countdown < 60 ? 'text-red-600' : 'text-amber-700'
+                    }`}>
+                      {String(Math.floor(countdown / 60)).padStart(2, '0')}:{String(countdown % 60).padStart(2, '0')}
+                    </span>
+                  </div>
+
+                  {/* QR Code */}
+                  <div className="flex flex-col items-center gap-3">
+                    <p className="text-sm text-gray-500 text-center">Quét mã QR bằng app ngân hàng để thanh toán</p>
+                    <div className="rounded-2xl border-4 border-green-100 p-2 shadow-inner">
+                      <img
+                        src={`https://img.vietqr.io/image/BIDV-96247VUONGTHUYLINH-compact2.png?amount=${Math.round(qrOrder.totalAmount)}&addInfo=THANHTOAN${qrOrder.orderCode}&accountName=VUONG%20THUY%20LINH`}
+                        alt="VietQR Payment"
+                        className="w-56 h-56 object-contain rounded-xl"
+                        onError={(e) => { (e.target as HTMLImageElement).src = `https://api.qrserver.com/v1/create-qr-code/?size=224x224&data=THANHTOAN${qrOrder.orderCode}%20${Math.round(qrOrder.totalAmount)}VND`; }}
+                      />
+                    </div>
+                    <div className="w-full rounded-xl bg-gray-50 border border-gray-200 p-3 text-center">
+                      <p className="text-xs text-gray-500 mb-1">Nội dung chuyển khoản</p>
+                      <p className="text-base font-bold text-green-700 tracking-wider">THANHTOAN {qrOrder.orderCode}</p>
+                    </div>
+                    <p className="text-xs text-gray-400 text-center">Hệ thống tự động xác nhận sau khi nhận được tiền</p>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="mt-5 flex gap-3">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const res = await fetch(`/rest/V1/tmdt-orders/status/${encodeURIComponent(qrOrder.orderCode)}`);
+                        const data = await res.json().catch(() => null);
+                        if (data?.status === 'paid' || data?.status === 'processing') {
+                          stopPolling();
+                          setPaymentStatus('paid');
+                          window.setTimeout(() => {
+                            window.sessionStorage.removeItem(checkoutPayloadKey);
+                            window.localStorage.removeItem(checkoutPayloadKey);
+                            window.localStorage.removeItem('freso_local_cart_items');
+                            window.location.href = `${reactHomePath}?view=thank-you&orderId=${qrOrder.orderCode}`;
+                          }, 1200);
+                        } else {
+                          showToast('Chưa nhận được thanh toán. Vui lòng đợi thêm.');
+                        }
+                      }}
+                      className="flex-1 rounded-full bg-green-600 py-2.5 text-sm font-semibold text-white hover:bg-green-700 transition"
+                    >
+                      Đã chuyển khoản
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { stopPolling(); setQrOrder(null); }}
+                      className="flex-1 rounded-full border border-gray-300 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition"
+                    >
+                      Hủy
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {paymentStatus === 'paid' && (
+                <div className="flex flex-col items-center gap-4 py-6">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+                    <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <p className="text-xl font-bold text-gray-900">Thanh toán thành công! 🎉</p>
+                  <p className="text-sm text-gray-500 text-center">Đơn hàng <strong>{qrOrder.orderCode}</strong> đã được xác nhận. Đang chuyển trang...</p>
+                </div>
+              )}
+
+              {(paymentStatus === 'expired' || paymentStatus === 'cancelled') && (
+                <div className="flex flex-col items-center gap-4 py-6">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
+                    <svg className="h-8 w-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </div>
+                  <p className="text-lg font-bold text-gray-900">Đơn hàng đã hết hạn</p>
+                  <p className="text-sm text-gray-500 text-center">Hàng đã được trả về kho. Vui lòng đặt lại đơn hàng.</p>
+                  <button
+                    type="button"
+                    onClick={() => { stopPolling(); setQrOrder(null); }}
+                    className="rounded-full bg-gray-900 px-6 py-2.5 text-sm font-semibold text-white hover:bg-gray-700 transition"
+                  >
+                    Đặt lại đơn hàng
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

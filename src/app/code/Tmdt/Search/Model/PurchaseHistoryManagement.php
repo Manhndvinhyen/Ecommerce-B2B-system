@@ -32,6 +32,7 @@ class PurchaseHistoryManagement implements PurchaseHistoryInterface
         $connection = $this->resourceConnection->getConnection();
         $historyTable = $this->resourceConnection->getTableName(self::HISTORY_TABLE);
         $itemTable = $this->resourceConnection->getTableName(self::ITEM_TABLE);
+        $orderTable = $this->resourceConnection->getTableName('tmdt_orders');
         $limit = max(1, min(50, (int) ($this->request->getParam('limit') ?: 20)));
 
         $orders = $connection->fetchAll(
@@ -43,6 +44,10 @@ class PurchaseHistoryManagement implements PurchaseHistoryInterface
         );
 
         $historyIds = array_map(fn (array $row): int => (int) $row['history_id'], $orders);
+        $orderReferences = array_values(array_filter(array_map(
+            static fn (array $row): string => trim((string) ($row['order_reference'] ?? '')),
+            $orders
+        )));
         $itemsByHistory = [];
         if ($historyIds) {
             $items = $connection->fetchAll(
@@ -56,13 +61,44 @@ class PurchaseHistoryManagement implements PurchaseHistoryInterface
             }
         }
 
+        $ordersByReference = [];
+        if ($orderReferences) {
+            $orderRows = $connection->fetchAll(
+                $connection->select()
+                    ->from($orderTable, ['order_code', 'status', 'transaction_id', 'expires_at', 'paid_at', 'customer_name', 'shipping_json'])
+                    ->where('order_code IN (?)', $orderReferences)
+            );
+
+            foreach ($orderRows as $orderRow) {
+                $ordersByReference[trim((string) ($orderRow['order_code'] ?? ''))] = [
+                    'status' => strtolower(trim((string) ($orderRow['status'] ?? 'pending'))),
+                    'transaction_id' => trim((string) ($orderRow['transaction_id'] ?? '')),
+                    'expires_at' => (string) ($orderRow['expires_at'] ?? ''),
+                    'paid_at' => (string) ($orderRow['paid_at'] ?? ''),
+                    'customer_name' => trim((string) ($orderRow['customer_name'] ?? '')),
+                    'shipping_info' => $this->decodeJsonObject((string) ($orderRow['shipping_json'] ?? '')),
+                ];
+            }
+        }
+
         return [
             'success' => true,
-            'items' => array_map(function (array $order) use ($itemsByHistory): array {
+            'items' => array_map(function (array $order) use ($itemsByHistory, $ordersByReference): array {
                 $historyId = (int) $order['history_id'];
+                $orderReference = (string) $order['order_reference'];
+                $orderMeta = $ordersByReference[$orderReference] ?? [
+                    'status' => 'pending',
+                    'transaction_id' => '',
+                    'expires_at' => '',
+                    'paid_at' => '',
+                    'customer_name' => '',
+                    'shipping_info' => [],
+                ];
                 return [
                     'history_id' => $historyId,
-                    'order_reference' => (string) $order['order_reference'],
+                    'order_reference' => $orderReference,
+                    'status' => $orderMeta['status'],
+                    'status_label' => $this->getOrderStatusLabel((string) $orderMeta['status']),
                     'customer_region' => (string) ($order['customer_region'] ?? ''),
                     'supplier' => (string) ($order['supplier'] ?? ''),
                     'subtotal' => (float) $order['subtotal'],
@@ -72,6 +108,11 @@ class PurchaseHistoryManagement implements PurchaseHistoryInterface
                     'shipping_address' => (string) ($order['shipping_address'] ?? ''),
                     'note' => (string) ($order['note'] ?? ''),
                     'created_at' => (string) $order['created_at'],
+                    'customer_name' => (string) $orderMeta['customer_name'],
+                    'transaction_id' => (string) $orderMeta['transaction_id'],
+                    'expires_at' => (string) $orderMeta['expires_at'],
+                    'paid_at' => (string) $orderMeta['paid_at'],
+                    'shipping_info' => $orderMeta['shipping_info'],
                     'items' => $itemsByHistory[$historyId] ?? [],
                 ];
             }, $orders),
@@ -201,5 +242,23 @@ class PurchaseHistoryManagement implements PurchaseHistoryInterface
             'row_total' => (float) $item['row_total'],
             'image' => (string) ($item['image'] ?? ''),
         ];
+    }
+
+    private function decodeJsonObject(string $value): array
+    {
+        $decoded = json_decode($value, true);
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    private function getOrderStatusLabel(string $status): string
+    {
+        return match (strtolower($status)) {
+            'paid' => 'Đã thanh toán',
+            'processing' => 'Đang xử lý',
+            'cancelled', 'canceled' => 'Đã hủy',
+            'expired' => 'Hết hạn',
+            'pending' => 'Chờ thanh toán',
+            default => $status !== '' ? ucfirst($status) : 'Chờ thanh toán',
+        };
     }
 }

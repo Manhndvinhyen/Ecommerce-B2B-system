@@ -160,6 +160,9 @@ class Sepay implements HttpPostActionInterface, CsrfAwareActionInterface
 
             // Process inventory updates
             $items = json_decode((string)($row['items_json'] ?? '[]'), true);
+            $sellerRevenues = [];
+            $sellerItems = [];
+
             if (is_array($items)) {
                 foreach ($items as $item) {
                     $sku = isset($item['sku']) ? (string)$item['sku'] : '';
@@ -169,17 +172,30 @@ class Sepay implements HttpPostActionInterface, CsrfAwareActionInterface
                     }
 
                     try {
-                        // 1. Get current stock
+                        // 1. Get product info
+                        $product = $this->productRepository->get($sku);
+                        $productId = (int)$product->getId();
+                        $sellerIdAttr = $product->getCustomAttribute('tmdt_seller_id');
+                        $sellerId = $sellerIdAttr ? (string)$sellerIdAttr->getValue() : '';
+
+                        if (!empty($sellerId) && $sellerId !== 'NONE') {
+                            $unitPrice = isset($item['unitPrice']) ? (float)$item['unitPrice'] : (float)$product->getPrice();
+                            $rowTotal = $qtySold * $unitPrice;
+                            $sellerRevenues[$sellerId] = ($sellerRevenues[$sellerId] ?? 0.0) + $rowTotal;
+                            $sellerItems[$sellerId][] = ($product->getName() ?: $sku) . ' (x' . $qtySold . ')';
+                        }
+
+                        // 2. Get current stock
                         $stockItem = $this->stockRegistry->getStockItemBySku($sku);
                         $qtyBefore = (float)$stockItem->getQty();
                         $qtyAfter = max(0.0, $qtyBefore - $qtySold);
 
-                        // 2. Update stock level
+                        // 3. Update stock level
                         $stockItem->setQty($qtyAfter);
                         $stockItem->setIsInStock($qtyAfter > 0);
                         $this->stockRegistry->updateStockItemBySku($sku, $stockItem);
 
-                        // 3. Record log in tmdt_inventory_log
+                        // 4. Record log in tmdt_inventory_log
                         $connection->insert(
                             $connection->getTableName('tmdt_inventory_log'),
                             [
@@ -192,11 +208,8 @@ class Sepay implements HttpPostActionInterface, CsrfAwareActionInterface
                             ]
                         );
 
-                        // 4. Reindex and flush cache for product
+                        // 5. Reindex and flush cache for product
                         try {
-                            $product = $this->productRepository->get($sku);
-                            $productId = (int)$product->getId();
-                            
                             $indexers = [
                                 'catalog_category_product',
                                 'catalog_product_category',
@@ -220,13 +233,10 @@ class Sepay implements HttpPostActionInterface, CsrfAwareActionInterface
                             $this->logger->warning('[SePay Webhook] Failed to reindex/flush cache for SKU: ' . $sku);
                         }
 
-                        // 5. Check if out of stock, send alert to seller
+                        // 6. Check if out of stock, send alert to seller
                         if ($qtyAfter <= 0) {
-                            try {
-                                $product = $this->productRepository->get($sku);
-                                $sellerIdAttr = $product->getCustomAttribute('tmdt_seller_id');
-                                $sellerId = $sellerIdAttr ? (string)$sellerIdAttr->getValue() : '';
-                                if (!empty($sellerId) && $sellerId !== 'NONE') {
+                            if (!empty($sellerId) && $sellerId !== 'NONE') {
+                                try {
                                     $connection->insert(
                                         $connection->getTableName('tmdt_seller_notifications'),
                                         [
@@ -238,15 +248,51 @@ class Sepay implements HttpPostActionInterface, CsrfAwareActionInterface
                                         ]
                                     );
                                     $this->logger->info('[SePay Webhook] Out of stock warning created for seller: ' . $sellerId . ' SKU: ' . $sku);
+                                } catch (\Exception $e) {
+                                    $this->logger->error('[SePay Webhook] Failed to create out of stock warning: ' . $e->getMessage());
                                 }
-                            } catch (\Exception $e) {
-                                $this->logger->error('[SePay Webhook] Failed to create out of stock warning: ' . $e->getMessage());
                             }
                         }
 
                     } catch (\Exception $e) {
                         $this->logger->error('[SePay Webhook] Failed to adjust stock for SKU: ' . $sku . ' error: ' . $e->getMessage());
                     }
+                }
+            }
+
+            // Create seller notifications and write revenue transactions
+            foreach ($sellerRevenues as $sellerId => $amount) {
+                try {
+                    $itemsList = implode(', ', $sellerItems[$sellerId]);
+                    $formattedAmount = number_format($amount, 0, ',', '.') . 'đ';
+                    
+                    // Insert order notification
+                    $connection->insert(
+                        $connection->getTableName('tmdt_seller_notifications'),
+                        [
+                            'seller_id' => $sellerId,
+                            'sku'       => $orderCode,
+                            'message'   => "Bạn có đơn hàng mới {$orderCode}. Sản phẩm: {$itemsList}. Tổng doanh thu: {$formattedAmount}.",
+                            'is_read'   => 0,
+                            'created_at'=> date('Y-m-d H:i:s')
+                        ]
+                    );
+
+                    // Insert revenue transaction
+                    $connection->insert(
+                        $connection->getTableName('tmdt_transactions'),
+                        [
+                            'order_code'     => $orderCode,
+                            'transaction_id' => $transactionId,
+                            'amount'         => $amount,
+                            'seller_id'      => $sellerId,
+                            'created_at'     => date('Y-m-d H:i:s')
+                        ]
+                    );
+
+                    $this->logger->info("[SePay Webhook] Logged new order notification and revenue transaction for seller: {$sellerId}, amount: {$amount}");
+                } catch (\Exception $e) {
+                    $this->logger->error('[SePay Webhook] Failed to create seller order notification / transaction: ' . $e->getMessage());
                 }
             }
 

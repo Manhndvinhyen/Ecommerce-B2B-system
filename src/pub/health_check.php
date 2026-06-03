@@ -4,6 +4,38 @@
  * See COPYING.txt for license details.
  */
 
+if (isset($_GET['url']) && (
+    strpos($_GET['url'], 'https://vnexpress.net/') === 0 || 
+    strpos($_GET['url'], 'https://nongnghiep.vn/') === 0 ||
+    strpos($_GET['url'], 'https://nongnghiepmoitruong.vn/') === 0
+)) {
+    header("Access-Control-Allow-Origin: *");
+    header("Access-Control-Allow-Methods: GET");
+    header("Content-Type: application/xml; charset=utf-8");
+
+    $url = $_GET['url'];
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+
+    $output = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($http_code !== 200) {
+        http_response_code($http_code !== 0 ? $http_code : 500);
+        echo "Failed to fetch remote XML RSS feed.";
+        exit;
+    }
+
+    echo $output;
+    exit;
+}
+
 /**
  * phpcs:disable PSR1.Files.SideEffects
  * phpcs:disable Squiz.Functions.GlobalFunction

@@ -1,6 +1,161 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Calendar, Clock, FileText, MapPin, PackageCheck, Phone, ShoppingBag, User } from 'lucide-react';
+import { useEffect, useMemo, useState, useRef } from 'react';
+import { Calendar, Clock, FileText, MapPin, PackageCheck, Phone, ShoppingBag, User, Wind, Thermometer, AlertTriangle, Truck } from 'lucide-react';
 import { toCurrencyTextFromNumber, useCart } from '../cart/CartProvider';
+
+declare global {
+  interface Window {
+    google?: any;
+    L?: any;
+  }
+}
+
+// Warehouse coordinates definition for routing from closest location
+const warehouses = [
+  { name: 'Kho Bắc Giang', lat: 21.2730, lon: 106.1946 },
+  { name: 'Kho Bình Dương', lat: 10.9805, lon: 106.6517 }
+];
+
+// Distance calculator (Haversine formula in km)
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Earth radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+    Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLon / 2) *
+    Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 10) / 10;
+}
+
+// Find closest warehouse location dynamically
+function findNearestWarehouse(lat: number, lon: number) {
+  let nearest = warehouses[0];
+  let minDistance = calculateDistance(lat, lon, nearest.lat, nearest.lon);
+
+  for (let i = 1; i < warehouses.length; i++) {
+    const dist = calculateDistance(lat, lon, warehouses[i].lat, warehouses[i].lon);
+    if (dist < minDistance) {
+      minDistance = dist;
+      nearest = warehouses[i];
+    }
+  }
+
+  return { warehouse: nearest, distance: minDistance };
+}
+
+// Format duration to human readable format (e.g. 1 giờ 52 phút)
+function formatDuration(minutes: number): string {
+  if (minutes < 60) return `${minutes} phút`;
+  const hrs = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return mins > 0 ? `${hrs} giờ ${mins} phút` : `${hrs} giờ`;
+}
+
+interface WeatherEstimation {
+  lat: number;
+  lng: number;
+  cityName: string;
+  temperature: number;
+  humidity: number;
+  condition: string;
+  conditionVi: string;
+  conditionEmoji: string;
+  windSpeed: number;
+  distanceKm: number;
+  warehouseName: string;
+  baseDurationMinutes: number;
+  finalDurationMinutes: number;
+  weatherFactor: number;
+  surcharge: number;
+  temperatureNotice: string;
+  windNotice: string;
+  weatherNotice: string;
+}
+
+// Map WMO Code to exact weather factor and translations
+const mapWmoToCondition = (code: number, windSpeed: number) => {
+  if (windSpeed > 40) {
+    return {
+      condition: 'Storm',
+      conditionVi: 'Bão / Gió giật',
+      emoji: '🌪️',
+      factor: 3.0,
+      notice: '⚠️ Thời tiết bão nguy hiểm, đơn hàng có thể giao chậm trễ đáng kể.'
+    };
+  }
+
+  // Clear
+  if (code === 0) {
+    return {
+      condition: 'Clear',
+      conditionVi: 'Trời đẹp',
+      emoji: '☀️',
+      factor: 1.0,
+      notice: ''
+    };
+  }
+  // Clouds
+  if ([1, 2, 3].includes(code)) {
+    return {
+      condition: 'Clouds',
+      conditionVi: 'Nhiều mây',
+      emoji: '⛅',
+      factor: 1.0,
+      notice: ''
+    };
+  }
+  // Drizzle / Light Rain
+  if ([45, 48, 51, 53, 55, 56, 57].includes(code)) {
+    return {
+      condition: 'Drizzle',
+      conditionVi: 'Mưa nhẹ',
+      emoji: '🌧️',
+      factor: 1.2,
+      notice: '⚠️ Có mưa phùn nhẹ, thời gian giao hàng có thể chậm 5-10 phút.'
+    };
+  }
+  // Rain
+  if ([61, 80].includes(code)) {
+    return {
+      condition: 'Rain',
+      conditionVi: 'Mưa vừa',
+      emoji: '🌧️',
+      factor: 1.5,
+      notice: '⚠️ Do thời tiết mưa, đơn hàng có thể giao chậm hơn bình thường.'
+    };
+  }
+  // Heavy Rain / Thunderstorm
+  if ([63, 65, 81, 82, 95, 96, 99].includes(code)) {
+    return {
+      condition: 'Heavy Rain',
+      conditionVi: 'Mưa lớn / Dông',
+      emoji: '⛈️',
+      factor: 2.0,
+      notice: '⚠️ Mưa lớn dữ dội, thời gian giao hàng có thể kéo dài gấp đôi.'
+    };
+  }
+  // Snow
+  if ([71, 73, 75, 77, 85, 86].includes(code)) {
+    return {
+      condition: 'Snow',
+      conditionVi: 'Tuyết rơi',
+      emoji: '❄️',
+      factor: 2.0,
+      notice: '⚠️ Tuyết rơi dày ảnh hưởng đến giao hàng.'
+    };
+  }
+
+  return {
+    condition: 'Clear',
+    conditionVi: 'Trời đẹp',
+    emoji: '☀️',
+    factor: 1.0,
+    notice: ''
+  };
+};
 
 const reactHomePath = '/react/index.html';
 const checkoutPayloadKey = 'freso_checkout_payload';
@@ -207,51 +362,109 @@ export function CheckoutPage() {
   const [toastMessage, setToastMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Weather and ETA estimation states
+  const [estimation, setEstimation] = useState<WeatherEstimation | null>(null);
+  const [estLoading, setEstLoading] = useState<boolean>(false);
+
+  // SOTA Leaflet Map states and refs
+  const [leafletLoaded, setLeafletLoaded] = useState<boolean>(false);
+  const [mapGpsLoading, setMapGpsLoading] = useState<boolean>(false);
+  const [initialCoordinates, setInitialCoordinates] = useState<{ lat: number; lng: number } | null>(null);
+  const [mapSearchQuery, setMapSearchQuery] = useState<string>('');
+
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<any>(null);
+  const markerRef = useRef<any>(null);
+  const circleRef = useRef<any>(null);
+
   const subtotal = useMemo(
     () => checkoutItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
     [checkoutItems]
   );
   const shippingFee = 0;
   const shippingDiscount = 0;
-  const totalAmount = subtotal + shippingFee - shippingDiscount;
+  const weatherSurcharge = estimation ? estimation.surcharge : 0;
+  const totalAmount = subtotal + shippingFee - shippingDiscount + weatherSurcharge;
+
+  // Immediately get initial location on mount to center the map on the user's actual GPS location
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setInitialCoordinates({ lat: 21.036, lng: 105.782 });
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const coords = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        };
+        setInitialCoordinates(coords);
+
+        // Reverse geocode to update address field immediately on load!
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${coords.lat}&lon=${coords.lng}&accept-language=vi`,
+            { headers: { 'User-Agent': 'FresoWeatherEstimation/1.0' } }
+          );
+          if (res.ok) {
+            const data = await res.json();
+            if (data.display_name) {
+              const parts = data.display_name.split(',');
+              const cleanAddr = parts.slice(0, 4).map((p: string) => p.trim()).join(', ');
+              setShippingInfo((prev) => ({ ...prev, address: cleanAddr }));
+              setMapSearchQuery(cleanAddr);
+            }
+          }
+        } catch (err) {
+          console.error('Initial GPS reverse geocode error:', err);
+        }
+      },
+      (error) => {
+        console.warn('Geolocation denied or failed on load, falling back to Hanoi:', error);
+        setInitialCoordinates({ lat: 21.036, lng: 105.782 });
+      },
+      { timeout: 8000, enableHighAccuracy: true }
+    );
+  }, []);
 
   useEffect(() => {
     let isCancelled = false;
 
     const loadCheckoutItems = async () => {
-    const storedPayload = readCheckoutPayload();
-    if (storedPayload) {
+      const storedPayload = readCheckoutPayload();
+      if (storedPayload) {
+        if (isCancelled) return;
+        setCheckoutItems(storedPayload.items);
+        setSupplierOptions(storedPayload.suppliers);
+        setSupplier(storedPayload.supplier || storedPayload.suppliers[0] || '');
+        setIsReady(true);
+        return;
+      }
+
+      const selected = cartItems.filter((item) => item.selected).map((item) => ({
+        id: item.id,
+        sku: item.sku,
+        name: item.name,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        unit: item.unit,
+        image: item.image,
+        category: item.category
+      }));
+
+      const fallbackPayload = selected.length > 0 ? buildCheckoutPayload(selected) : await fetchCustomerCartPayload();
       if (isCancelled) return;
-      setCheckoutItems(storedPayload.items);
-      setSupplierOptions(storedPayload.suppliers);
-      setSupplier(storedPayload.supplier || storedPayload.suppliers[0] || '');
+
+      if (fallbackPayload) {
+        const serializedPayload = JSON.stringify(fallbackPayload);
+        window.sessionStorage.setItem(checkoutPayloadKey, serializedPayload);
+        window.localStorage.setItem(checkoutPayloadKey, serializedPayload);
+        setCheckoutItems(fallbackPayload.items);
+        setSupplierOptions(fallbackPayload.suppliers);
+        setSupplier(fallbackPayload.supplier || fallbackPayload.suppliers[0] || '');
+      }
       setIsReady(true);
-      return;
-    }
-
-    const selected = cartItems.filter((item) => item.selected).map((item) => ({
-      id: item.id,
-      sku: item.sku,
-      name: item.name,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      unit: item.unit,
-      image: item.image,
-      category: item.category
-    }));
-
-    const fallbackPayload = selected.length > 0 ? buildCheckoutPayload(selected) : await fetchCustomerCartPayload();
-    if (isCancelled) return;
-
-    if (fallbackPayload) {
-      const serializedPayload = JSON.stringify(fallbackPayload);
-      window.sessionStorage.setItem(checkoutPayloadKey, serializedPayload);
-      window.localStorage.setItem(checkoutPayloadKey, serializedPayload);
-      setCheckoutItems(fallbackPayload.items);
-      setSupplierOptions(fallbackPayload.suppliers);
-      setSupplier(fallbackPayload.supplier || fallbackPayload.suppliers[0] || '');
-    }
-    setIsReady(true);
     };
 
     loadCheckoutItems();
@@ -279,6 +492,368 @@ export function CheckoutPage() {
       window.location.href = `${reactHomePath}?view=cart`;
     }
   }, [checkoutItems, isReady]);
+
+  // Debounced effect for shipping address and branch selection changes
+  useEffect(() => {
+    const cleanAddress = shippingInfo.address.trim();
+    if (cleanAddress.length < 5) {
+      setEstimation(null);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      calculateWeatherAndEta(cleanAddress, shippingInfo.branch);
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [shippingInfo.address, shippingInfo.branch]);
+
+  const calculateWeatherAndEta = async (address: string, branch: string) => {
+    setEstLoading(true);
+    try {
+      const queryAddress = `${address}, ${branch}`.trim();
+      let lat = 21.036; // Default to Cau Giay, Hanoi
+      let lng = 105.782;
+      let cityName = 'Hà Nội';
+
+      // Call Nominatim Geocoding API to resolve coordinates
+      try {
+        const geoRes = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(queryAddress)}&format=json&limit=1`,
+          { headers: { 'User-Agent': 'FresoWeatherEstimation/1.0' } }
+        );
+        if (geoRes.ok) {
+          const geoData = await geoRes.json();
+          if (geoData && geoData.length > 0) {
+            lat = parseFloat(geoData[0].lat);
+            lng = parseFloat(geoData[0].lon);
+            cityName = geoData[0].display_name.split(',')[0] || 'Vị trí nhận hàng';
+          } else {
+            // Fallback: search for just the branch/region name
+            const fallbackRes = await fetch(
+              `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(branch)}&format=json&limit=1`,
+              { headers: { 'User-Agent': 'FresoWeatherEstimation/1.0' } }
+            );
+            if (fallbackRes.ok) {
+              const fallbackData = await fallbackRes.json();
+              if (fallbackData && fallbackData.length > 0) {
+                lat = parseFloat(fallbackData[0].lat);
+                lng = parseFloat(fallbackData[0].lon);
+                cityName = branch;
+              }
+            }
+          }
+        }
+      } catch (geoErr) {
+        console.warn('Geocoding failed, using fallbacks', geoErr);
+      }
+
+      // Determine the nearest warehouse dynamically by comparing distances to all options
+      const { warehouse, distance } = findNearestWarehouse(lat, lng);
+
+      // Fetch Weather Data from Open-Meteo
+      const weatherRes = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m`
+      );
+      if (!weatherRes.ok) {
+        throw new Error('Không thể tải dữ liệu thời tiết.');
+      }
+      const weatherData = await weatherRes.json();
+      const temperature = Math.round(weatherData.current.temperature_2m);
+      const humidity = Math.round(weatherData.current.relative_humidity_2m);
+      const weatherCode = weatherData.current.weather_code;
+      const windSpeed = Math.round(weatherData.current.wind_speed_10m);
+
+      // Map WMO Code and wind speed to factor and labels
+      const weatherDetails = mapWmoToCondition(weatherCode, windSpeed);
+
+      // Calculate ETA: base minutes is rounded distance * 1.5 + 12
+      const baseDurationMinutes = Math.round(distance * 1.5) + 12;
+      const finalDurationMinutes = Math.round(baseDurationMinutes * weatherDetails.factor);
+
+      // Temperature rules
+      let surcharge = 0;
+      let temperatureNotice = '';
+      if (temperature > 38) {
+        surcharge = 10000;
+        temperatureNotice = '⚠️ Nắng nóng gay gắt. Một số mặt hàng dễ hư hỏng có thể bị hạn chế giao xa. Sản phẩm sẽ được ưu tiên vận chuyển bằng xe lạnh.';
+      } else if (temperature > 35) {
+        surcharge = 10000;
+        temperatureNotice = '⚠️ Nhiệt độ cao. Sản phẩm sẽ được ưu tiên vận chuyển bằng xe lạnh.';
+      }
+
+      // Wind rules
+      let windNotice = '';
+      if (windSpeed > 40) {
+        windNotice = '⚠️ Gió mạnh. Thời gian giao hàng có thể kéo dài.';
+      }
+
+      setEstimation({
+        lat,
+        lng,
+        cityName,
+        temperature,
+        humidity,
+        condition: weatherDetails.condition,
+        conditionVi: weatherDetails.conditionVi,
+        conditionEmoji: weatherDetails.emoji,
+        windSpeed,
+        distanceKm: distance,
+        warehouseName: warehouse.name,
+        baseDurationMinutes,
+        finalDurationMinutes,
+        weatherFactor: weatherDetails.factor,
+        surcharge,
+        temperatureNotice,
+        windNotice,
+        weatherNotice: weatherDetails.notice
+      });
+
+    } catch (err) {
+      console.error('Weather estimation error:', err);
+    } finally {
+      setEstLoading(false);
+    }
+  };
+
+  // Dynamically load Leaflet assets on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.L) {
+      setLeafletLoaded(true);
+      return;
+    }
+
+    const existingCss = document.getElementById('leaflet-css');
+    if (!existingCss) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      link.id = 'leaflet-css';
+      document.head.appendChild(link);
+    }
+
+    const existingScript = document.getElementById('leaflet-js');
+    if (existingScript) {
+      existingScript.addEventListener('load', () => setLeafletLoaded(true));
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.id = 'leaflet-js';
+    script.async = true;
+    script.onload = () => {
+      setLeafletLoaded(true);
+    };
+    script.onerror = () => {
+      console.error('Failed to load Leaflet script');
+    };
+    document.body.appendChild(script);
+  }, []);
+
+  // Initialize Map when Leaflet is loaded, container is ready, and initial coordinates are resolved
+  useEffect(() => {
+    if (!leafletLoaded || !mapContainerRef.current || mapRef.current || !isReady || !initialCoordinates) return;
+
+    const startLat = initialCoordinates.lat;
+    const startLng = initialCoordinates.lng;
+
+    // Initialize map centered at start location
+    const map = window.L.map(mapContainerRef.current, {
+      center: [startLat, startLng],
+      zoom: 14,
+      zoomControl: false
+    });
+
+    window.L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    }).addTo(map);
+
+    window.L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    const myCustomIcon = window.L.divIcon({
+      html: `<div style="
+        width: 16px;
+        height: 16px;
+        background-color: #0d3b66;
+        border: 3px solid #ffffff;
+        border-radius: 50%;
+        box-shadow: 0 0 6px rgba(0,0,0,0.45);
+      "></div>`,
+      className: 'custom-circle-marker',
+      iconSize: [16, 16],
+      iconAnchor: [8, 8]
+    });
+
+    const marker = window.L.marker([startLat, startLng], {
+      draggable: true,
+      icon: myCustomIcon
+    }).addTo(map);
+
+    const circle = window.L.circle([startLat, startLng], {
+      radius: 120,
+      color: '#0d3b66',
+      fillColor: '#3b82f6',
+      fillOpacity: 0.12,
+      weight: 1.5
+    }).addTo(map);
+
+    mapRef.current = map;
+    markerRef.current = marker;
+    circleRef.current = circle;
+
+    const handleLocationSelect = async (lat: number, lng: number) => {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=vi`,
+          { headers: { 'User-Agent': 'FresoWeatherEstimation/1.0' } }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data.display_name) {
+            const parts = data.display_name.split(',');
+            const cleanAddr = parts.slice(0, 4).map((p: string) => p.trim()).join(', ');
+            setShippingInfo((prev) => ({ ...prev, address: cleanAddr }));
+            setMapSearchQuery(cleanAddr);
+          }
+        }
+      } catch (err) {
+        console.error('Reverse geocoding error:', err);
+      }
+    };
+
+    map.on('click', (e: any) => {
+      const { lat, lng } = e.latlng;
+      marker.setLatLng([lat, lng]);
+      circle.setLatLng([lat, lng]);
+      map.panTo([lat, lng]);
+      handleLocationSelect(lat, lng);
+    });
+
+    marker.on('drag', (e: any) => {
+      const latlng = e.target.getLatLng();
+      circle.setLatLng(latlng);
+    });
+
+    marker.on('dragend', () => {
+      const { lat, lng } = marker.getLatLng();
+      map.panTo([lat, lng]);
+      handleLocationSelect(lat, lng);
+    });
+
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+        markerRef.current = null;
+        circleRef.current = null;
+      }
+    };
+  }, [leafletLoaded, isReady, initialCoordinates]);
+
+  // Synchronize map center and marker when estimation changes (text address geocoded)
+  useEffect(() => {
+    if (!mapRef.current || !estimation || !leafletLoaded) return;
+    const { lat, lng } = estimation;
+
+    const center = mapRef.current.getCenter();
+    const diffLat = Math.abs(center.lat - lat);
+    const diffLng = Math.abs(center.lng - lng);
+    // Pan only if coordinates have moved significantly to avoid fight with dragging marker
+    if (diffLat > 0.001 || diffLng > 0.001) {
+      mapRef.current.setView([lat, lng], 14);
+      if (markerRef.current) {
+        markerRef.current.setLatLng([lat, lng]);
+      }
+      if (circleRef.current) {
+        circleRef.current.setLatLng([lat, lng]);
+      }
+    }
+  }, [estimation?.lat, estimation?.lng, leafletLoaded]);
+
+  const handleMapSearch = async () => {
+    if (!mapSearchQuery.trim()) return;
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(mapSearchQuery)}&format=json&limit=1`,
+        { headers: { 'User-Agent': 'FresoWeatherEstimation/1.0' } }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.length > 0) {
+          const lat = parseFloat(data[0].lat);
+          const lng = parseFloat(data[0].lon);
+
+          if (mapRef.current) {
+            mapRef.current.setView([lat, lng], 15);
+          }
+          if (markerRef.current) {
+            markerRef.current.setLatLng([lat, lng]);
+          }
+          if (circleRef.current) {
+            circleRef.current.setLatLng([lat, lng]);
+          }
+
+          const cleanAddr = data[0].display_name.split(',').slice(0, 4).map((p: string) => p.trim()).join(', ');
+          setShippingInfo((prev) => ({ ...prev, address: cleanAddr }));
+          setMapSearchQuery(cleanAddr);
+        } else {
+          alert('Không tìm thấy địa chỉ này trên bản đồ.');
+        }
+      }
+    } catch (err) {
+      console.error('Map search error:', err);
+    }
+  };
+
+  const handleGpsMapLocate = () => {
+    if (!navigator.geolocation) {
+      alert('Trình duyệt của bạn không hỗ trợ định vị GPS.');
+      return;
+    }
+
+    setMapGpsLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+
+        if (mapRef.current && markerRef.current) {
+          mapRef.current.setView([lat, lng], 15);
+          markerRef.current.setLatLng([lat, lng]);
+          if (circleRef.current) {
+            circleRef.current.setLatLng([lat, lng]);
+          }
+        }
+
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=vi`,
+            { headers: { 'User-Agent': 'FresoWeatherEstimation/1.0' } }
+          );
+          if (res.ok) {
+            const data = await res.json();
+            if (data.display_name) {
+              const parts = data.display_name.split(',');
+              const cleanAddr = parts.slice(0, 4).map((p: string) => p.trim()).join(', ');
+              setShippingInfo((prev) => ({ ...prev, address: cleanAddr }));
+              setMapSearchQuery(cleanAddr);
+            }
+          }
+        } catch (err) {
+          console.error('GPS reverse geocode error:', err);
+        } finally {
+          setMapGpsLoading(false);
+        }
+      },
+      (err) => {
+        console.warn('GPS location retrieval failed', err);
+        alert('Không thể truy cập vị trí thiết bị. Vui lòng cấp quyền trong cài đặt trình duyệt.');
+        setMapGpsLoading(false);
+      },
+      { timeout: 8000, enableHighAccuracy: true }
+    );
+  };
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -477,9 +1052,8 @@ export function CheckoutPage() {
                       setDeliveryDate(event.target.value);
                       setErrors((prev) => ({ ...prev, deliveryDate: event.target.value ? '' : 'Vui lòng chọn ngày giao.' }));
                     }}
-                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${
-                      errors.deliveryDate ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
-                    }`}
+                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${errors.deliveryDate ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
+                      }`}
                   />
                   {errors.deliveryDate && <p className="mt-1 text-xs text-red-500">{errors.deliveryDate}</p>}
                 </div>
@@ -493,9 +1067,8 @@ export function CheckoutPage() {
                         setDeliveryTime(event.target.value);
                         setErrors((prev) => ({ ...prev, deliveryTime: event.target.value ? '' : 'Vui lòng chọn khung giờ giao.' }));
                       }}
-                      className={`w-full rounded-xl border bg-white py-2 pl-9 pr-3 text-sm outline-none transition-colors ${
-                        errors.deliveryTime ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
-                      }`}
+                      className={`w-full rounded-xl border bg-white py-2 pl-9 pr-3 text-sm outline-none transition-colors ${errors.deliveryTime ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
+                        }`}
                     >
                       <option value="">Chọn khung giờ giao</option>
                       {deliveryTimeOptions.map((option) => (
@@ -536,12 +1109,149 @@ export function CheckoutPage() {
                     value={shippingInfo.address}
                     onChange={(event) => updateShippingField('address', event.target.value)}
                     placeholder="Số nhà, đường, phường/xã"
-                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${
-                      errors.address ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
-                    }`}
+                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${errors.address ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
+                      }`}
                   />
                   {errors.shipping_address && <p className="mt-1 text-xs text-red-500">{errors.shipping_address}</p>}
                 </div>
+
+                {/* SOTA Map Viewport and location selector */}
+                <div className="md:col-span-2 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-bold text-gray-700 flex items-center gap-1.5">
+                      <MapPin className="size-4 text-green-600 animate-bounce" />
+                      Bản đồ định vị địa điểm nhận hàng
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleGpsMapLocate}
+                      disabled={mapGpsLoading}
+                      className="px-3.5 py-1.5 bg-green-50 border border-green-200 text-green-700 text-xs font-bold rounded-full hover:bg-green-100 transition-all flex items-center gap-1 disabled:opacity-50 shadow-xs"
+                    >
+                      <MapPin className="size-3" />
+                      {mapGpsLoading ? 'Đang định vị...' : 'Sử dụng vị trí hiện tại'}
+                    </button>
+                  </div>
+                  <div className="relative w-full h-[260px] rounded-2xl border border-gray-200 overflow-hidden shadow-xs hover:shadow-md transition-shadow group">
+                    <div ref={mapContainerRef} className="w-full h-full z-10" />
+
+                    {/* Floating Search Bar */}
+                    <div className="absolute top-3 left-3 right-3 z-20 flex items-center bg-white rounded-full shadow-md border border-gray-150 px-3 py-1.5 gap-2 max-w-md">
+                      <MapPin className="size-4 text-gray-400 shrink-0 ml-1" />
+                      <input
+                        type="text"
+                        value={mapSearchQuery}
+                        onChange={(e) => setMapSearchQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleMapSearch();
+                          }
+                        }}
+                        placeholder="Nhập địa chỉ cụ thể hoặc click chọn trên bản đồ..."
+                        className="flex-1 bg-transparent text-xs outline-none text-gray-800 placeholder-gray-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleMapSearch}
+                        className="px-4 py-1.5 bg-[#0d3b66] text-white text-xs font-bold rounded-full hover:bg-[#154675] transition-colors shrink-0"
+                      >
+                        Tìm kiếm
+                      </button>
+                    </div>
+
+                    {/* Floating Overlay Instruction */}
+                    <div className="absolute bottom-3.5 left-3.5 z-20 bg-white/95 backdrop-blur-xs px-3 py-1.5 rounded-full shadow-xs border border-gray-150 text-[10px] sm:text-xs font-bold text-gray-700 flex items-center gap-1.5 pointer-events-none select-none">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                      </span>
+                      Nhấp bản đồ hoặc kéo thả ghim để chọn vị trí giao
+                    </div>
+                  </div>
+                </div>
+
+                {/* Weather & ETA estimation display */}
+                {estLoading && (
+                  <div className="md:col-span-2 py-4 px-5 bg-gray-50 border border-gray-100 rounded-2xl animate-pulse text-xs text-gray-500 flex items-center gap-2.5">
+                    <Clock className="size-4 animate-spin text-green-600" />
+                    Đang tính toán khoảng cách và thời tiết khu vực giao hàng...
+                  </div>
+                )}
+
+                {(!estLoading && estimation) && (
+                  <div className="md:col-span-2 p-5 bg-gradient-to-br from-green-50/50 to-emerald-50/40 border border-green-100 rounded-2xl space-y-3.5">
+                    <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                      <div className="flex items-center gap-2 font-semibold text-gray-900">
+                        <MapPin className="size-4 text-green-600" />
+                        📍 Vị trí nhận: <span className="text-green-700">{estimation.cityName}</span>
+                      </div>
+
+                      <div className="flex items-center gap-4 text-xs font-semibold text-gray-600 bg-white px-3 py-1.5 rounded-full shadow-xs border border-green-100/50">
+                        <span className="flex items-center gap-1">
+                          {estimation.conditionEmoji} {estimation.conditionVi}
+                        </span>
+                        <span className="h-3 w-px bg-gray-200" />
+                        <span>
+                          <Thermometer className="size-3.5 inline mr-0.5 text-orange-500" /> {estimation.temperature}°C
+                        </span>
+                        <span className="h-3 w-px bg-gray-200" />
+                        <span>
+                          💧 Độ ẩm {estimation.humidity}%
+                        </span>
+                        <span className="h-3 w-px bg-gray-200" />
+                        <span>
+                          <Wind className="size-3.5 inline mr-0.5 text-sky-500" /> {estimation.windSpeed} km/h
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-dashed border-green-200/50 pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <div className="text-xs text-gray-500 font-medium">Tuyến vận chuyển hàng:</div>
+                        <div className="text-sm font-bold text-gray-900">
+                          {estimation.warehouseName} → Khách hàng ({estimation.distanceKm} km)
+                        </div>
+                      </div>
+
+                      <div className="text-left sm:text-right">
+                        <div className="text-xs text-gray-500 font-medium">Thời gian giao dự kiến (ETA):</div>
+                        <div className="text-base font-extrabold text-green-700 flex items-center sm:justify-end gap-1.5">
+                          <Truck className="size-5" />
+                          {formatDuration(estimation.finalDurationMinutes)}
+                          {estimation.weatherFactor > 1.0 && (
+                            <span className="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-full ml-1 whitespace-nowrap">
+                              x{estimation.weatherFactor} thời tiết
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Notices and Alerts */}
+                    {(estimation.weatherNotice || estimation.temperatureNotice || estimation.windNotice) && (
+                      <div className="border-t border-green-100/50 pt-3 space-y-2 text-xs font-semibold text-rose-800">
+                        {estimation.weatherNotice && (
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="size-3.5 shrink-0 text-rose-600 mt-0.5" />
+                            <span>{estimation.weatherNotice}</span>
+                          </div>
+                        )}
+                        {estimation.temperatureNotice && (
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="size-3.5 shrink-0 text-amber-600 mt-0.5" />
+                            <span>{estimation.temperatureNotice}</span>
+                          </div>
+                        )}
+                        {estimation.windNotice && (
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="size-3.5 shrink-0 text-sky-600 mt-0.5" />
+                            <span>{estimation.windNotice}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div>
                   <label className="text-sm font-medium text-gray-700">Tên người nhận</label>
                   <div className="relative mt-2">
@@ -549,9 +1259,8 @@ export function CheckoutPage() {
                     <input
                       value={shippingInfo.receiver}
                       onChange={(event) => updateShippingField('receiver', event.target.value)}
-                      className={`w-full rounded-xl border py-2 pl-9 pr-3 text-sm outline-none transition-colors ${
-                        errors.receiver ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
-                      }`}
+                      className={`w-full rounded-xl border py-2 pl-9 pr-3 text-sm outline-none transition-colors ${errors.receiver ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
+                        }`}
                     />
                   </div>
                   {errors.shipping_receiver && <p className="mt-1 text-xs text-red-500">{errors.shipping_receiver}</p>}
@@ -564,9 +1273,8 @@ export function CheckoutPage() {
                       value={shippingInfo.phone}
                       onChange={(event) => updateShippingField('phone', event.target.value)}
                       placeholder="VD: 090x xxx xxx"
-                      className={`w-full rounded-xl border py-2 pl-9 pr-3 text-sm outline-none transition-colors ${
-                        errors.phone ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
-                      }`}
+                      className={`w-full rounded-xl border py-2 pl-9 pr-3 text-sm outline-none transition-colors ${errors.phone ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
+                        }`}
                     />
                   </div>
                   {errors.shipping_phone && <p className="mt-1 text-xs text-red-500">{errors.shipping_phone}</p>}
@@ -613,9 +1321,8 @@ export function CheckoutPage() {
                     value={invoiceInfo.companyName}
                     onChange={(event) => updateInvoiceField('companyName', event.target.value)}
                     disabled={!invoiceEditable}
-                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${
-                      errors.invoice_companyName ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
-                    }`}
+                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${errors.invoice_companyName ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
+                      }`}
                   />
                   {errors.invoice_companyName && (
                     <p className="mt-1 text-xs text-red-500">{errors.invoice_companyName}</p>
@@ -627,9 +1334,8 @@ export function CheckoutPage() {
                     value={invoiceInfo.taxCode}
                     onChange={(event) => updateInvoiceField('taxCode', event.target.value)}
                     disabled={!invoiceEditable}
-                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${
-                      errors.invoice_taxCode ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
-                    }`}
+                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${errors.invoice_taxCode ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
+                      }`}
                   />
                   {errors.invoice_taxCode && <p className="mt-1 text-xs text-red-500">{errors.invoice_taxCode}</p>}
                 </div>
@@ -639,9 +1345,8 @@ export function CheckoutPage() {
                     value={invoiceInfo.address}
                     onChange={(event) => updateInvoiceField('address', event.target.value)}
                     disabled={!invoiceEditable}
-                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${
-                      errors.invoice_address ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
-                    }`}
+                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${errors.invoice_address ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
+                      }`}
                   />
                   {errors.invoice_address && <p className="mt-1 text-xs text-red-500">{errors.invoice_address}</p>}
                 </div>
@@ -651,9 +1356,8 @@ export function CheckoutPage() {
                     value={invoiceInfo.email}
                     onChange={(event) => updateInvoiceField('email', event.target.value)}
                     disabled={!invoiceEditable}
-                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${
-                      errors.invoice_email ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
-                    }`}
+                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${errors.invoice_email ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
+                      }`}
                   />
                   {errors.invoice_email && <p className="mt-1 text-xs text-red-500">{errors.invoice_email}</p>}
                 </div>
@@ -681,6 +1385,15 @@ export function CheckoutPage() {
                   <span>Giảm giá vận chuyển</span>
                   <span>- {toCurrencyTextFromNumber(shippingDiscount)}</span>
                 </div>
+                {weatherSurcharge > 0 && (
+                  <div className="flex items-center justify-between text-amber-700 font-semibold bg-amber-50/60 px-3 py-2 rounded-xl border border-amber-100">
+                    <span className="flex items-center gap-1.5 text-xs">
+                      <Thermometer className="size-4 text-amber-600" />
+                      Phụ phí xe lạnh (Nắng nóng &gt;35°C)
+                    </span>
+                    <span className="text-xs">+ {toCurrencyTextFromNumber(weatherSurcharge)}</span>
+                  </div>
+                )}
                 <div className="border-t border-dashed border-gray-200 pt-3 text-base font-semibold text-gray-900">
                   <div className="flex items-center justify-between">
                     <span>Tổng thanh toán</span>

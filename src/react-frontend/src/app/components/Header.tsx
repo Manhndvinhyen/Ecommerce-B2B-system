@@ -36,6 +36,7 @@ export function Header() {
   const currentCategory = categoryMenu.find((category) => category.name === activeCategory) ?? categoryMenu[0];
   const isLoggedIn = useMemo(() => Boolean(customerToken), [customerToken]);
   const isEmbeddedInIframe = window.self !== window.top;
+  const currentView = registerParams.get('view');
 
   const handleTopLevelNavigation = (event: React.MouseEvent<HTMLElement>) => {
     if (!isEmbeddedInIframe) {
@@ -401,7 +402,14 @@ export function Header() {
                       </div>
                     )}
                   </div>
-                  
+                  <a
+                    href={`${reactHomePath}?view=news`}
+                    className={`text-gray-700 font-medium transition-colors hover:text-green-600 ${
+                      currentView === 'news' ? 'text-green-600 font-semibold' : ''
+                    }`}
+                  >
+                    Tin tức
+                  </a>
                 </nav>
               </div>
 
@@ -478,7 +486,6 @@ export function Header() {
   }
 
   const params = new URLSearchParams(window.location.search);
-  const currentView = params.get('view');
 
   return (
   <header className="sticky top-0 z-50 bg-white shadow-sm" onClickCapture={handleTopLevelNavigation}>
@@ -645,6 +652,14 @@ export function Header() {
                     </div>
                   )}
                 </div>
+                <a
+                  href={`${reactHomePath}?view=news`}
+                  className={`text-gray-700 font-medium transition-colors hover:text-green-600 ${
+                    currentView === 'news' ? 'text-green-600 font-semibold' : ''
+                  }`}
+                >
+                  Tin tức
+                </a>
               </nav>
             </div>
 

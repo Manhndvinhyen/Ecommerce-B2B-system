@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Header } from './components/Header';
+import { WeatherWidget } from './components/WeatherWidget';
 import { ProductsPage } from './components/ProductsPage';
 import { FeaturedSuppliers } from './components/FeaturedSuppliers';
 import { Features } from './components/Features';
@@ -20,6 +21,7 @@ import { UserDashboardPage } from './components/UserDashboardPage';
 import { SellerDashboardPage } from './components/SellerDashboardPage';
 import { WishlistPage } from './components/WishlistPage';
 import { CheckoutPage } from './components/CheckoutPage';
+import { NewsPage } from './components/NewsPage';
 import { getCategoryNameFromQuery, getSubcategoryNameFromQuery } from './data/categories';
 import { CartProvider } from './cart/CartProvider';
 import { applySeo, buildCanonicalPath, getSiteName } from './utils/seo';
@@ -43,6 +45,7 @@ function AppContent() {
     window.location.pathname.endsWith('/checkout');
   const isDashboardView = view === 'dashboard';
   const isSellerDashboardView = view === 'seller-dashboard';
+  const isNewsView = view === 'news';
 
   useEffect(() => {
     console.info('[FresoSearch][App] route detected', {
@@ -90,6 +93,15 @@ function AppContent() {
       return;
     }
 
+    if (isNewsView) {
+      applySeo({
+        title: `Tin tức nông sản B2B | ${siteName}`,
+        description: `Cập nhật tin tức thị trường nông sản, nông nghiệp, xuất khẩu, giá cả thị trường hàng hóa và logistics mới nhất từ VnExpress.`,
+        canonicalPath
+      });
+      return;
+    }
+
     if (isCartView || isLoginView || isRegisterView || isForgotPasswordView || isWishlistView || isCheckoutView || isDashboardView || isSellerDashboardView) {
       applySeo({
         title: `${siteName} | Tài khoản và mua hàng`,
@@ -119,7 +131,8 @@ function AppContent() {
     isWishlistView,
     isCheckoutView,
     isDashboardView,
-    isSellerDashboardView
+    isSellerDashboardView,
+    isNewsView
   ]);
 
   if (isDashboardView) {
@@ -172,6 +185,19 @@ function AppContent() {
   }
 
 
+  if (isNewsView) {
+    return (
+      <div className="min-h-screen bg-white">
+        <Header />
+        <main>
+          <NewsPage />
+        </main>
+        <Footer />
+        <ChatbotWidget />
+      </div>
+    );
+  }
+
   if (isCheckoutView) {
     return (
       <div className="min-h-screen bg-white">
@@ -193,6 +219,7 @@ function AppContent() {
           <ProductCategoryPage categoryName={category} initialSubcategory={subcategory} />
         ) : (
           <>
+            <WeatherWidget />
             <ProductsPage />
             <Features />
             <FeaturedSuppliers />

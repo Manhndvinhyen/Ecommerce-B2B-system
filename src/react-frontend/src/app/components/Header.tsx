@@ -242,14 +242,27 @@ export function Header() {
 
   const displayedUserName = customerName || customerEmail || 'Tài khoản';
   const currentView = new URLSearchParams(window.location.search).get('view');
-  const dashboardBase = currentView === 'seller-dashboard'
-    ? `${reactHomePath}?view=seller-dashboard`
-    : `${reactHomePath}?view=dashboard`;
+  const dashboardBase = `${reactHomePath}?view=dashboard`;
   const getDashboardHref = (tabLabel: string) => `${dashboardBase}&tab=${encodeURIComponent(tabLabel)}`;
   const activeDashboardTab = new URLSearchParams(window.location.search).get('tab');
-  const visibleMenuItems = currentView === 'dashboard'
-    ? adminMenuItems.filter((item) => item.id === 'profile-seller' || item.id === 'nhan-vien')
-    : adminMenuItems.filter((item) => userRole === 'seller' ? true : item.id !== 'thong-tin');
+  
+  const canManageBranches = useMemo(() => {
+    const isOwner = window.localStorage.getItem('freso_is_owner') || window.sessionStorage.getItem('freso_is_owner') || '';
+    const isSuperAdmin = window.localStorage.getItem('freso_is_super_admin') || window.sessionStorage.getItem('freso_is_super_admin') || '';
+    const role = (window.localStorage.getItem('freso_role') || window.sessionStorage.getItem('freso_role') || '').trim().toLowerCase();
+    const parseBool = (val: string) => {
+      const n = val.trim().toLowerCase();
+      return n === '1' || n === 'true' || n === 'yes';
+    };
+    return role !== 'branch' && (parseBool(isOwner) || parseBool(isSuperAdmin) || role === '' || role === 'manager' || role === 'seller');
+  }, [userRole, customerName]);
+
+  const visibleMenuItems = useMemo(() => {
+    const visibleIds = new Set(['profile-seller', 'nhan-vien', 'lich-su-mua-hang', 'bao-gia']);
+    return adminMenuItems.filter((item) => {
+      return visibleIds.has(item.id) && (canManageBranches || item.id !== 'nhan-vien');
+    });
+  }, [canManageBranches]);
 
   const logoutAndBackHome = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();

@@ -106,6 +106,32 @@ export function SellerProductManager() {
   const [tierQty, setTierQty] = useState('');
   const [tierDiscount, setTierDiscount] = useState('');
 
+  const getAuthToken = () =>
+    window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
+
+  const publishCatalogMutation = async (url: string, method: 'POST' | 'PUT' | 'DELETE', body?: unknown) => {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Bạn cần đăng nhập seller để đăng sản phẩm lên website.');
+    }
+
+    const response = await fetch(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: body === undefined ? undefined : JSON.stringify(body)
+    });
+
+    const responseText = await response.text().catch(() => '');
+    if (!response.ok) {
+      throw new Error(responseText || 'Không thể đồng bộ sản phẩm lên website.');
+    }
+
+    return responseText;
+  };
+
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
@@ -287,27 +313,14 @@ export function SellerProductManager() {
       return;
     }
 
-    const token = window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
-    let apiSuccess = false;
-
-    if (token) {
-      try {
-        const res = await fetch(`${window.location.origin}/rest/V1/tmdt-catalog/product/${targetSku}`, {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          }
-        });
-        if (res.ok) {
-          apiSuccess = true;
-        }
-      } catch (e) {
-        // Fallback
-      }
+    try {
+      await publishCatalogMutation(`${window.location.origin}/rest/V1/tmdt-catalog/product/${targetSku}`, 'DELETE');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Không thể xóa sản phẩm khỏi website.';
+      showToast(message, 'error');
+      return;
     }
 
-    // Local sync fallback
     const filtered = products.filter((p) => p.sku !== targetSku);
     saveLocalProducts(filtered);
     showToast(`Đã xóa sản phẩm "${productName}" thành công!`, 'success');
@@ -490,33 +503,20 @@ export function SellerProductManager() {
       }
     };
 
-    const token = window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
-    let apiSuccess = false;
+    try {
+      const url = editingSku
+        ? `${window.location.origin}/rest/V1/tmdt-catalog/product/${editingSku}`
+        : `${window.location.origin}/rest/V1/tmdt-catalog/product`;
 
-    if (token) {
-      try {
-        const url = editingSku 
-          ? `${window.location.origin}/rest/V1/tmdt-catalog/product/${editingSku}`
-          : `${window.location.origin}/rest/V1/tmdt-catalog/product`;
-
-        const res = await fetch(url, {
-          method: editingSku ? 'PUT' : 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({ productData: JSON.stringify(newProductData) })
-        });
-
-        if (res.ok) {
-          apiSuccess = true;
-        }
-      } catch (e) {
-        // Fallback
-      }
+      await publishCatalogMutation(url, editingSku ? 'PUT' : 'POST', {
+        productData: JSON.stringify(newProductData)
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Không thể đăng sản phẩm lên website.';
+      showToast(message, 'error');
+      return;
     }
 
-    // Local sync fallback
     let updatedProducts: Product[];
     if (editingSku) {
       updatedProducts = products.map((p) => (p.sku === editingSku ? newProductData : p));

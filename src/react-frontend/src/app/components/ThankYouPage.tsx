@@ -15,7 +15,7 @@ export function ThankYouPage() {
 
   useEffect(() => {
     if (!orderId) return;
-    fetch(`/tmdt/order/status?code=${orderId}`)
+    fetch(`/rest/V1/tmdt-orders/status/${encodeURIComponent(orderId)}`)
       .then((r) => r.json())
       .then((data) => {
         if (data?.success) {

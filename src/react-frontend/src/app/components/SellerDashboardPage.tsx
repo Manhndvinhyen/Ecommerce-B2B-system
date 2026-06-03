@@ -6,6 +6,7 @@ import { SellerOverviewDashboard } from './SellerOverviewDashboard';
 import { SellerProductManager } from './SellerProductManager';
 import { SellerInventoryManager } from './SellerInventoryManager';
 import { SellerCartManager } from './SellerCartManager';
+import { SellerOrderManager } from './SellerOrderManager';
 import { BranchManagementPanel } from './BranchManagementPanel';
 import { SellerHeader } from './SellerHeader';
 import { AuthPageFooter } from './auth/AuthPageFooter';
@@ -79,7 +80,12 @@ export function SellerDashboardPage() {
   }, []);
 
   const menuItems = useMemo(() => {
-    return adminMenuItems.filter((item) => canManageBranches || item.id !== 'nhan-vien');
+    return adminMenuItems.filter((item) => {
+      if (item.id === 'quan-ly-gio-hang' || item.id === 'lich-su-mua-hang') {
+        return false;
+      }
+      return canManageBranches || item.id !== 'nhan-vien';
+    });
   }, [canManageBranches]);
 
   const dashboardLabel = adminMenuItems.find((item) => item.id === 'dashboard')?.label ?? 'Dashboard';
@@ -125,9 +131,7 @@ export function SellerDashboardPage() {
                 <BranchManagementPanel canManageBranches={canManageBranches} />
               </div>
             )}
-            {activeTab === orderLabel && (
-              <div className="p-8">Nội dung cho: {activeTab}</div>
-            )}
+            {activeTab === orderLabel && <SellerOrderManager />}
             {activeTab === quoteLabel && (
               <div className="p-8">Nội dung cho: {activeTab}</div>
             )}

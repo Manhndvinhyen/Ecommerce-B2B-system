@@ -107,14 +107,32 @@ export function SellerInventoryManager() {
           const apiLogs = await lResponse.json();
 
           if (Array.isArray(apiProducts) && Array.isArray(apiLogs)) {
-            setProducts(apiProducts.map((p) => ({
-              sku: p.sku,
-              name: p.name,
-              qty: Number(p.qty),
-              unit: p.unit || 'kg',
-              categoryLabel: p.categoryLabel || 'Rau củ quả',
-              image: p.image || 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&h=500&fit=crop'
-            })));
+            const apiSkus = new Set(apiProducts.map((p) => p.sku));
+            const filteredLocal = customLocalProducts.filter((p) => !apiSkus.has(p.sku));
+
+            const merged = [
+              ...apiProducts.map((p) => {
+                const localMatch = customLocalProducts.find((lp) => lp.sku === p.sku);
+                return {
+                  sku: p.sku,
+                  name: p.name,
+                  qty: Number(p.qty),
+                  unit: p.unit || localMatch?.unit || 'kg',
+                  categoryLabel: localMatch?.categoryLabel || 'Rau củ quả',
+                  image: localMatch?.image || p.image || 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&h=500&fit=crop'
+                };
+              }),
+              ...filteredLocal.map((p) => ({
+                sku: p.sku,
+                name: p.name,
+                qty: Number(p.qty),
+                unit: p.unit || 'kg',
+                categoryLabel: p.categoryLabel || 'Rau củ quả',
+                image: p.image || 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&h=500&fit=crop'
+              }))
+            ];
+
+            setProducts(merged);
 
             setLogs(apiLogs.map((l) => ({
               log_id: String(l.log_id),

@@ -109,12 +109,12 @@ export function UserDashboardPage() {
             )}
             {activeTab === purchaseHistoryLabel && <PurchaseHistoryContent />}
             {activeTab === orderLabel && (
-              <div className="p-8">
-                <h1 className="text-2xl font-bold text-gray-900">Quản lý đơn hàng</h1>
-                <p className="mt-2 text-sm text-gray-500">
-                  Mục này chưa được nối với API đơn hàng Magento. Cần thêm endpoint lấy sales_order theo customer/cơ sở.
-                </p>
-              </div>
+              <PurchaseHistoryContent
+                title="Quản lý đơn hàng của tôi"
+                description="Theo dõi toàn bộ đơn gần đây, trạng thái thanh toán và thông tin giao hàng ở một nơi."
+                emptyTitle="Chưa có đơn hàng nào"
+                emptyDescription="Khi bạn đặt hàng, danh sách đơn sẽ xuất hiện tại đây cùng trạng thái xử lý."
+              />
             )}
             {activeTab === quoteLabel && (
               <div className="p-8">

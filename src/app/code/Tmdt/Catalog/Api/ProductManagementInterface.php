@@ -64,4 +64,12 @@ interface ProductManagementInterface
      * @throws \Magento\Framework\Exception\LocalizedException
      */
     public function getSellerRevenueStats(): array;
+
+    /**
+     * Get order list for the authenticated B2B seller.
+     *
+     * @return mixed[]
+     * @throws \Magento\Framework\Exception\LocalizedException
+     */
+    public function getSellerOrders(): array;
 }

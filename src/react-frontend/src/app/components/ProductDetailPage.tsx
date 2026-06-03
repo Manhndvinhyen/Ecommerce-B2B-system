@@ -31,6 +31,44 @@ type MagentoProduct = {
   store_name?: string;
 };
 
+const pickBestImageUrl = (...candidates: Array<string | null | undefined>) => {
+  const chosen = candidates.find((value) => typeof value === 'string' && value.trim().length > 0);
+  return chosen ?? '';
+};
+
+type GraphQlMediaEntry = {
+  file?: string | null;
+  disabled?: boolean | null;
+};
+
+const getMagentoMediaImageUrl = (file?: string | null) => {
+  if (!file || !file.trim()) return '';
+  const normalizedFile = file.startsWith('/') ? file : `/${file}`;
+  return `${window.location.origin}/media/catalog/product${normalizedFile}`;
+};
+
+const getBestMagentoProductImage = (
+  product: {
+    small_image?: { url?: string | null } | null;
+    thumbnail?: { url?: string | null } | null;
+    media_gallery_entries?: GraphQlMediaEntry[];
+  },
+  fallback: string
+) => {
+  const galleryImage = (product.media_gallery_entries ?? []).find((entry) => {
+    const file = entry.file?.trim() ?? '';
+    return file && !file.toLowerCase().includes('placeholder');
+  });
+
+  const candidates = [
+    getMagentoMediaImageUrl(galleryImage?.file),
+    product.small_image?.url ?? '',
+    product.thumbnail?.url ?? ''
+  ];
+
+  return candidates.find((value) => value && !value.toLowerCase().includes('/placeholder/')) || '';
+};
+
 const fallbackProduct: MagentoProduct = {
   id: 'RC_0034',
   name: 'Cà chua ta',
@@ -195,6 +233,8 @@ export function ProductDetailPage() {
               short_description { html }
               categories { name }
               small_image { url }
+              thumbnail { url }
+              media_gallery_entries { file disabled }
               price_range {
                 minimum_price {
                   final_price { value }
@@ -216,6 +256,8 @@ export function ProductDetailPage() {
               short_description { html }
               categories { name }
               small_image { url }
+              thumbnail { url }
+              media_gallery_entries { file disabled }
               price_range {
                 minimum_price {
                   final_price { value }
@@ -259,7 +301,7 @@ export function ProductDetailPage() {
         }
 
   const price = Number(item.price_range?.minimum_price?.final_price?.value ?? fallbackProduct.price);
-  const imageUrl = item.small_image?.url || fallbackProduct.image;
+  const imageUrl = getBestMagentoProductImage(item, fallbackProduct.image);
   const descriptionHtml = item.description?.html;
   const descriptionText = stripHtml(descriptionHtml);
   const shortDescriptionText = stripHtml(item.short_description?.html);
@@ -281,6 +323,22 @@ export function ProductDetailPage() {
           }
         }
 
+        const resolvedImage = imageUrl || pickBestImageUrl(localCustomFields.image) || fallbackProduct.image;
+
+        if (resolvedImage && resolvedImage !== localCustomFields.image && customLocalRaw) {
+          try {
+            const customLocalProducts = JSON.parse(customLocalRaw);
+            const nextCustomLocalProducts = Array.isArray(customLocalProducts)
+              ? customLocalProducts.map((p: any) =>
+                  p?.sku === item.sku ? { ...p, image: resolvedImage } : p
+                )
+              : customLocalProducts;
+            window.localStorage.setItem('freso_custom_products', JSON.stringify(nextCustomLocalProducts));
+          } catch {
+            // Ignore cache healing errors.
+          }
+        }
+
         setProduct({
           id: String(item.id ?? fallbackProduct.id),
           name: item.name ?? fallbackProduct.name,
@@ -290,7 +348,7 @@ export function ProductDetailPage() {
           note: localCustomFields.note || shortDescriptionText || fallbackProduct.note,
           price: localCustomFields.price || price,
           category: pickCategoryName(item.categories),
-          image: localCustomFields.image || imageUrl,
+          image: resolvedImage,
           description: {
             features: localCustomFields.description?.features || parsed.features || combinedDescription,
             benefits: localCustomFields.description?.benefits || parsed.benefits || shortDescriptionText || fallbackProduct.description.benefits,
@@ -314,6 +372,10 @@ export function ProductDetailPage() {
               (querySku && p.sku === querySku) || (queryName && p.name === queryName)
             );
             if (localProd) {
+              const localImage =
+                getBestMagentoProductImage(localProd, 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop') ||
+                pickBestImageUrl(localProd.image, localProd.thumbnail?.url) ||
+                'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop';
               setProduct({
                 id: String(localProd.id || localProd.sku),
                 name: localProd.name,
@@ -323,7 +385,7 @@ export function ProductDetailPage() {
                 note: localProd.note || 'Sản phẩm sỉ B2B',
                 price: localProd.price,
                 category: localProd.categoryLabel || 'Sản phẩm sỉ',
-                image: localProd.image || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop',
+                image: localImage,
                 description: {
                   features: localProd.description?.features || 'Sản phẩm nông sản/thực phẩm sỉ chất lượng cao cung cấp trực tiếp bởi nhà vườn/nhà phân phối uy tín.',
                   benefits: localProd.description?.benefits || 'Cung cấp nguồn hàng sỉ ổn định cho nhà hàng, cửa hàng kinh doanh ăn uống với giá cả cạnh tranh nhất.',
@@ -679,4 +741,3 @@ export function ProductDetailPage() {
     </>
   );
 }
-

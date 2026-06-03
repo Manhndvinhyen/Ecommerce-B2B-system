@@ -46,12 +46,12 @@ interface CustomTooltipProps {
   label?: string;
 }
 
-const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label }) => {
+const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-xl border border-slate-800 text-xs">
         <p className="font-bold mb-1.5 text-slate-400">{label}</p>
-        {payload.map((item, index) => (
+        {payload.map((item: any, index: number) => (
           <p key={index} className="font-semibold flex items-center gap-2" style={{ color: item.color }}>
             <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: item.color }} />
             {item.name}: <span className="text-white font-bold">{item.value.toLocaleString()}đ</span>
@@ -100,6 +100,8 @@ export function SellerOverviewDashboard() {
     totalOrders: number;
     chartData: any[];
     categoryData: any[];
+    topProducts?: any[];
+    operationalLog?: any[];
   } | null>(null);
 
   const fetchStockAlerts = async () => {
@@ -143,7 +145,9 @@ export function SellerOverviewDashboard() {
             totalRevenue: data.totalRevenue,
             totalOrders: data.totalOrders,
             chartData: data.chartData,
-            categoryData: data.categoryData
+            categoryData: data.categoryData,
+            topProducts: data.topProducts,
+            operationalLog: data.operationalLog
           });
         }
       }
@@ -190,19 +194,19 @@ export function SellerOverviewDashboard() {
   const monthlyChartData = (revenueStats && revenueStats.chartData && revenueStats.chartData.length > 0)
     ? revenueStats.chartData
     : [
-        { name: 'Tháng 1', DoanhThu: 120000000, DonHang: 12 },
-        { name: 'Tháng 2', DoanhThu: 185000000, DonHang: 18 },
-        { name: 'Tháng 3', DoanhThu: 210000000, DonHang: 22 },
-        { name: 'Tháng 4', DoanhThu: 295000000, DonHang: 25 },
-        { name: 'Tháng 5', DoanhThu: 342850000, DonHang: 28 },
-        { name: 'Tháng 6 (Dự kiến)', DoanhThu: 390000000, DonHang: 32 }
+        { name: 'Tháng 1', DoanhThu: 0, DonHang: 0 },
+        { name: 'Tháng 2', DoanhThu: 0, DonHang: 0 },
+        { name: 'Tháng 3', DoanhThu: 0, DonHang: 0 },
+        { name: 'Tháng 4', DoanhThu: 0, DonHang: 0 },
+        { name: 'Tháng 5', DoanhThu: 0, DonHang: 0 },
+        { name: 'Tháng 6', DoanhThu: 0, DonHang: 0 }
       ];
 
   const weeklyChartData = [
-    { name: 'Tuần 1', DoanhThu: 72000000, DonHang: 6 },
-    { name: 'Tuần 2', DoanhThu: 95000000, DonHang: 8 },
-    { name: 'Tuần 3', DoanhThu: 88000000, DonHang: 7 },
-    { name: 'Tuần 4', DoanhThu: 110000000, DonHang: 9 }
+    { name: 'Tuần 1', DoanhThu: 0, DonHang: 0 },
+    { name: 'Tuần 2', DoanhThu: 0, DonHang: 0 },
+    { name: 'Tuần 3', DoanhThu: 0, DonHang: 0 },
+    { name: 'Tuần 4', DoanhThu: 0, DonHang: 0 }
   ];
 
   const activeChartData = chartPeriod === 'month' ? monthlyChartData : weeklyChartData;
@@ -210,15 +214,10 @@ export function SellerOverviewDashboard() {
   // Pie chart data for categories share
   const categoryData = (revenueStats && revenueStats.categoryData && revenueStats.categoryData.length > 0)
     ? revenueStats.categoryData
-    : [
-        { name: 'Hải sản cấp đông', value: 120000000 },
-        { name: 'Thịt tươi sống', value: 96000000 },
-        { name: 'Rau củ hữu cơ', value: 75420000 },
-        { name: 'Gia vị & Đồ khô', value: 51430000 }
-      ];
+    : [];
 
   // B2B Price Negotiation mock state
-  const [negotiations, setNegotiations] = useState<Negotiation[]>([
+  const defaultNegotiations: Negotiation[] = [
     {
       id: 'NEG-101',
       product: 'Cá Hồi Na Uy Nguyên Con (Nhập Khẩu)',
@@ -259,16 +258,94 @@ export function SellerOverviewDashboard() {
       date: '2 ngày trước',
       status: 'pending'
     }
-  ]);
+  ];
+
+  const [negotiations, setNegotiations] = useState<Negotiation[]>(() => {
+    const cached = window.localStorage.getItem('freso_seller_negotiations');
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (e) {
+        // ignore
+      }
+    }
+    return defaultNegotiations;
+  });
 
   // Modal / Input state for Counter Offer
   const [activeCounterId, setActiveCounterId] = useState<string | null>(null);
   const [counterPriceInput, setCounterPriceInput] = useState('');
 
+  // Helper to format time ago in Vietnamese
+  const formatTimeAgo = (timeStr: string) => {
+    if (!timeStr) return '';
+    try {
+      const cleanedStr = timeStr.replace(' ', 'T');
+      const date = new Date(cleanedStr);
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      
+      if (diffMins < 1) return 'Vừa xong';
+      if (diffMins < 60) return `${diffMins} phút trước`;
+      
+      const diffHours = Math.floor(diffMins / 60);
+      if (diffHours < 24) return `${diffHours} giờ trước`;
+      
+      const diffDays = Math.floor(diffHours / 24);
+      if (diffDays === 1) return 'Hôm qua';
+      return `${diffDays} ngày trước`;
+    } catch (e) {
+      return timeStr;
+    }
+  };
+
+  // Helper to add manual log entries (e.g., from negotiations)
+  const addOperationalLogEntry = (title: string, message: string) => {
+    try {
+      const cachedLogs = window.localStorage.getItem('freso_seller_negotiation_logs');
+      const logs = cachedLogs ? JSON.parse(cachedLogs) : [];
+      const newEntry = {
+        type: 'negotiation_action',
+        title,
+        message,
+        time: new Date().toISOString()
+      };
+      logs.unshift(newEntry);
+      window.localStorage.setItem('freso_seller_negotiation_logs', JSON.stringify(logs.slice(0, 10)));
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  // Merge backend operationalLog and local negotiation logs
+  const getMergedLogs = () => {
+    let localLogs: any[] = [];
+    try {
+      const cached = window.localStorage.getItem('freso_seller_negotiation_logs');
+      if (cached) {
+        localLogs = JSON.parse(cached);
+      }
+    } catch (e) {}
+
+    const backendLogs = revenueStats?.operationalLog || [];
+    const merged = [...localLogs, ...backendLogs];
+    
+    // Sort by time descending
+    merged.sort((a, b) => b.time.localeCompare(a.time));
+    return merged.slice(0, 6);
+  };
+
   // Handle Approve Negotiation
   const handleApprove = (id: string, buyer: string) => {
-    setNegotiations((prev) =>
-      prev.map((neg) => (neg.id === id ? { ...neg, status: 'approved' } : neg))
+    setNegotiations((prev) => {
+      const next = prev.map((neg) => (neg.id === id ? { ...neg, status: 'approved' } : neg));
+      window.localStorage.setItem('freso_seller_negotiations', JSON.stringify(next));
+      return next;
+    });
+    addOperationalLogEntry(
+      'Đã duyệt đàm phán giá',
+      `Đã duyệt đơn giá đàm phán thành công cho <strong>${buyer}</strong>.`
     );
     showToast(`Đã duyệt đơn giá đàm phán thành công cho ${buyer}!`, 'success');
   };
@@ -281,25 +358,32 @@ export function SellerOverviewDashboard() {
 
   // Handle Submit Counter Offer
   const handleSubmitCounter = (id: string, buyer: string) => {
-    const customPrice = parseInt(counterPriceInput, 10);
-    if (isNaN(customPrice) || customPrice <= 0) {
+    const customPrice = parseInt(counterPriceInput, 15); // Wait, parseInt is radix 10, let's keep 10
+    const parsedPrice = parseInt(counterPriceInput, 10);
+    if (isNaN(parsedPrice) || parsedPrice <= 0) {
       showToast('Đơn giá đề xuất không hợp lệ.', 'info');
       return;
     }
 
-    setNegotiations((prev) =>
-      prev.map((neg) =>
+    setNegotiations((prev) => {
+      const next = prev.map((neg) =>
         neg.id === id
-          ? { ...neg, status: 'countered', counterOffer: customPrice }
+          ? { ...neg, status: 'countered', counterOffer: parsedPrice }
           : neg
-      )
+      );
+      window.localStorage.setItem('freso_seller_negotiations', JSON.stringify(next));
+      return next;
+    });
+    addOperationalLogEntry(
+      'Đã gửi đề xuất phản hồi giá',
+      `Đã gửi đề xuất phản hồi giá <strong>${parsedPrice.toLocaleString()}đ</strong> tới <strong>${buyer}</strong>.`
     );
     setActiveCounterId(null);
-    showToast(`Đã gửi đề xuất phản hồi giá ${customPrice.toLocaleString()}đ tới ${buyer}.`, 'info');
+    showToast(`Đã gửi đề xuất phản hồi giá ${parsedPrice.toLocaleString()}đ tới ${buyer}.`, 'info');
   };
 
-  const displayRevenue = revenueStats ? revenueStats.totalRevenue : 342850000;
-  const displayOrders = revenueStats ? revenueStats.totalOrders : 28;
+  const displayRevenue = revenueStats ? revenueStats.totalRevenue : 0;
+  const displayOrders = revenueStats ? revenueStats.totalOrders : 0;
 
   return (
     <div className="flex-1 bg-transparent p-0 overflow-y-auto" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
@@ -365,37 +449,38 @@ export function SellerOverviewDashboard() {
       )}
 
       {/* Premium Welcome Header Area */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-6 md:p-8 text-white shadow-xl border border-slate-800 mb-8">
-        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 right-1/4 -mb-16 w-48 h-48 bg-emerald-500/10 rounded-full blur-2xl" />
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a] rounded-[2rem] p-6 md:p-8 text-white shadow-xl border border-slate-800 mb-8 transition-all duration-300">
+        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-72 h-72 bg-[#00b14f]/10 rounded-full blur-[80px]" />
+        <div className="absolute bottom-0 right-1/4 -mb-16 w-56 h-56 bg-emerald-500/10 rounded-full blur-[60px]" />
+        <div className="absolute top-1/2 left-1/3 -translate-y-1/2 w-40 h-40 bg-teal-500/5 rounded-full blur-[40px]" />
 
-        <div className="relative flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        <div className="relative flex flex-col md:flex-row justify-between items-start md:items-center gap-6 z-10">
           <div className="flex items-center gap-5">
-            <div className="w-16 h-16 bg-gradient-to-tr from-[#00b14f] via-emerald-500 to-teal-400 rounded-2xl flex items-center justify-center font-black text-2xl text-slate-900 shadow-md">
+            <div className="w-16 h-16 bg-gradient-to-tr from-[#00b14f] via-[#10b981] to-[#14b8a6] rounded-2xl flex items-center justify-center font-black text-2xl text-white shadow-lg shadow-emerald-500/20 transform hover:scale-105 transition-transform duration-300 select-none">
               {merchantName.charAt(0).toUpperCase()}
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-1.5">
                 <h1 className="text-xl md:text-2xl font-black tracking-tight">{merchantName}</h1>
-                <span className="flex items-center gap-1 bg-[#E9F8EF]/20 text-[#c8f9db] border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full">
+                <span className="flex items-center gap-1 bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full">
                   <UserCheck size={11} className="text-[#00b14f]" />
-                  Verified Merchant
+                  Verified B2B Seller
                 </span>
               </div>
               <p className="text-xs text-slate-400 font-medium">
-                Mã nhà bán hàng B2B: <span className="font-extrabold text-slate-200">{merchantCode}</span>
+                Mã đối tác: <span className="font-extrabold text-slate-200">{merchantCode}</span>
                 <span className="mx-2 text-slate-600">|</span>
-                Hệ thống Freso tự động đồng bộ: <span className="text-slate-300 font-bold">1 phút trước</span>
+                Tự động đồng bộ: <span className="text-slate-300 font-bold">Vừa xong</span>
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3 w-full md:w-auto">
-            <button className="flex-1 md:flex-initial px-5 py-3 bg-white text-slate-900 rounded-full text-xs font-extrabold hover:bg-slate-100 transition-all flex items-center justify-center gap-2 shadow-lg">
+            <button className="flex-1 md:flex-initial px-5 py-3 bg-slate-800/80 text-slate-200 border border-slate-700/60 rounded-full text-xs font-black hover:bg-slate-700 hover:text-white transition-all duration-300 flex items-center justify-center gap-2 shadow-lg backdrop-blur-sm cursor-pointer">
               <Download size={14} />
               <span>Xuất báo cáo tài chính</span>
             </button>
-            <button className="flex-1 md:flex-initial px-5 py-3 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-full text-xs font-extrabold hover:from-emerald-600 hover:to-green-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20">
+            <button className="flex-1 md:flex-initial px-5 py-3 bg-gradient-to-r from-[#00b14f] to-[#059669] text-white rounded-full text-xs font-black hover:from-[#059669] hover:to-[#047857] transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/45 cursor-pointer transform hover:translate-y-[-1px]">
               <PlusCircle size={14} />
               <span>Đăng sản phẩm sỉ</span>
             </button>
@@ -404,74 +489,67 @@ export function SellerOverviewDashboard() {
       </div>
 
       {/* Grid of Key B2B Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         {/* Doanh thu tích luỹ */}
-        <div className="bg-gradient-to-br from-[#EBF9F0] to-[#D5F3DF] border border-[#BBEBCC] rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between h-[155px] group">
-          <div className="flex justify-between items-start">
+        <div className="bg-white border border-slate-100 hover:border-emerald-500/30 rounded-[1.75rem] p-6 shadow-sm hover:shadow-xl hover:shadow-emerald-500/5 hover:-translate-y-1.5 transition-all duration-300 flex flex-col justify-between h-[160px] group relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl group-hover:scale-150 transition-all duration-500" />
+          <div className="flex justify-between items-start z-10">
             <div>
-              <p className="text-[11.5px] font-black uppercase tracking-wider text-[#066e33] mb-1">Tổng doanh thu tháng</p>
-              <h3 className="text-2xl font-black text-[#0c3c1e] tracking-tight">{displayRevenue.toLocaleString()}đ</h3>
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5">Doanh thu bán sỉ</p>
+              <h3 className="text-2xl font-black text-slate-800 tracking-tight leading-none">{displayRevenue.toLocaleString()}đ</h3>
             </div>
-            <div className="w-10 h-10 bg-white/70 rounded-xl flex items-center justify-center text-[#00b14f] border border-[#A4E0B9]">
-              <TrendingUp size={20} />
+            <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center border border-emerald-100 shadow-inner group-hover:scale-110 transition-transform duration-300">
+              <TrendingUp size={22} />
             </div>
           </div>
-          <div className="flex justify-between items-center mt-3 pt-3 border-t border-[#A8E5BE]/30 text-[11px] font-bold text-slate-600">
-            <span className="text-[#066e33] font-black">+15.8% <span className="font-normal text-slate-500">tháng trước</span></span>
-            <span className="bg-white/60 px-1.5 py-0.5 rounded text-[10px] text-slate-600 font-extrabold">KPI 92%</span>
+          <div className="flex justify-between items-center mt-3 pt-3 border-t border-slate-100 text-[11px] font-bold text-slate-500 z-10">
+            <span className="text-emerald-600 font-extrabold flex items-center gap-1">
+              <ArrowUpRight size={14} />
+              +15.8% <span className="font-semibold text-slate-400">so với tháng trước</span>
+            </span>
+            <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider">KPI 92%</span>
           </div>
         </div>
 
         {/* Đơn hàng bán sỉ */}
-        <div className="bg-gradient-to-br from-[#E6F3FB] to-[#C9E5F7] border border-[#ABD6F2] rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between h-[155px] group">
-          <div className="flex justify-between items-start">
+        <div className="bg-white border border-slate-100 hover:border-sky-500/30 rounded-[1.75rem] p-6 shadow-sm hover:shadow-xl hover:shadow-sky-500/5 hover:-translate-y-1.5 transition-all duration-300 flex flex-col justify-between h-[160px] group relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-sky-500/5 rounded-full blur-xl group-hover:scale-150 transition-all duration-500" />
+          <div className="flex justify-between items-start z-10">
             <div>
-              <p className="text-[11.5px] font-black uppercase tracking-wider text-[#0e6191] mb-1">Đơn hàng mới nhận</p>
-              <h3 className="text-2xl font-black text-[#0a3a57] tracking-tight">{displayOrders} đơn hàng</h3>
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5">Đơn hàng mới nhận</p>
+              <h3 className="text-2xl font-black text-slate-800 tracking-tight leading-none">{displayOrders} đơn hàng</h3>
             </div>
-            <div className="w-10 h-10 bg-white/70 rounded-xl flex items-center justify-center text-sky-600 border border-[#91CBEF]">
-              <ShoppingBag size={20} />
+            <div className="w-12 h-12 bg-sky-50 text-sky-600 rounded-2xl flex items-center justify-center border border-sky-100 shadow-inner group-hover:scale-110 transition-transform duration-300">
+              <ShoppingBag size={22} />
             </div>
           </div>
-          <div className="flex justify-between items-center mt-3 pt-3 border-t border-[#9BCEF0]/30 text-[11px] font-bold text-slate-600">
-            <span className="text-[#0e6191] font-black">4 đơn hàng <span className="font-normal text-slate-500">chờ giao</span></span>
-            <span className="bg-white/60 px-1.5 py-0.5 rounded text-[10px] text-slate-600 font-extrabold">Sỉ 100%</span>
+          <div className="flex justify-between items-center mt-3 pt-3 border-t border-slate-100 text-[11px] font-bold text-slate-500 z-10">
+            <span className="text-sky-600 font-extrabold flex items-center gap-1">
+              <Clock size={13} />
+              <span>4 đơn hàng chờ xử lý</span>
+            </span>
+            <span className="bg-sky-50 text-sky-700 border border-sky-100 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider">Sỉ 100%</span>
           </div>
         </div>
 
         {/* Đàm phán đang chờ */}
-        <div className="bg-gradient-to-br from-[#EBF8F6] to-[#D1F2EC] border border-[#A3E4D7] rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between h-[155px] group">
-          <div className="flex justify-between items-start">
+        <div className="bg-white border border-slate-100 hover:border-purple-500/30 rounded-[1.75rem] p-6 shadow-sm hover:shadow-xl hover:shadow-purple-500/5 hover:-translate-y-1.5 transition-all duration-300 flex flex-col justify-between h-[160px] group relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/5 rounded-full blur-xl group-hover:scale-150 transition-all duration-500" />
+          <div className="flex justify-between items-start z-10">
             <div>
-              <p className="text-[11.5px] font-black uppercase tracking-wider text-[#0b6c5f] mb-1">Yêu cầu đàm phán giá</p>
-              <h3 className="text-2xl font-black text-[#083c35] tracking-tight">8 yêu cầu</h3>
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5">Yêu cầu đàm phán giá</p>
+              <h3 className="text-2xl font-black text-slate-800 tracking-tight leading-none">{negotiations.filter(n => n.status === 'pending').length} yêu cầu</h3>
             </div>
-            <div className="w-10 h-10 bg-white/70 rounded-xl flex items-center justify-center text-teal-600 border border-[#A3E4D7]">
-              <Handshake size={20} />
-            </div>
-          </div>
-          <div className="flex justify-between items-center mt-3 pt-3 border-t border-[#A3E4D7]/30 text-[11px] font-bold text-slate-600">
-            <span className="text-[#0b6c5f] font-black">3 chiết khấu lớn</span>
-            <span className="bg-rose-500 text-white px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider animate-pulse">Gấp</span>
-          </div>
-        </div>
-
-        {/* Điểm sức khỏe gian hàng */}
-        <div className="bg-gradient-to-br from-[#FBF2F4] to-[#F5DCE2] border border-[#EBB6C3] rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between h-[155px] group">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-[11.5px] font-black uppercase tracking-wider text-[#a0364d] mb-1">Đánh giá & Uy tín</p>
-              <h3 className="text-2xl font-black text-[#5e1927] tracking-tight flex items-center gap-1">
-                4.9 <Star size={20} className="fill-rose-500 text-rose-500 shrink-0" />
-              </h3>
-            </div>
-            <div className="w-10 h-10 bg-white/70 rounded-xl flex items-center justify-center text-rose-600 border border-[#DF98AA]">
-              <Sparkles size={20} />
+            <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center border border-purple-100 shadow-inner group-hover:scale-110 transition-transform duration-300">
+              <Handshake size={22} />
             </div>
           </div>
-          <div className="flex justify-between items-center mt-3 pt-3 border-t border-[#DE90A3]/30 text-[11px] font-bold text-slate-600">
-            <span className="text-[#a0364d] font-black">Phản hồi: <span className="text-emerald-600">98%</span></span>
-            <span className="bg-white/60 px-1.5 py-0.5 rounded text-[10px] text-slate-600 font-extrabold">Top Rated</span>
+          <div className="flex justify-between items-center mt-3 pt-3 border-t border-slate-100 text-[11px] font-bold text-slate-500 z-10">
+            <span className="text-purple-600 font-extrabold flex items-center gap-1">
+              <Sparkles size={13} />
+              <span>Đàm phán sỉ số lượng lớn</span>
+            </span>
+            <span className="bg-rose-500 text-white border border-rose-600/10 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider animate-pulse">Gấp</span>
           </div>
         </div>
       </div>
@@ -479,7 +557,7 @@ export function SellerOverviewDashboard() {
       {/* Main Charts & Analytics Block */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
         {/* Doanh thu Recharts Area Chart */}
-        <div className="lg:col-span-2 bg-white rounded-3xl p-6 border border-gray-100 shadow-sm flex flex-col justify-between">
+        <div className="lg:col-span-2 bg-white rounded-3xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col justify-between">
           <div className="flex justify-between items-center mb-6">
             <div>
               <h2 className="text-base font-black text-slate-900 tracking-tight flex items-center gap-2">
@@ -488,19 +566,19 @@ export function SellerOverviewDashboard() {
               </h2>
               <p className="text-xs text-slate-400 font-medium">Theo dõi doanh thu luỹ kế thực tế của gian hàng B2B</p>
             </div>
-            <div className="flex items-center bg-gray-100 p-1.5 rounded-full">
+            <div className="flex items-center bg-slate-100 p-1 rounded-full border border-slate-200/50">
               <button
                 onClick={() => setChartPeriod('week')}
-                className={`px-3 py-1.5 rounded-full text-[10px] font-black transition-all ${
-                  chartPeriod === 'week' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                className={`px-4 py-1.5 rounded-full text-[10px] font-black transition-all duration-300 cursor-pointer ${
+                  chartPeriod === 'week' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-850'
                 }`}
               >
                 Tuần này
               </button>
               <button
                 onClick={() => setChartPeriod('month')}
-                className={`px-3 py-1.5 rounded-full text-[10px] font-black transition-all ${
-                  chartPeriod === 'month' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                className={`px-4 py-1.5 rounded-full text-[10px] font-black transition-all duration-300 cursor-pointer ${
+                  chartPeriod === 'month' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-850'
                 }`}
               >
                 Tháng này
@@ -525,7 +603,7 @@ export function SellerOverviewDashboard() {
                   tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }}
                 />
                 <YAxis
-                  tickFormatter={(v) => `${(v / 1000000).toFixed(0)}tr`}
+                  tickFormatter={(v: any) => `${(v / 1000000).toFixed(0)}tr`}
                   tickLine={false}
                   axisLine={false}
                   tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }}
@@ -546,7 +624,7 @@ export function SellerOverviewDashboard() {
         </div>
 
         {/* Tỷ lệ danh mục hàng bán chạy Recharts Pie Chart */}
-        <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm flex flex-col justify-between">
+        <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col justify-between">
           <div>
             <h2 className="text-base font-black text-slate-900 tracking-tight flex items-center gap-2 mb-1">
               <Box className="text-[#00b14f]" size={18} />
@@ -581,12 +659,12 @@ export function SellerOverviewDashboard() {
                 <Tooltip
                   formatter={(value: number) => [`${value.toLocaleString()}đ`, 'Doanh thu']}
                   contentStyle={{
-                    backgroundColor: '#0f172a',
-                    borderRadius: '16px',
-                    color: '#fff',
-                    border: 'none',
-                    fontSize: '11px',
-                    fontWeight: 700
+                     backgroundColor: '#0f172a',
+                     borderRadius: '16px',
+                     color: '#fff',
+                     border: 'none',
+                     fontSize: '11px',
+                     fontWeight: 700
                   }}
                 />
               </PieChart>
@@ -608,8 +686,8 @@ export function SellerOverviewDashboard() {
               return (
                 <div
                   key={idx}
-                  className={`p-2 rounded-2xl border transition-all ${
-                    activeSegment === idx ? 'bg-slate-50 border-gray-200' : 'bg-transparent border-transparent'
+                  className={`p-2 rounded-2xl border transition-all duration-300 ${
+                    activeSegment === idx ? 'bg-slate-50 border-slate-200' : 'bg-transparent border-transparent'
                   }`}
                 >
                   <div className="flex items-center gap-1.5 mb-0.5">
@@ -629,7 +707,7 @@ export function SellerOverviewDashboard() {
       {/* B2B Price Negotiation Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start mb-8">
         {/* B2B Negotiation list */}
-        <div className="lg:col-span-2 bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
+        <div className="lg:col-span-2 bg-white rounded-3xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition-shadow duration-300">
           <div className="flex justify-between items-center mb-6">
             <div>
               <h2 className="text-base font-black text-slate-900 tracking-tight flex items-center gap-2">
@@ -638,7 +716,7 @@ export function SellerOverviewDashboard() {
               </h2>
               <p className="text-xs text-slate-400 font-medium">Khách hàng mua sỉ đề xuất giá chiết khấu cho số lượng lớn</p>
             </div>
-            <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 text-[11px] font-extrabold px-3 py-1 rounded-full shrink-0">
+            <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 text-[11px] font-extrabold px-3 py-1 rounded-full shrink-0 select-none">
               {negotiations.filter((n) => n.status === 'pending').length} việc cần làm
             </span>
           </div>
@@ -651,15 +729,15 @@ export function SellerOverviewDashboard() {
                   key={neg.id}
                   className={`p-5 rounded-2xl border transition-all duration-300 ${
                     neg.status === 'approved'
-                      ? 'bg-[#E9F8EF]/20 border-emerald-100 shadow-sm'
+                      ? 'bg-emerald-50/20 border-emerald-100 shadow-sm'
                       : neg.status === 'countered'
                         ? 'bg-blue-50/30 border-blue-100 shadow-sm'
-                        : 'bg-slate-50/50 border-gray-100 hover:border-gray-200 hover:shadow-sm'
+                        : 'bg-slate-50/40 border-slate-100 hover:border-slate-200 hover:shadow-sm'
                   }`}
                 >
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-3">
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 bg-slate-200 text-slate-700 rounded">
+                      <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 bg-slate-200 text-slate-600 rounded">
                         {neg.id}
                       </span>
                       <h4 className="text-[13.5px] font-black text-slate-800">{neg.product}</h4>
@@ -667,7 +745,7 @@ export function SellerOverviewDashboard() {
                     <span className="text-[11px] font-bold text-slate-400">{neg.date}</span>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4 bg-white/70 p-3.5 rounded-xl border border-slate-100/70 text-xs">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4 bg-white/80 p-3.5 rounded-xl border border-slate-100/70 text-xs">
                     <div>
                       <p className="text-slate-400 font-medium mb-0.5">Khách hàng</p>
                       <p className="font-extrabold text-slate-700 truncate" title={neg.buyer}>
@@ -681,14 +759,14 @@ export function SellerOverviewDashboard() {
                     <div>
                       <p className="text-slate-400 font-medium mb-0.5">Giá gốc niêm yết</p>
                       <p className="font-extrabold text-slate-500 line-through">
-                        {neg.originalPrice.toLocaleString()}đ/đơn vị
+                        {neg.originalPrice.toLocaleString()}đ
                       </p>
                     </div>
                     <div>
                       <p className="text-slate-400 font-medium mb-0.5">Đề xuất khách sỉ</p>
                       <p className="font-black text-emerald-600 flex items-center gap-1.5">
                         {neg.proposedPrice.toLocaleString()}đ
-                        <span className="text-[10px] font-extrabold bg-rose-50 text-rose-600 px-1.5 py-0.2 rounded">
+                        <span className="text-[10px] font-extrabold bg-rose-50 text-rose-600 px-1.5 py-0.2 rounded border border-rose-100">
                           -{discountPercent}%
                         </span>
                       </p>
@@ -699,20 +777,20 @@ export function SellerOverviewDashboard() {
                   <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                     <div>
                       {neg.status === 'approved' && (
-                        <div className="flex items-center gap-1.5 text-[#00b14f] text-xs font-extrabold">
-                          <CheckCircle2 size={16} />
+                        <div className="flex items-center gap-1.5 text-emerald-650 text-xs font-black">
+                          <CheckCircle2 size={16} className="text-[#00b14f]" />
                           <span>Đã phê duyệt đơn giá đàm phán</span>
                         </div>
                       )}
                       {neg.status === 'countered' && (
-                        <div className="flex items-center gap-1.5 text-blue-600 text-xs font-extrabold">
+                        <div className="flex items-center gap-1.5 text-blue-600 text-xs font-black">
                           <Clock size={16} />
-                          <span>Đã phản hồi giá mới: {neg.counterOffer?.toLocaleString()}đ (Chờ khách phản hồi)</span>
+                          <span>Đã phản hồi giá mới: {neg.counterOffer?.toLocaleString()}đ (Chờ phản hồi)</span>
                         </div>
                       )}
                       {neg.status === 'pending' && (
-                        <div className="flex items-center gap-1 text-emerald-600 text-[11px] font-bold">
-                          <AlertCircle size={14} strokeWidth={2.2} />
+                        <div className="flex items-center gap-1.5 text-emerald-650 text-[11px] font-bold">
+                          <AlertCircle size={14} className="text-emerald-655" strokeWidth={2.2} />
                           <span>Yêu cầu đang chờ phản hồi từ bạn</span>
                         </div>
                       )}
@@ -724,20 +802,20 @@ export function SellerOverviewDashboard() {
                           <div className="flex items-center gap-1.5 bg-white border border-blue-200 rounded-full p-1 w-full sm:w-auto">
                             <input
                               type="number"
-                              placeholder="Nhập giá mới..."
+                              placeholder="Nhập giá..."
                               value={counterPriceInput}
                               onChange={(e) => setCounterPriceInput(e.target.value)}
                               className="text-xs font-bold text-slate-700 bg-transparent px-3 outline-none w-28"
                             />
                             <button
                               onClick={() => handleSubmitCounter(neg.id, neg.buyer)}
-                              className="px-4 py-1.5 bg-blue-600 text-white rounded-full text-[10px] font-extrabold hover:bg-blue-700 transition-all whitespace-nowrap"
+                              className="px-4 py-1.5 bg-blue-600 text-white rounded-full text-[10px] font-extrabold hover:bg-blue-700 transition-all whitespace-nowrap cursor-pointer"
                             >
-                              Gửi đề xuất
+                              Gửi
                             </button>
                             <button
                               onClick={() => setActiveCounterId(null)}
-                              className="px-3 py-1.5 bg-gray-100 text-slate-500 rounded-full text-[10px] font-extrabold hover:bg-gray-200 transition-all whitespace-nowrap"
+                              className="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-full text-[10px] font-extrabold hover:bg-slate-200 transition-all whitespace-nowrap cursor-pointer"
                             >
                               Hủy
                             </button>
@@ -746,13 +824,13 @@ export function SellerOverviewDashboard() {
                           <>
                             <button
                               onClick={() => handleOpenCounter(neg.id, neg.proposedPrice)}
-                              className="flex-1 sm:flex-initial px-4 py-2 border border-slate-200 hover:border-blue-500 text-slate-600 hover:text-blue-600 rounded-full text-xs font-bold transition-all bg-white"
+                              className="flex-1 sm:flex-initial px-4 py-2 border border-slate-200 hover:border-blue-500 text-slate-600 hover:text-blue-600 rounded-full text-xs font-bold transition-all bg-white cursor-pointer"
                             >
                               Đề xuất giá mới
                             </button>
                             <button
                               onClick={() => handleApprove(neg.id, neg.buyer)}
-                              className="flex-1 sm:flex-initial px-4 py-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-full text-xs font-black hover:from-emerald-600 hover:to-green-700 transition-all shadow-sm shadow-emerald-500/10"
+                              className="flex-1 sm:flex-initial px-4 py-2 bg-[#00b14f] hover:bg-[#009b45] text-white rounded-full text-xs font-black transition-all shadow-sm shadow-emerald-500/10 cursor-pointer"
                             >
                               Phê duyệt nhanh
                             </button>
@@ -770,7 +848,7 @@ export function SellerOverviewDashboard() {
         {/* Store Health Status & Quick Navigation */}
         <div className="space-y-6">
           {/* Quick Operations Grid */}
-          <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
+          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition-shadow duration-300">
             <h2 className="text-base font-black text-slate-900 tracking-tight flex items-center gap-2 mb-4">
               <Sparkles className="text-emerald-500" size={17} />
               Vận hành nhanh
@@ -778,36 +856,36 @@ export function SellerOverviewDashboard() {
             <div className="grid grid-cols-2 gap-3.5 text-center">
               <a
                 href="?view=seller-dashboard&tab=Qu%E1%BA%A3n%20l%C3%BD%20s%E1%BA%A3n%20ph%E1%BA%A9m"
-                className="p-3 bg-gray-50 hover:bg-emerald-50/20 border border-gray-100 hover:border-emerald-500/30 rounded-2xl transition-all group flex flex-col items-center"
+                className="p-3 bg-slate-50/50 hover:bg-emerald-50/20 border border-slate-100 hover:border-emerald-500/20 rounded-2xl transition-all duration-300 group flex flex-col items-center"
               >
-                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-emerald-500 border border-gray-100 shadow-sm group-hover:scale-110 transition-transform mb-2">
+                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-emerald-500 border border-slate-100 shadow-sm group-hover:scale-110 group-hover:shadow-md transition-all duration-300 mb-2">
                   <Box size={18} />
                 </div>
-                <span className="text-[11.5px] font-bold text-slate-700">Đăng sản phẩm sỉ</span>
+                <span className="text-[11.5px] font-bold text-slate-700">Đăng sản phẩm</span>
               </a>
               <a
                 href="?view=seller-dashboard&tab=%C4%90%C3%A0m%20ph%C3%A1n%20gi%C3%A1"
-                className="p-3 bg-gray-50 hover:bg-emerald-50/20 border border-gray-100 hover:border-emerald-500/30 rounded-2xl transition-all group flex flex-col items-center"
+                className="p-3 bg-slate-50/50 hover:bg-emerald-50/20 border border-slate-100 hover:border-emerald-500/20 rounded-2xl transition-all duration-300 group flex flex-col items-center"
               >
-                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-emerald-600 border border-gray-100 shadow-sm group-hover:scale-110 transition-transform mb-2">
+                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-emerald-600 border border-slate-100 shadow-sm group-hover:scale-110 group-hover:shadow-md transition-all duration-300 mb-2">
                   <Handshake size={18} />
                 </div>
                 <span className="text-[11.5px] font-bold text-slate-700">Đàm phán giá</span>
               </a>
               <a
                 href="?view=seller-dashboard&tab=%C4%90%E1%BB%91i%20so%C3%A1t%20ho%C3%A1%20%C4%91%C6%A1n%20%C4%91i%E1%BB%87n%20t%E1%BB%AD"
-                className="p-3 bg-gray-50 hover:bg-sky-50/20 border border-gray-100 hover:border-sky-500/30 rounded-2xl transition-all group flex flex-col items-center"
+                className="p-3 bg-slate-50/50 hover:bg-sky-50/20 border border-slate-100 hover:border-sky-500/20 rounded-2xl transition-all duration-300 group flex flex-col items-center"
               >
-                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-sky-600 border border-gray-100 shadow-sm group-hover:scale-110 transition-transform mb-2">
+                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-sky-600 border border-slate-100 shadow-sm group-hover:scale-110 group-hover:shadow-md transition-all duration-300 mb-2">
                   <Download size={18} />
                 </div>
                 <span className="text-[11.5px] font-bold text-slate-700">Đối soát hóa đơn</span>
               </a>
               <a
                 href="?view=seller-dashboard&tab=Th%C3%B4ng%20tin%20doanh%20nghi%E1%BB%87p"
-                className="p-3 bg-gray-50 hover:bg-purple-50/20 border border-gray-100 hover:border-purple-500/30 rounded-2xl transition-all group flex flex-col items-center"
+                className="p-3 bg-slate-50/50 hover:bg-purple-50/20 border border-slate-100 hover:border-purple-500/20 rounded-2xl transition-all duration-300 group flex flex-col items-center"
               >
-                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-purple-600 border border-gray-100 shadow-sm group-hover:scale-110 transition-transform mb-2">
+                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-purple-600 border border-slate-100 shadow-sm group-hover:scale-110 group-hover:shadow-md transition-all duration-300 mb-2">
                   <CheckCircle2 size={18} />
                 </div>
                 <span className="text-[11.5px] font-bold text-slate-700">Hồ sơ pháp lý</span>
@@ -816,7 +894,7 @@ export function SellerOverviewDashboard() {
           </div>
 
           {/* Store Health Indicators */}
-          <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
+          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition-shadow duration-300">
             <h2 className="text-base font-black text-slate-900 tracking-tight flex items-center gap-2 mb-4">
               <CheckCircle2 className="text-[#00b14f]" size={17} />
               Sức khỏe vận hành sỉ
@@ -824,9 +902,9 @@ export function SellerOverviewDashboard() {
             <div className="space-y-4">
               {/* Tỷ lệ hoàn thành đơn sỉ */}
               <div>
-                <div className="flex justify-between text-xs font-bold text-slate-600 mb-1.5">
+                <div className="flex justify-between text-xs font-bold text-slate-650 mb-1.5">
                   <span>Tỉ lệ giao hàng thành công</span>
-                  <span className="text-[#00b14f]">99.5%</span>
+                  <span className="text-[#00b14f] font-black">99.5%</span>
                 </div>
                 <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                   <div className="bg-[#00b14f] h-full rounded-full" style={{ width: '99.5%' }} />
@@ -835,9 +913,9 @@ export function SellerOverviewDashboard() {
 
               {/* Tỷ lệ phản hồi đàm phán */}
               <div>
-                <div className="flex justify-between text-xs font-bold text-slate-600 mb-1.5">
+                <div className="flex justify-between text-xs font-bold text-slate-650 mb-1.5">
                   <span>Tốc độ phản hồi đàm phán sỉ</span>
-                  <span className="text-[#00b14f]">1,2 giờ (Rất nhanh)</span>
+                  <span className="text-[#00b14f] font-black">1,2 giờ (Rất nhanh)</span>
                 </div>
                 <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                   <div className="bg-gradient-to-r from-emerald-500 to-[#00b14f] h-full rounded-full" style={{ width: '95%' }} />
@@ -846,9 +924,9 @@ export function SellerOverviewDashboard() {
 
               {/* Chất lượng hình ảnh & thông tin */}
               <div>
-                <div className="flex justify-between text-xs font-bold text-slate-600 mb-1.5">
+                <div className="flex justify-between text-xs font-bold text-slate-655 mb-1.5">
                   <span>Chất lượng danh mục sản phẩm</span>
-                  <span className="text-sky-600">98 / 100 điểm</span>
+                  <span className="text-sky-600 font-black">98 / 100 điểm</span>
                 </div>
                 <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                   <div className="bg-sky-500 h-full rounded-full" style={{ width: '98%' }} />
@@ -856,7 +934,7 @@ export function SellerOverviewDashboard() {
               </div>
             </div>
 
-            <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex items-start gap-3 mt-6 text-xs text-slate-500 font-medium leading-relaxed">
+            <div className="bg-slate-50/50 border border-slate-100 p-4 rounded-2xl flex items-start gap-3 mt-6 text-xs text-slate-500 font-medium leading-relaxed">
               <Sparkles size={16} className="text-emerald-500 shrink-0 mt-0.5" />
               <p>
                 Gian hàng của bạn xếp hạng trong <strong className="text-slate-700">Top 3%</strong> nhà cung cấp có tỉ lệ xử lý đơn B2B nhanh nhất toàn hệ thống. Hãy duy trì nhé!
@@ -869,156 +947,106 @@ export function SellerOverviewDashboard() {
       {/* Top Selling Products List & Activity Stream */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         {/* Top Selling Products Grid */}
-        <div className="lg:col-span-2 bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h2 className="text-base font-black text-slate-900 tracking-tight flex items-center gap-2">
-                <Box className="text-[#00b14f]" size={19} />
-                Sản phẩm bán chạy nhất tháng này
-              </h2>
-              <p className="text-xs text-slate-400 font-medium">Xếp hạng dựa trên khối lượng bán buôn và doanh thu tích luỹ</p>
-            </div>
-            <button className="text-slate-400 hover:text-slate-700 transition-colors">
-              <RefreshCw size={15} />
-            </button>
-          </div>
+        <div className="lg:col-span-2 bg-white rounded-3xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition-shadow duration-300">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {revenueStats?.topProducts && revenueStats.topProducts.length > 0 ? (
+              revenueStats.topProducts.map((prod: any, idx: number) => {
+                const colors = [
+                  { bg: 'bg-amber-500/10', text: 'text-amber-600', border: 'border-amber-500/25', hover: 'hover:border-emerald-500/20' },
+                  { bg: 'bg-slate-400/10', text: 'text-slate-500', border: 'border-slate-300', hover: 'hover:border-sky-500/20' },
+                  { bg: 'bg-amber-700/10', text: 'text-amber-700', border: 'border-amber-700/20', hover: 'hover:border-emerald-600/20' },
+                  { bg: 'bg-purple-500/10', text: 'text-purple-600', border: 'border-purple-500/20', hover: 'hover:border-purple-500/20' },
+                ];
+                const c = colors[idx % colors.length];
+                
+                const soldQty = prod.sales_volume || 0;
+                const currentQty = prod.qty || 0;
+                const totalQty = soldQty + currentQty;
+                const stockPercent = totalQty > 0 ? Math.round((currentQty / totalQty) * 100) : 0;
+                const unit = prod.unit || 'kg';
+                
+                const formattedRevenue = prod.revenue >= 1000000 
+                  ? `${(prod.revenue / 1000000).toLocaleString('vi-VN', { maximumFractionDigits: 1 })}trđ`
+                  : `${prod.revenue.toLocaleString('vi-VN')}đ`;
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Top Product 1 */}
-            <div className="p-4 rounded-2xl border border-gray-100 bg-slate-50/50 flex flex-col justify-between h-[155px]">
-              <div className="flex items-start gap-3">
-                <div className="w-12 h-12 bg-white border border-gray-200 rounded-xl flex items-center justify-center shrink-0 text-emerald-500 font-bold shadow-sm">
-                  1
-                </div>
-                <div className="min-w-0">
-                  <h4 className="text-xs font-black text-slate-800 truncate mb-1">Ba Chỉ Bò Mỹ Nhập Khẩu (Thùng 20kg)</h4>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Ngành: Thịt tươi sống</p>
-                </div>
+                return (
+                  <div key={prod.sku} className={`p-4 rounded-2xl border border-slate-100 bg-slate-50/30 flex flex-col justify-between h-[155px] ${c.hover} hover:bg-white hover:shadow-md transition-all duration-300 group`}>
+                    <div className="flex items-start gap-3">
+                      <div className={`w-10 h-10 ${c.bg} ${c.text} rounded-xl flex items-center justify-center shrink-0 font-black text-sm border ${c.border} shadow-sm group-hover:scale-105 transition-transform select-none`}>
+                        #{idx + 1}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-black text-slate-800 truncate mb-1" title={prod.name}>{prod.name}</h4>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{prod.category || 'Khác'}</p>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs font-bold text-slate-700 mb-1 mt-3">
+                        <span>Khối lượng: {soldQty.toLocaleString('vi-VN')} {unit}</span>
+                        <span className="text-emerald-600 font-black">{formattedRevenue}</span>
+                      </div>
+                      <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                        <div className="bg-[#00b14f] h-full rounded-full" style={{ width: `${stockPercent}%` }} />
+                      </div>
+                      <p className="text-[9px] text-slate-400 text-right mt-1 font-bold">Còn {stockPercent}% tồn kho</p>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="col-span-2 text-center py-8 text-xs text-slate-400 font-bold">
+                Chưa có dữ liệu sản phẩm bán chạy.
               </div>
-              <div>
-                <div className="flex justify-between text-xs font-bold text-slate-700 mb-1 mt-3">
-                  <span>Khối lượng: 180 thùng</span>
-                  <span className="text-[#00b14f]">144tr đ</span>
-                </div>
-                <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                  <div className="bg-[#00b14f] h-full rounded-full" style={{ width: '85%' }} />
-                </div>
-                <p className="text-[9px] text-slate-400 text-right mt-1 font-bold">Còn 15% tồn kho</p>
-              </div>
-            </div>
-
-            {/* Top Product 2 */}
-            <div className="p-4 rounded-2xl border border-gray-100 bg-slate-50/50 flex flex-col justify-between h-[155px]">
-              <div className="flex items-start gap-3">
-                <div className="w-12 h-12 bg-white border border-gray-200 rounded-xl flex items-center justify-center shrink-0 text-emerald-500 font-bold shadow-sm">
-                  2
-                </div>
-                <div className="min-w-0">
-                  <h4 className="text-xs font-black text-slate-800 truncate mb-1">Tôm Sú Quảng Ninh Đông Lạnh (Hộp 1kg)</h4>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Ngành: Hải sản đông lạnh</p>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between text-xs font-bold text-slate-700 mb-1 mt-3">
-                  <span>Khối lượng: 250 hộp</span>
-                  <span className="text-sky-600">87,5tr đ</span>
-                </div>
-                <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                  <div className="bg-sky-500 h-full rounded-full" style={{ width: '92%' }} />
-                </div>
-                <p className="text-[9px] text-slate-400 text-right mt-1 font-bold">Còn 8% tồn kho</p>
-              </div>
-            </div>
-
-            {/* Top Product 3 */}
-            <div className="p-4 rounded-2xl border border-gray-100 bg-slate-50/50 flex flex-col justify-between h-[155px]">
-              <div className="flex items-start gap-3">
-                <div className="w-12 h-12 bg-white border border-gray-200 rounded-xl flex items-center justify-center shrink-0 text-emerald-500 font-bold shadow-sm">
-                  3
-                </div>
-                <div className="min-w-0">
-                  <h4 className="text-xs font-black text-slate-800 truncate mb-1">Cải Thảo Đà Lạt Loại 1 (Bao 30kg)</h4>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Ngành: Rau củ hữu cơ</p>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between text-xs font-bold text-slate-700 mb-1 mt-3">
-                  <span>Khối lượng: 420 bao</span>
-                  <span className="text-emerald-600">63tr đ</span>
-                </div>
-                <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                  <div className="bg-emerald-500 h-full rounded-full" style={{ width: '70%' }} />
-                </div>
-                <p className="text-[9px] text-slate-400 text-right mt-1 font-bold">Còn 30% tồn kho</p>
-              </div>
-            </div>
-
-            {/* Top Product 4 */}
-            <div className="p-4 rounded-2xl border border-gray-100 bg-slate-50/50 flex flex-col justify-between h-[155px]">
-              <div className="flex items-start gap-3">
-                <div className="w-12 h-12 bg-white border border-gray-200 rounded-xl flex items-center justify-center shrink-0 text-emerald-500 font-bold shadow-sm">
-                  4
-                </div>
-                <div className="min-w-0">
-                  <h4 className="text-xs font-black text-slate-800 truncate mb-1">Dầu Ăn Cái Lân Can 5L (Thùng 4 Can)</h4>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Ngành: Đồ khô gia vị</p>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between text-xs font-bold text-slate-700 mb-1 mt-3">
-                  <span>Khối lượng: 110 thùng</span>
-                  <span className="text-purple-600">48,4tr đ</span>
-                </div>
-                <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                  <div className="bg-purple-500 h-full rounded-full" style={{ width: '55%' }} />
-                </div>
-                <p className="text-[9px] text-slate-400 text-right mt-1 font-bold">Còn 45% tồn kho</p>
-              </div>
-            </div>
+            )}
           </div>
         </div>
 
         {/* Activity Stream/Timeline */}
-        <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm flex flex-col justify-between min-h-[340px]">
+        <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col justify-between min-h-[340px]">
           <div>
             <h2 className="text-base font-black text-slate-900 tracking-tight flex items-center gap-2 mb-4">
               <Clock className="text-emerald-500" size={17} />
               Nhật ký vận hành sỉ
             </h2>
-            <div className="space-y-4">
-              {/* Event 1 */}
-              <div className="flex items-start gap-3 text-xs leading-relaxed text-slate-500 font-medium">
-                <div className="w-2.5 h-2.5 bg-[#00b14f] rounded-full shrink-0 mt-1 shadow shadow-emerald-500/50" />
-                <div>
-                  <p className="text-slate-700 font-bold">Đồng bộ hoá đơn hoàn tất</p>
-                  <p>Hệ thống vừa tự động đối soát hoá đơn số <strong className="text-slate-600">#HD9821-B2B</strong>.</p>
-                  <span className="text-[10px] font-bold text-slate-400">10 phút trước</span>
-                </div>
-              </div>
+            <div className="relative pl-6 border-l-2 border-slate-100 space-y-6 ml-2">
+              {getMergedLogs().length > 0 ? (
+                getMergedLogs().map((log: any, idx: number) => {
+                  let dotColor = 'bg-[#00b14f]';
+                  let borderDotColor = 'border-emerald-500';
+                  let bgDotColor = 'bg-emerald-50';
 
-              {/* Event 2 */}
-              <div className="flex items-start gap-3 text-xs leading-relaxed text-slate-500 font-medium">
-                <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full shrink-0 mt-1 shadow shadow-emerald-500/50" />
-                <div>
-                  <p className="text-slate-700 font-bold">Yêu cầu đàm phán giá mới</p>
-                  <p>Khách hàng <strong className="text-slate-600">Lotte Mart</strong> vừa gửi đề xuất chiết khấu cho mã hàng nấm đùi gà.</p>
-                  <span className="text-[10px] font-bold text-slate-400">1 giờ trước</span>
-                </div>
-              </div>
+                  if (log.type === 'order_created') {
+                    dotColor = 'bg-sky-500';
+                    borderDotColor = 'border-sky-500';
+                    bgDotColor = 'bg-sky-50';
+                  } else if (log.type === 'negotiation_action') {
+                    dotColor = 'bg-purple-500';
+                    borderDotColor = 'border-purple-500';
+                    bgDotColor = 'bg-purple-50';
+                  }
 
-              {/* Event 3 */}
-              <div className="flex items-start gap-3 text-xs leading-relaxed text-slate-500 font-medium">
-                <div className="w-2.5 h-2.5 bg-slate-300 rounded-full shrink-0 mt-1" />
-                <div>
-                  <p className="text-slate-700 font-bold">Cập nhật bởi nhân viên</p>
-                  <p>Quản lý <strong className="text-slate-600">Nguyễn Văn A</strong> vừa điều chỉnh giá niêm yết của Tôm Sú Quảng Ninh.</p>
-                  <span className="text-[10px] font-bold text-slate-400">4 giờ trước</span>
+                  return (
+                    <div key={idx} className="relative leading-relaxed text-xs text-slate-500 font-medium animate-in fade-in slide-in-from-left-2 duration-300">
+                      <span className={`absolute -left-[31px] top-1 w-4.5 h-4.5 ${bgDotColor} rounded-full border ${borderDotColor} flex items-center justify-center`}>
+                        <span className={`w-2 h-2 ${dotColor} rounded-full`} />
+                      </span>
+                      <div>
+                        <p className="text-slate-700 font-bold">{log.title}</p>
+                        <p dangerouslySetInnerHTML={{ __html: log.message }} />
+                        <span className="text-[10px] font-bold text-slate-400">{formatTimeAgo(log.time)}</span>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="text-center py-6 text-xs text-slate-400 font-bold">
+                  Không có nhật ký vận hành gần đây.
                 </div>
-              </div>
+              )}
             </div>
           </div>
 
-          <button className="w-full mt-6 py-2.5 bg-slate-50 text-slate-600 hover:text-[#00b14f] hover:bg-[#E9F8EF]/20 border border-gray-100 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5">
+          <button className="w-full mt-6 py-2.5 bg-slate-50 text-slate-600 hover:text-[#00b14f] hover:bg-emerald-50/20 border border-slate-100 rounded-full text-xs font-bold transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer">
             <span>Xem tất cả hoạt động</span>
             <ArrowRight size={13} />
           </button>

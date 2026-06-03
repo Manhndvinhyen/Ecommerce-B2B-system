@@ -55,6 +55,17 @@ const getAuthToken = () =>
 const isValidPhone = (value: string) => /^(\+?84|0)\d{9,10}$/.test(value.replace(/\s/g, ''));
 const getRegionFromBranch = (branch: string) => branch.replace(/^Chi nhánh\s+/i, '').trim();
 
+const getMagentoMediaImageUrl = (file?: string | null) => {
+  if (!file || !file.trim()) return '';
+  const normalizedFile = file.startsWith('/') ? file : `/${file}`;
+  return `${window.location.origin}/media/catalog/product${normalizedFile}`;
+};
+
+const isRealImageUrl = (value?: string | null) => {
+  if (!value) return false;
+  return !value.toLowerCase().includes('/placeholder/');
+};
+
 type MagentoCartItem = {
   id: number | string;
   quantity?: number;
@@ -64,6 +75,10 @@ type MagentoCartItem = {
     categories?: Array<{ name?: string | null }> | null;
     small_image?: { url?: string | null } | null;
     thumbnail?: { url?: string | null } | null;
+    media_gallery_entries?: Array<{
+      file?: string | null;
+      disabled?: boolean | null;
+    }> | null;
     price_range?: {
       minimum_price?: {
         final_price?: { value?: number | null } | null;
@@ -121,12 +136,16 @@ const mapMagentoCartItems = (items: MagentoCartItem[] = []): CheckoutItem[] => {
     const unitPrice = originalPrice * (1 - discountPercent / 100);
     const category = product.categories?.find((cat) => cat?.name)?.name ?? (matchingProduct?.categoryLabel || '');
     const unit = matchingProduct?.unit || 'kg';
-
-    const rawImage = product.small_image?.url || product.thumbnail?.url || '';
-    const isPlaceholder = rawImage.toLowerCase().includes('placeholder');
-    const finalImage = !rawImage || isPlaceholder 
-      ? (matchingProduct?.image || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop') 
-      : rawImage;
+    const galleryImage = (product.media_gallery_entries ?? []).find((entry) => {
+      const file = entry.file?.trim() ?? '';
+      return file && !file.toLowerCase().includes('placeholder');
+    });
+    const finalImage =
+      (isRealImageUrl(getMagentoMediaImageUrl(galleryImage?.file)) ? getMagentoMediaImageUrl(galleryImage?.file) : '') ||
+      (isRealImageUrl(product.small_image?.url) ? product.small_image?.url : '') ||
+      (isRealImageUrl(product.thumbnail?.url) ? product.thumbnail?.url : '') ||
+      matchingProduct?.image ||
+      'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop';
 
     return {
       id: String(item.id),
@@ -168,6 +187,7 @@ const fetchCustomerCartPayload = async (): Promise<CheckoutPayload | null> => {
                 categories { name }
                 small_image { url }
                 thumbnail { url }
+                media_gallery_entries { file disabled }
                 price_range { minimum_price { final_price { value } } }
               }
             }

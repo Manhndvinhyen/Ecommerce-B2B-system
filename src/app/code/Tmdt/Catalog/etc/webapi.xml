@@ -53,10 +53,25 @@
             <resource ref="anonymous"/>
         </resources>
     </route>
-    <route url="/V1/tmdt-orders/webhook" method="POST">
-        <service class="Tmdt\Catalog\Api\OrderManagementInterface" method="handleWebhook"/>
+    <!-- Seller Stock Warning Notifications -->
+    <route url="/V1/tmdt-catalog/notifications" method="GET">
+        <service class="Tmdt\Catalog\Api\ProductManagementInterface" method="getSellerNotifications"/>
         <resources>
-            <resource ref="anonymous"/>
+            <resource ref="self"/>
         </resources>
     </route>
+    <route url="/V1/tmdt-catalog/notifications/read" method="POST">
+        <service class="Tmdt\Catalog\Api\ProductManagementInterface" method="markNotificationsAsRead"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+    <!-- Seller Revenue and Analytics Stats -->
+    <route url="/V1/tmdt-catalog/revenue" method="GET">
+        <service class="Tmdt\Catalog\Api\ProductManagementInterface" method="getSellerRevenueStats"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+    <!-- NOTE: Webhook is handled by Controller at /tmdt/webhook/sepay (not REST API) -->
 </routes>

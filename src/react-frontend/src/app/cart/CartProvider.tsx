@@ -81,6 +81,16 @@ const isAuthSessionError = (message: string) => {
   return authSessionErrorMarkers.some((marker) => normalized.includes(marker));
 };
 
+const fallbackImageByCategory: Record<string, string> = {
+  'Rau củ quả': 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&h=500&fit=crop',
+  'Trái cây': 'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=500&h=500&fit=crop',
+  'Thực phẩm tươi sống': 'https://images.unsplash.com/photo-1602470520998-f4a52199a3d6?w=500&h=500&fit=crop',
+  'Thuỷ hải sản': 'https://images.unsplash.com/photo-1615141982883-c7ad0e69fd62?w=500&h=500&fit=crop',
+  'Thực phẩm đông lạnh': 'https://images.unsplash.com/photo-1481070414801-51fd732d7184?w=500&h=500&fit=crop',
+  'Thực phẩm khô': 'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=500&h=500&fit=crop',
+  'Tiện ích bếp': 'https://images.unsplash.com/photo-1584990347449-a1e229ee8b29?w=500&h=500&fit=crop'
+};
+
 const clearCustomerAuthSession = () => {
   if (typeof window === 'undefined') {
     return;
@@ -330,10 +340,11 @@ export function CartProvider({ children }: PropsWithChildren) {
 
       // Prioritise seller-uploaded image; only use Magento image if it's not a placeholder
       const rawImage = product.small_image?.url || product.thumbnail?.url || '';
+      const fallbackImage = fallbackImageByCategory[category] || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop';
       const finalImage =
         matchingProduct?.image ||
         (!rawImage || rawImage.toLowerCase().includes('placeholder')
-          ? 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop'
+          ? fallbackImage
           : rawImage);
 
       return {
@@ -351,6 +362,48 @@ export function CartProvider({ children }: PropsWithChildren) {
         note: '',
       };
     });
+  }, []);
+
+  const mergeMagentoAndLocalCart = useCallback((mappedMagento: CartLineItem[]): CartLineItem[] => {
+    const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
+    let customLocalProducts: any[] = [];
+    if (customLocalRaw) {
+      try {
+        customLocalProducts = JSON.parse(customLocalRaw);
+      } catch {
+        customLocalProducts = [];
+      }
+    }
+
+    const localCartRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_local_cart_items') : null;
+    let localCartItems: CartLineItem[] = [];
+    if (localCartRaw) {
+      try {
+        localCartItems = JSON.parse(localCartRaw);
+      } catch {
+        localCartItems = [];
+      }
+    }
+
+    const enrichedLocalItems = localCartItems.map((item) => {
+      const localSku = (item.sku ?? '').trim().toLowerCase();
+      const match = customLocalProducts.find(
+        (p) => (p.sku ?? '').trim().toLowerCase() === localSku
+      );
+      return {
+        ...item,
+        image: match?.image || item.image,
+        unitPrice: match ? Number(match.price) : item.unitPrice,
+        unit: match?.unit || item.unit,
+      };
+    });
+
+    const magentoSkus = new Set(mappedMagento.map((i) => (i.sku ?? '').trim().toLowerCase()));
+    const localOnly = enrichedLocalItems.filter(
+      (i) => !magentoSkus.has((i.sku ?? '').trim().toLowerCase())
+    );
+
+    return [...mappedMagento, ...localOnly];
   }, []);
 
   const loadCustomerCart = useCallback(async () => {
@@ -396,54 +449,8 @@ export function CartProvider({ children }: PropsWithChildren) {
     const magentoItems = await activeCustomerCartItemsRequest;
     const mappedMagento = mapMagentoCartItems(magentoItems);
 
-    // Load local custom seller products to merge with Magento cart
-    const customLocalRaw = typeof window !== 'undefined'
-      ? window.localStorage.getItem('freso_custom_products')
-      : null;
-    let customLocalProducts: any[] = [];
-    if (customLocalRaw) {
-      try {
-        customLocalProducts = JSON.parse(customLocalRaw);
-      } catch {
-        customLocalProducts = [];
-      }
-    }
-
-    // Load persisted local cart items (seller products not in Magento)
-    const localCartRaw = typeof window !== 'undefined'
-      ? window.localStorage.getItem('freso_local_cart_items')
-      : null;
-    let localCartItems: CartLineItem[] = [];
-    if (localCartRaw) {
-      try {
-        localCartItems = JSON.parse(localCartRaw);
-      } catch {
-        localCartItems = [];
-      }
-    }
-
-    // Enrich local cart items with up-to-date seller image
-    const enrichedLocalItems = localCartItems.map((item) => {
-      const localSku = (item.sku ?? '').trim().toLowerCase();
-      const match = customLocalProducts.find(
-        (p) => (p.sku ?? '').trim().toLowerCase() === localSku
-      );
-      return {
-        ...item,
-        image: match?.image || item.image,
-        unitPrice: match ? Number(match.price) : item.unitPrice,
-        unit: match?.unit || item.unit,
-      };
-    });
-
-    // Merge: Magento items take precedence; local items fill the gap
-    const magentoSkus = new Set(mappedMagento.map((i) => (i.sku ?? '').trim().toLowerCase()));
-    const localOnly = enrichedLocalItems.filter(
-      (i) => !magentoSkus.has((i.sku ?? '').trim().toLowerCase())
-    );
-
-    setCartItems([...mappedMagento, ...localOnly]);
-  }, [graphqlRequest, isAuthenticated, mapMagentoCartItems]);
+    setCartItems(mergeMagentoAndLocalCart(mappedMagento));
+  }, [graphqlRequest, isAuthenticated, mapMagentoCartItems, mergeMagentoAndLocalCart]);
 
 
   useEffect(() => {
@@ -681,7 +688,8 @@ export function CartProvider({ children }: PropsWithChildren) {
       const items = await addProductToMagentoCart(selectedProduct, quantity);
       if (items && items.length > 0) {
         // Magento returned real cart items – use them
-        setCartItems(mapMagentoCartItems(items));
+        const mapped = mapMagentoCartItems(items);
+        setCartItems(mergeMagentoAndLocalCart(mapped));
       } else {
         // Magento returned empty (custom/local product not in Magento catalog)
         // Fall back to adding directly into local cart state
@@ -706,7 +714,7 @@ export function CartProvider({ children }: PropsWithChildren) {
     toastTimerRef.current = window.setTimeout(() => {
       setToastMessage('');
     }, 2400);
-  }, [addProductToMagentoCart, addToCart, closeModal, ensureAuthenticated, mapMagentoCartItems, modalProduct, modalQuantity, runFlyToCartAnimation]);
+  }, [addProductToMagentoCart, addToCart, closeModal, ensureAuthenticated, mapMagentoCartItems, mergeMagentoAndLocalCart, modalProduct, modalQuantity, runFlyToCartAnimation]);
 
   const quickAddToCart = useCallback(
     async (product: AddToCartProduct, quantity: number, sourceImageElement?: Element | null) => {
@@ -720,7 +728,8 @@ export function CartProvider({ children }: PropsWithChildren) {
         const items = await addProductToMagentoCart(product, targetQuantity);
         if (items && items.length > 0) {
           // Magento returned real cart items – use them
-          setCartItems(mapMagentoCartItems(items));
+          const mapped = mapMagentoCartItems(items);
+          setCartItems(mergeMagentoAndLocalCart(mapped));
         } else {
           // Custom/local seller product not in Magento catalog – add to local cart state
           addToCart(product, targetQuantity);
@@ -745,7 +754,7 @@ export function CartProvider({ children }: PropsWithChildren) {
         setToastMessage('');
       }, 2400);
     },
-    [addProductToMagentoCart, addToCart, ensureAuthenticated, mapMagentoCartItems, runFlyToCartAnimation]
+    [addProductToMagentoCart, addToCart, ensureAuthenticated, mapMagentoCartItems, mergeMagentoAndLocalCart, runFlyToCartAnimation]
   );
 
   const setCartItemQuantity = useCallback(async (itemId: string, quantity: number) => {
@@ -753,14 +762,39 @@ export function CartProvider({ children }: PropsWithChildren) {
       return;
     }
 
+    const targetItem = cartItems.find((i) => i.id === itemId);
+    if (!targetItem) {
+      return;
+    }
+
+    const targetQuantity = clampQuantity(quantity);
+
+    if (!targetItem.cartItemId) {
+      // Local-only item: update quantity in state and localStorage
+      setCartItems((prev) => {
+        const next = prev.map((item) =>
+          item.id === itemId ? { ...item, quantity: targetQuantity } : item
+        );
+        const localItems = next.filter((i) => !i.cartItemId);
+        try {
+          window.localStorage.setItem('freso_local_cart_items', JSON.stringify(localItems));
+        } catch {
+          // ignore
+        }
+        return next;
+      });
+      return;
+    }
+
     try {
-      const items = await updateMagentoCartItemQuantity(itemId, quantity);
-      setCartItems(mapMagentoCartItems(items));
+      const items = await updateMagentoCartItemQuantity(itemId, targetQuantity);
+      const mapped = mapMagentoCartItems(items);
+      setCartItems(mergeMagentoAndLocalCart(mapped));
     } catch (_error) {
       setToastMessage('Không thể cập nhật số lượng. Vui lòng thử lại.');
       toastTimerRef.current = window.setTimeout(() => setToastMessage(''), 2400);
     }
-  }, [ensureAuthenticated, mapMagentoCartItems, updateMagentoCartItemQuantity]);
+  }, [cartItems, ensureAuthenticated, mapMagentoCartItems, mergeMagentoAndLocalCart, updateMagentoCartItemQuantity]);
 
   const setCartItemSelected = useCallback((itemId: string, selected: boolean) => {
     setCartItems((prev) => prev.map((item) => (item.id === itemId ? { ...item, selected } : item)));
@@ -775,36 +809,44 @@ export function CartProvider({ children }: PropsWithChildren) {
       return;
     }
 
-    // Check if this is a local-only seller item (no Magento cartItemId)
     const targetItem = cartItems.find((i) => i.id === itemId);
-    if (!targetItem || !targetItem.cartItemId) {
-      // Local-only item: remove from state and localStorage
-      setCartItems((prev) => {
-        const next = prev.filter((i) => i.id !== itemId);
-        const localItems = next.filter((i) => !i.cartItemId);
-        try {
-          window.localStorage.setItem('freso_local_cart_items', JSON.stringify(localItems));
-        } catch {
-          // ignore
-        }
-        return next;
-      });
+    if (!targetItem) {
+      return;
+    }
+
+    // Always remove from localStorage local items (by SKU or ID) to prevent syncing issues
+    const targetSku = (targetItem.sku ?? '').trim().toLowerCase();
+    const localCartRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_local_cart_items') : null;
+    if (localCartRaw) {
+      try {
+        const localCartItems: CartLineItem[] = JSON.parse(localCartRaw);
+        const updatedLocalItems = localCartItems.filter(
+          (i) =>
+            (i.sku ?? '').trim().toLowerCase() !== targetSku &&
+            i.id !== itemId &&
+            i.id !== targetItem.id
+        );
+        window.localStorage.setItem('freso_local_cart_items', JSON.stringify(updatedLocalItems));
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!targetItem.cartItemId) {
+      // Local-only item: remove from state
+      setCartItems((prev) => prev.filter((i) => i.id !== itemId));
       return;
     }
 
     try {
       const items = await removeMagentoCartItem(itemId);
       const mappedMagento = mapMagentoCartItems(items);
-      // Keep local items that weren't removed
-      setCartItems((prev) => {
-        const localItems = prev.filter((i) => !i.cartItemId && i.id !== itemId);
-        return [...mappedMagento, ...localItems];
-      });
+      setCartItems(mergeMagentoAndLocalCart(mappedMagento));
     } catch (_error) {
       setToastMessage('Không thể xóa sản phẩm. Vui lòng thử lại.');
       toastTimerRef.current = window.setTimeout(() => setToastMessage(''), 2400);
     }
-  }, [cartItems, ensureAuthenticated, mapMagentoCartItems, removeMagentoCartItem]);
+  }, [cartItems, ensureAuthenticated, mapMagentoCartItems, mergeMagentoAndLocalCart, removeMagentoCartItem]);
 
 
   const toggleAllCartItems = useCallback((selected: boolean) => {

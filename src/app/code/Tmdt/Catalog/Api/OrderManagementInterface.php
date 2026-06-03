@@ -6,12 +6,22 @@ namespace Tmdt\Catalog\Api;
 interface OrderManagementInterface
 {
     /**
-     * Create a new pending order and return order code + expiry.
+     * Create a new pending order.
      *
-     * @param mixed[] $orderData
+     * @param string $customerEmail
+     * @param string $customerName
+     * @param float  $totalAmount
+     * @param string $itemsJson    JSON-encoded array of cart items
+     * @param string $shippingJson JSON-encoded shipping info
      * @return mixed[]
      */
-    public function createOrder(array $orderData): array;
+    public function createOrder(
+        string $customerEmail,
+        string $customerName,
+        float $totalAmount,
+        string $itemsJson,
+        string $shippingJson
+    ): array;
 
     /**
      * Get order status by order code.
@@ -20,12 +30,4 @@ interface OrderManagementInterface
      * @return mixed[]
      */
     public function getOrderStatus(string $orderCode): array;
-
-    /**
-     * Handle SePay webhook for payment confirmation.
-     *
-     * @param mixed[] $payload
-     * @return mixed[]
-     */
-    public function handleWebhook(array $payload): array;
 }

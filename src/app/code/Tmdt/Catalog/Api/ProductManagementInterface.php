@@ -40,4 +40,28 @@ interface ProductManagementInterface
      * @throws \Magento\Framework\Exception\LocalizedException
      */
     public function getSellerProducts();
+
+    /**
+     * Get stock notifications for the authenticated B2B seller.
+     *
+     * @return mixed[]
+     * @throws \Magento\Framework\Exception\LocalizedException
+     */
+    public function getSellerNotifications(): array;
+
+    /**
+     * Mark all stock notifications as read for the authenticated B2B seller.
+     *
+     * @return bool
+     * @throws \Magento\Framework\Exception\LocalizedException
+     */
+    public function markNotificationsAsRead(): bool;
+
+    /**
+     * Get revenue and analytics stats for the authenticated B2B seller.
+     *
+     * @return mixed[]
+     * @throws \Magento\Framework\Exception\LocalizedException
+     */
+    public function getSellerRevenueStats(): array;
 }

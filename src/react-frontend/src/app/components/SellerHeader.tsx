@@ -11,6 +11,19 @@ export function SellerHeader() {
   const [userRole, setUserRole] = useState('seller');
   const userMenuRef = useRef<HTMLDivElement | null>(null);
 
+  // States and refs for B2B seller notifications
+  interface SellerNotification {
+    id: string;
+    seller_id: string;
+    sku: string;
+    message: string;
+    is_read: number;
+    created_at: string;
+  }
+  const [notifications, setNotifications] = useState<SellerNotification[]>([]);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const notifMenuRef = useRef<HTMLDivElement | null>(null);
+
   const reactHomePath = '/react/index.html';
   const isEmbeddedInIframe = window.self !== window.top;
 
@@ -219,6 +232,89 @@ export function SellerHeader() {
     };
   }, [isUserMenuOpen]);
 
+  // Load B2B notifications for seller
+  const fetchNotifications = async () => {
+    const token = window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
+    if (!token) return;
+    try {
+      const res = await fetch(`${window.location.origin}/rest/V1/tmdt-catalog/notifications`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setNotifications(data.map((n: any) => ({
+            id: String(n.id),
+            seller_id: String(n.seller_id),
+            sku: String(n.sku),
+            message: String(n.message),
+            is_read: Number(n.is_read),
+            created_at: String(n.created_at)
+          })));
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 15000); // Poll every 15s
+
+    // Listen to custom re-fetch event
+    const handleRefreshNotifs = () => fetchNotifications();
+    window.addEventListener('freso:refresh-notifications', handleRefreshNotifs);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('freso:refresh-notifications', handleRefreshNotifs);
+    };
+  }, [customerToken]);
+
+  // Handle click outside for notifications popover
+  useEffect(() => {
+    if (!isNotifOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (target && notifMenuRef.current?.contains(target)) {
+        return;
+      }
+      setIsNotifOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isNotifOpen]);
+
+  const handleMarkAllRead = async () => {
+    const token = window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
+    if (!token) return;
+    try {
+      const res = await fetch(`${window.location.origin}/rest/V1/tmdt-catalog/notifications/read`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        setNotifications(prev => prev.map(n => ({ ...n, is_read: 1 })));
+        // Dispatch event to refresh dashboard alert banners
+        window.dispatchEvent(new CustomEvent('freso:notifications-read'));
+      }
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  const unreadCount = notifications.filter(n => n.is_read === 0).length;
+
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.03)] transition-all duration-300" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }} onClickCapture={handleTopLevelNavigation}>
       {/* Top visual gradient border */}
@@ -283,14 +379,60 @@ export function SellerHeader() {
               <HelpCircle className="size-5 transition-transform group-hover:scale-105" />
             </button>
             
-            <button 
-              type="button" 
-              className="relative p-2 hover:bg-gray-50 rounded-full transition-colors text-gray-500 hover:text-[#00b14f] group" 
-              title="Thông báo"
-            >
-              <Bell className="size-5 transition-transform group-hover:scale-105" />
-              <span className="absolute top-1.5 right-1.5 bg-rose-500 size-2 rounded-full ring-2 ring-white animate-pulse"></span>
-            </button>
+            <div className="relative" ref={notifMenuRef}>
+              <button 
+                type="button" 
+                onClick={() => setIsNotifOpen(!isNotifOpen)}
+                className="relative p-2 hover:bg-gray-50 rounded-full transition-colors text-gray-500 hover:text-[#00b14f] group" 
+                title="Thông báo"
+              >
+                <Bell className="size-5 transition-transform group-hover:scale-105" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center ring-2 ring-white animate-pulse">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+              
+              {isNotifOpen && (
+                <div className="absolute right-0 mt-3 w-[320px] bg-white border border-gray-150 rounded-2xl shadow-xl p-3 z-50 animate-in fade-in slide-in-from-top-3 duration-200">
+                  <div className="flex justify-between items-center pb-2 border-b border-gray-100 mb-2">
+                    <span className="text-xs font-black text-slate-800">Thông báo sỉ ({unreadCount})</span>
+                    {unreadCount > 0 && (
+                      <button 
+                        onClick={handleMarkAllRead}
+                        className="text-[10px] font-black text-green-600 hover:text-green-700 transition-colors"
+                      >
+                        Đọc tất cả
+                      </button>
+                    )}
+                  </div>
+                  <div className="max-h-[260px] overflow-y-auto space-y-2 text-xs">
+                    {notifications.length === 0 ? (
+                      <div className="text-center py-6 text-slate-400 font-medium">Không có thông báo mới</div>
+                    ) : (
+                      notifications.map((notif) => (
+                        <div 
+                          key={notif.id} 
+                          className={`p-2.5 rounded-xl border transition-all ${
+                            notif.is_read === 0 
+                              ? 'bg-rose-50/60 border-rose-100/70 font-semibold' 
+                              : 'bg-slate-50/50 border-gray-100/50 text-slate-500'
+                          }`}
+                        >
+                          <p className={notif.is_read === 0 ? 'text-slate-900 font-bold' : 'text-slate-600'}>
+                            {notif.message}
+                          </p>
+                          <span className="text-[10px] text-slate-400 block mt-1">
+                            {new Date(notif.created_at).toLocaleString('vi-VN')}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="h-4 w-[1px] bg-gray-200" />

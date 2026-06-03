@@ -39,5 +39,34 @@
             <column name="status"/>
         </index>
     </table>
+
+    <table name="tmdt_order_status_history" resource="default" engine="innodb" comment="Tmdt Order Status History">
+        <column xsi:type="int" name="id" padding="10" unsigned="true" nullable="false" identity="true" comment="History ID"/>
+        <column xsi:type="varchar" name="order_code" length="32" nullable="false" comment="Order Code"/>
+        <column xsi:type="varchar" name="status" length="32" nullable="false" comment="Status"/>
+        <column xsi:type="text" name="comment" nullable="true" comment="Comment"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="id"/>
+        </constraint>
+        <index referenceId="TMDT_ORDER_STATUS_HISTORY_ORDER_CODE" indexType="btree">
+            <column name="order_code"/>
+        </index>
+    </table>
+
+    <table name="tmdt_seller_notifications" resource="default" engine="innodb" comment="Tmdt Seller Notifications">
+        <column xsi:type="int" name="id" padding="10" unsigned="true" nullable="false" identity="true" comment="Notification ID"/>
+        <column xsi:type="varchar" name="seller_id" length="32" nullable="false" comment="Seller Customer ID"/>
+        <column xsi:type="varchar" name="sku" length="64" nullable="false" comment="Product SKU"/>
+        <column xsi:type="text" name="message" nullable="false" comment="Alert Message"/>
+        <column xsi:type="smallint" name="is_read" padding="5" unsigned="true" nullable="false" default="0" comment="Read status: 0=unread, 1=read"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="id"/>
+        </constraint>
+        <index referenceId="TMDT_SELLER_NOTIFICATIONS_SELLER_ID" indexType="btree">
+            <column name="seller_id"/>
+        </index>
+    </table>
 </schema>
 

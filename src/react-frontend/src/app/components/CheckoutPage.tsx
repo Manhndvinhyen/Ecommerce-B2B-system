@@ -265,10 +265,10 @@ export function CheckoutPage() {
     // Status polling every 5s
     pollingRef.current = window.setInterval(async () => {
       try {
-        const res = await fetch(`/rest/V1/tmdt-orders/status/${orderCode}`);
+        const res = await fetch(`/tmdt/order/status?code=${orderCode}`);
         if (!res.ok) return;
         const data = await res.json();
-        if (data?.status === 'paid') {
+        if (data?.status === 'paid' || data?.status === 'processing') {
           stopPolling();
           setPaymentStatus('paid');
           // Clear local cart
@@ -485,34 +485,33 @@ export function CheckoutPage() {
       setIsSubmitting(true);
 
       // Step 1: Create order in backend and get orderCode
-      const createRes = await fetch('/rest/V1/tmdt-orders/create', {
+      const createRes = await fetch('/tmdt/order/create', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {})
         },
         body: JSON.stringify({
-          orderData: {
-            items: checkoutItems.map((item) => ({
-              sku: item.sku,
-              name: item.name,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              unit: item.unit
-            })),
-            totalAmount,
-            customerEmail: getCustomerEmail() || 'guest',
-            customerName: getCustomerName(),
-            shippingInfo: {
-              branch: shippingInfo.branch,
-              address: shippingInfo.address,
-              receiver: shippingInfo.receiver,
-              phone: shippingInfo.phone,
-              note: shippingInfo.note,
-              deliveryDate,
-              deliveryTime
-            }
-          }
+          // Flat params matching Magento interface (no nested array)
+          customerEmail: getCustomerEmail() || 'guest',
+          customerName: getCustomerName(),
+          totalAmount,
+          itemsJson: JSON.stringify(checkoutItems.map((item) => ({
+            sku: item.sku,
+            name: item.name,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            unit: item.unit
+          }))),
+          shippingJson: JSON.stringify({
+            branch: shippingInfo.branch,
+            address: shippingInfo.address,
+            receiver: shippingInfo.receiver,
+            phone: shippingInfo.phone,
+            note: shippingInfo.note,
+            deliveryDate,
+            deliveryTime
+          })
         })
       });
 
@@ -973,9 +972,9 @@ export function CheckoutPage() {
                     <button
                       type="button"
                       onClick={async () => {
-                        const res = await fetch(`/rest/V1/tmdt-orders/status/${qrOrder.orderCode}`);
+                        const res = await fetch(`/tmdt/order/status?code=${qrOrder.orderCode}`);
                         const data = await res.json().catch(() => null);
-                        if (data?.status === 'paid') {
+                        if (data?.status === 'paid' || data?.status === 'processing') {
                           stopPolling();
                           setPaymentStatus('paid');
                           window.setTimeout(() => {

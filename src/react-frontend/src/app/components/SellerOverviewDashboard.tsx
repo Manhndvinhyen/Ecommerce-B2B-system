@@ -86,6 +86,90 @@ export function SellerOverviewDashboard() {
   const [merchantName, setMerchantName] = useState('Nhà cung cấp Thực phẩm Sạch Freso');
   const [merchantCode, setMerchantCode] = useState('FR-982736');
 
+  // Seller stock warning alerts
+  interface SellerNotification {
+    id: string;
+    sku: string;
+    message: string;
+    is_read: number;
+    created_at: string;
+  }
+  const [stockAlerts, setStockAlerts] = useState<SellerNotification[]>([]);
+  const [revenueStats, setRevenueStats] = useState<{
+    totalRevenue: number;
+    totalOrders: number;
+    chartData: any[];
+    categoryData: any[];
+  } | null>(null);
+
+  const fetchStockAlerts = async () => {
+    const token = window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
+    if (!token) return;
+    try {
+      const res = await fetch(`${window.location.origin}/rest/V1/tmdt-catalog/notifications`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          // Only show unread out of stock alerts
+          setStockAlerts(data.filter((n: any) => Number(n.is_read) === 0));
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  const fetchRevenueStats = async () => {
+    const token = window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
+    if (!token) return;
+    try {
+      const res = await fetch(`${window.location.origin}/rest/V1/tmdt-catalog/revenue`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.success) {
+          setRevenueStats({
+            totalRevenue: data.totalRevenue,
+            totalOrders: data.totalOrders,
+            chartData: data.chartData,
+            categoryData: data.categoryData
+          });
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    fetchStockAlerts();
+    fetchRevenueStats();
+    
+    // Listen to refresh events or notifications read event
+    const handleRefresh = () => {
+      fetchStockAlerts();
+      fetchRevenueStats();
+    };
+    window.addEventListener('freso:notifications-read', handleRefresh);
+    window.addEventListener('freso:refresh-notifications', handleRefresh);
+    
+    return () => {
+      window.removeEventListener('freso:notifications-read', handleRefresh);
+      window.removeEventListener('freso:refresh-notifications', handleRefresh);
+    };
+  }, []);
+
   useEffect(() => {
     const storedName = window.localStorage.getItem('freso_branch_name') || window.sessionStorage.getItem('freso_branch_name') || '';
     const storedCode = window.localStorage.getItem('freso_login_code') || window.sessionStorage.getItem('freso_login_code') || '';
@@ -103,14 +187,16 @@ export function SellerOverviewDashboard() {
   };
 
   // Recharts Chart Mock Data
-  const monthlyChartData = [
-    { name: 'Tháng 1', DoanhThu: 120000000, DonHang: 12 },
-    { name: 'Tháng 2', DoanhThu: 185000000, DonHang: 18 },
-    { name: 'Tháng 3', DoanhThu: 210000000, DonHang: 22 },
-    { name: 'Tháng 4', DoanhThu: 295000000, DonHang: 25 },
-    { name: 'Tháng 5', DoanhThu: 342850000, DonHang: 28 },
-    { name: 'Tháng 6 (Dự kiến)', DoanhThu: 390000000, DonHang: 32 }
-  ];
+  const monthlyChartData = (revenueStats && revenueStats.chartData && revenueStats.chartData.length > 0)
+    ? revenueStats.chartData
+    : [
+        { name: 'Tháng 1', DoanhThu: 120000000, DonHang: 12 },
+        { name: 'Tháng 2', DoanhThu: 185000000, DonHang: 18 },
+        { name: 'Tháng 3', DoanhThu: 210000000, DonHang: 22 },
+        { name: 'Tháng 4', DoanhThu: 295000000, DonHang: 25 },
+        { name: 'Tháng 5', DoanhThu: 342850000, DonHang: 28 },
+        { name: 'Tháng 6 (Dự kiến)', DoanhThu: 390000000, DonHang: 32 }
+      ];
 
   const weeklyChartData = [
     { name: 'Tuần 1', DoanhThu: 72000000, DonHang: 6 },
@@ -122,12 +208,14 @@ export function SellerOverviewDashboard() {
   const activeChartData = chartPeriod === 'month' ? monthlyChartData : weeklyChartData;
 
   // Pie chart data for categories share
-  const categoryData = [
-    { name: 'Hải sản cấp đông', value: 120000000 },
-    { name: 'Thịt tươi sống', value: 96000000 },
-    { name: 'Rau củ hữu cơ', value: 75420000 },
-    { name: 'Gia vị & Đồ khô', value: 51430000 }
-  ];
+  const categoryData = (revenueStats && revenueStats.categoryData && revenueStats.categoryData.length > 0)
+    ? revenueStats.categoryData
+    : [
+        { name: 'Hải sản cấp đông', value: 120000000 },
+        { name: 'Thịt tươi sống', value: 96000000 },
+        { name: 'Rau củ hữu cơ', value: 75420000 },
+        { name: 'Gia vị & Đồ khô', value: 51430000 }
+      ];
 
   // B2B Price Negotiation mock state
   const [negotiations, setNegotiations] = useState<Negotiation[]>([
@@ -210,6 +298,9 @@ export function SellerOverviewDashboard() {
     showToast(`Đã gửi đề xuất phản hồi giá ${customPrice.toLocaleString()}đ tới ${buyer}.`, 'info');
   };
 
+  const displayRevenue = revenueStats ? revenueStats.totalRevenue : 342850000;
+  const displayOrders = revenueStats ? revenueStats.totalOrders : 28;
+
   return (
     <div className="flex-1 bg-transparent p-0 overflow-y-auto" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
       {/* Toast Alert Notification */}
@@ -223,6 +314,53 @@ export function SellerOverviewDashboard() {
             {toastType === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
           </div>
           <span className="text-sm font-bold tracking-tight">{toastMessage}</span>
+        </div>
+      )}
+
+      {stockAlerts.length > 0 && (
+        <div className="mb-6 bg-rose-50 border border-rose-200 rounded-3xl p-5 flex items-start gap-4 shadow-sm animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="w-10 h-10 bg-rose-100 rounded-2xl flex items-center justify-center text-rose-600 shrink-0">
+            <AlertCircle size={20} className="animate-bounce" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h4 className="text-sm font-black text-rose-900 mb-1">Cảnh báo: Có sản phẩm đã hết hàng sỉ!</h4>
+            <p className="text-xs text-rose-700 font-semibold mb-3 leading-relaxed">
+              Hệ thống ghi nhận có {stockAlerts.length} sản phẩm sỉ của gian hàng bạn đã hết hàng sau khi khách thanh toán đơn hàng. Vui lòng kiểm tra và bổ sung tồn kho sỉ để tránh gián đoạn kinh doanh.
+            </p>
+            <div className="flex items-center gap-3">
+              <a
+                href="?view=seller-dashboard&tab=Quản lý kho hàng"
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-full text-[11px] font-black shadow-sm shadow-rose-600/10 transition-all flex items-center gap-1.5"
+              >
+                <span>Cập nhật tồn kho ngay</span>
+                <ArrowRight size={12} />
+              </a>
+              <button
+                onClick={async () => {
+                  // Mark all notifications as read to clear banner
+                  const token = window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
+                  if (!token) return;
+                  try {
+                    await fetch(`${window.location.origin}/rest/V1/tmdt-catalog/notifications/read`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`
+                      }
+                    });
+                    setStockAlerts([]);
+                    // Dispatch to header too
+                    window.dispatchEvent(new CustomEvent('freso:refresh-notifications'));
+                  } catch (e) {
+                    // ignore
+                  }
+                }}
+                className="px-3.5 py-2 hover:bg-rose-100 text-rose-700 rounded-full text-[11px] font-black transition-all"
+              >
+                Bỏ qua
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -272,7 +410,7 @@ export function SellerOverviewDashboard() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-[11.5px] font-black uppercase tracking-wider text-[#066e33] mb-1">Tổng doanh thu tháng</p>
-              <h3 className="text-2xl font-black text-[#0c3c1e] tracking-tight">342.850.000đ</h3>
+              <h3 className="text-2xl font-black text-[#0c3c1e] tracking-tight">{displayRevenue.toLocaleString()}đ</h3>
             </div>
             <div className="w-10 h-10 bg-white/70 rounded-xl flex items-center justify-center text-[#00b14f] border border-[#A4E0B9]">
               <TrendingUp size={20} />
@@ -289,7 +427,7 @@ export function SellerOverviewDashboard() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-[11.5px] font-black uppercase tracking-wider text-[#0e6191] mb-1">Đơn hàng mới nhận</p>
-              <h3 className="text-2xl font-black text-[#0a3a57] tracking-tight">28 đơn hàng</h3>
+              <h3 className="text-2xl font-black text-[#0a3a57] tracking-tight">{displayOrders} đơn hàng</h3>
             </div>
             <div className="w-10 h-10 bg-white/70 rounded-xl flex items-center justify-center text-sky-600 border border-[#91CBEF]">
               <ShoppingBag size={20} />
@@ -454,7 +592,11 @@ export function SellerOverviewDashboard() {
               </PieChart>
             </ResponsiveContainer>
             <div className="absolute text-center">
-              <p className="text-[20px] font-black text-slate-900">342,8tr</p>
+              <p className="text-[20px] font-black text-slate-900">
+                {displayRevenue >= 1000000 
+                  ? `${(displayRevenue / 1000000).toFixed(1).replace('.', ',')}tr` 
+                  : `${displayRevenue.toLocaleString()}đ`}
+              </p>
               <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Tổng doanh thu</p>
             </div>
           </div>

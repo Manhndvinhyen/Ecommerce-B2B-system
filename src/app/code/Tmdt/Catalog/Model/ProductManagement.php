@@ -475,4 +475,134 @@ class ProductManagement implements ProductManagementInterface
         $suffix = substr(md5($sku . '_' . time()), 0, 8);
         return $slug . '-' . $suffix;
     }
+
+    /**
+     * @inheritDoc
+     */
+    public function getSellerNotifications(): array
+    {
+        $sellerId = $this->getSellerIdFromSession();
+        $connection = $this->resourceConnection->getConnection();
+        
+        $select = $connection->select()
+            ->from($connection->getTableName('tmdt_seller_notifications'))
+            ->where('seller_id = ?', $sellerId)
+            ->order('created_at DESC');
+            
+        return $connection->fetchAll($select);
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function markNotificationsAsRead(): bool
+    {
+        $sellerId = $this->getSellerIdFromSession();
+        $connection = $this->resourceConnection->getConnection();
+        
+        $connection->update(
+            $connection->getTableName('tmdt_seller_notifications'),
+            ['is_read' => 1],
+            ['seller_id = ?' => $sellerId]
+        );
+        
+        return true;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function getSellerRevenueStats(): array
+    {
+        $sellerId = $this->getSellerIdFromSession();
+        $connection = $this->resourceConnection->getConnection();
+        
+        $cpevTable = $connection->getTableName('catalog_product_entity_varchar');
+        $cpeTable = $connection->getTableName('catalog_product_entity');
+        $phiTable = $connection->getTableName('tmdt_purchase_history_item');
+        $phTable = $connection->getTableName('tmdt_purchase_history');
+        $oTable = $connection->getTableName('tmdt_orders');
+        
+        // Fetch all paid/processing item records for this seller's products
+        $query = "
+            SELECT phi.sku, phi.product_name, phi.category, phi.quantity, phi.unit_price, phi.row_total, ph.created_at, ph.order_reference
+            FROM {$phiTable} phi
+            INNER JOIN {$phTable} ph ON phi.history_id = ph.history_id
+            INNER JOIN {$oTable} o ON ph.order_reference = o.order_code
+            INNER JOIN {$cpeTable} cpe ON phi.sku = cpe.sku
+            INNER JOIN {$cpevTable} cpev ON cpe.entity_id = cpev.entity_id
+            WHERE cpev.value = :seller_id
+              AND cpev.attribute_id = (SELECT attribute_id FROM eav_attribute WHERE attribute_code = 'tmdt_seller_id' AND entity_type_id = 4 LIMIT 1)
+              AND o.status IN ('paid', 'processing')
+        ";
+        
+        $records = $connection->fetchAll($query, ['seller_id' => $sellerId]);
+        
+        $totalRevenue = 0.0;
+        $orderCodes = [];
+        $categoryTotals = [];
+        
+        // Monthly chart aggregates (last 6 months)
+        $months = [];
+        for ($i = 5; $i >= 0; $i--) {
+            $monthName = 'Tháng ' . date('n', strtotime("-{$i} month"));
+            $months[$monthName] = [
+                'name' => $monthName,
+                'DoanhThu' => 0.0,
+                'DonHang' => 0
+            ];
+        }
+        
+        $monthlyOrders = [];
+        
+        foreach ($records as $row) {
+            $rowTotal = (float)$row['row_total'];
+            $totalRevenue += $rowTotal;
+            $orderCodes[$row['order_reference']] = true;
+            
+            // Category distribution
+            $cat = $row['category'] ?: 'Khác';
+            if (!isset($categoryTotals[$cat])) {
+                $categoryTotals[$cat] = 0.0;
+            }
+            $categoryTotals[$cat] += $rowTotal;
+            
+            // Monthly grouping
+            $createdAt = strtotime($row['created_at']);
+            $monthName = 'Tháng ' . date('n', $createdAt);
+            if (isset($months[$monthName])) {
+                $months[$monthName]['DoanhThu'] += $rowTotal;
+                
+                $ref = $row['order_reference'];
+                if (!isset($monthlyOrders[$monthName][$ref])) {
+                    $monthlyOrders[$monthName][$ref] = true;
+                    $months[$monthName]['DonHang'] += 1;
+                }
+            }
+        }
+        
+        // Format category chart data
+        $categoryData = [];
+        foreach ($categoryTotals as $name => $val) {
+            $categoryData[] = [
+                'name' => $name,
+                'value' => $val
+            ];
+        }
+        // Sort by value desc
+        usort($categoryData, function($a, $b) {
+            return $b['value'] <=> $a['value'];
+        });
+        
+        // Format monthly data array
+        $chartData = array_values($months);
+        
+        return [
+            'success' => true,
+            'totalRevenue' => $totalRevenue,
+            'totalOrders' => count($orderCodes),
+            'chartData' => $chartData,
+            'categoryData' => $categoryData
+        ];
+    }
 }

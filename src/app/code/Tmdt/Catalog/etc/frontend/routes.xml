@@ -4,5 +4,8 @@
         <route id="tmdt" frontName="tmdt">
             <module name="Tmdt_Catalog"/>
         </route>
+        <route id="api" frontName="api">
+            <module name="Tmdt_Catalog" before="Magento_Webapi"/>
+        </route>
     </router>
 </config>

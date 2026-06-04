@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Heart, ChevronRight, ShoppingCart } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
-import { toCurrencyTextFromLooseValue, toUnitPriceFromLooseValue, useCart } from '../cart/CartProvider';
+import { toCurrencyTextFromLooseValue, toUnitPriceFromLooseValue, toCurrencyTextFromNumber, useCart } from '../cart/CartProvider';
 
 const hotProducts = [
   {
@@ -436,7 +436,7 @@ export function HotProducts() {
                     </button>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <p className="text-red-500 font-bold">{product.price}</p>
+                    <p className="text-red-500 font-bold">{toCurrencyTextFromLooseValue(product.price)}</p>
                     <p className="text-xs text-gray-500">({product.unit}) - Chưa bao gồm VAT</p>
                   </div>
                 </div>

@@ -329,19 +329,19 @@ const mapMagentoCartItems = (items: MagentoCartItem[] = []): CheckoutItem[] => {
 
     const rawImage = product.small_image?.url || product.thumbnail?.url || '';
     const isPlaceholder = rawImage.toLowerCase().includes('placeholder');
-    const finalImage = !rawImage || isPlaceholder
-      ? (matchingProduct?.image || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop')
-      : rawImage;
+    const fallbackImage = matchingProduct?.image || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop';
+
     const galleryImage = (product.media_gallery_entries ?? []).find((entry) => {
       const file = entry.file?.trim() ?? '';
       return file && !file.toLowerCase().includes('placeholder');
     });
+    
     const finalImage =
       (isRealImageUrl(getMagentoMediaImageUrl(galleryImage?.file)) ? getMagentoMediaImageUrl(galleryImage?.file) : '') ||
       (isRealImageUrl(product.small_image?.url) ? product.small_image?.url : '') ||
       (isRealImageUrl(product.thumbnail?.url) ? product.thumbnail?.url : '') ||
       matchingProduct?.image ||
-      'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop';
+      (!rawImage || isPlaceholder ? fallbackImage : rawImage);
 
     return {
       id: String(item.id),
@@ -454,6 +454,12 @@ export function CheckoutPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toastMessage, setToastMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Subscription / Recurring Order states
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recFrequency, setRecFrequency] = useState<'weekly' | 'monthly'>('weekly');
+  const [recWeekdays, setRecWeekdays] = useState<number[]>([1, 4]); // Mon & Thu
+  const [recMonthDay, setRecMonthDay] = useState<number>(1);
 
   // Weather and ETA estimation states
   const [estimation, setEstimation] = useState<WeatherEstimation | null>(null);
@@ -1247,6 +1253,43 @@ export function CheckoutPage() {
         window.sessionStorage.setItem(preferredRegionStorageKey, preferredRegion);
       }
 
+      // Save recurring subscription if checked
+      if (isRecurring) {
+        try {
+          await fetch('/rest/V1/tmdt-recurring/subscribe', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {})
+            },
+            body: JSON.stringify({
+              customerEmail: getCustomerEmail() || 'guest',
+              customerName: getCustomerName(),
+              frequency: recFrequency,
+              weekdays: recFrequency === 'weekly' ? recWeekdays.join(',') : null,
+              monthDay: recFrequency === 'monthly' ? recMonthDay : null,
+              deliveryTime: deliveryTime || '07:00 - 09:00',
+              itemsJson: JSON.stringify(checkoutItems.map((item) => ({
+                sku: item.sku,
+                name: item.name,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                unit: item.unit
+              }))),
+              shippingJson: JSON.stringify({
+                branch: shippingInfo.branch,
+                address: shippingInfo.address,
+                receiver: shippingInfo.receiver,
+                phone: shippingInfo.phone,
+                note: shippingInfo.note
+              })
+            })
+          });
+        } catch (subErr) {
+          console.error('Failed to create recurring subscription', subErr);
+        }
+      }
+
       // Step 3: Show VietQR modal
       setQrOrder({ orderCode, totalAmount, expiresAt });
       setPaymentStatus('pending');
@@ -1667,6 +1710,123 @@ export function CheckoutPage() {
                   {errors.invoice_email && <p className="mt-1 text-xs text-red-500">{errors.invoice_email}</p>}
                 </div>
               </div>
+            </section>
+
+            {/* Section 4: Đăng ký mua định kỳ / Đặt hàng tự động */}
+            <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <h3 className="flex items-center gap-2 text-lg font-bold text-gray-800">
+                  <Calendar className="size-5 text-green-600" />
+                  Đăng ký mua định kỳ (Subscription)
+                </h3>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isRecurring}
+                    onChange={(e) => setIsRecurring(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                </label>
+              </div>
+
+              {isRecurring ? (
+                <div className="space-y-4 pt-2 text-sm transition-all duration-300">
+                  <p className="text-xs text-green-700 bg-green-50 p-3.5 rounded-2xl border border-green-100 font-semibold leading-relaxed">
+                    💡 Hệ thống sẽ tự động lên đơn hàng mới cho các sản phẩm này (ở trạng thái Chờ thanh toán) vào các ngày hẹn dưới đây. Bạn chỉ cần vào Dashboard thanh toán bằng QR là xong.
+                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Tần suất lên đơn</label>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setRecFrequency('weekly')}
+                          className={`flex-1 py-2 px-4 rounded-xl border text-xs font-bold transition-all ${
+                            recFrequency === 'weekly'
+                              ? 'bg-green-600 border-transparent text-white shadow-sm'
+                              : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                          }`}
+                        >
+                          Hàng tuần
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRecFrequency('monthly')}
+                          className={`flex-1 py-2 px-4 rounded-xl border text-xs font-bold transition-all ${
+                            recFrequency === 'monthly'
+                              ? 'bg-green-600 border-transparent text-white shadow-sm'
+                              : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                          }`}
+                        >
+                          Hàng tháng
+                        </button>
+                      </div>
+                    </div>
+
+                    {recFrequency === 'weekly' ? (
+                      <div>
+                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Chọn thứ trong tuần</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {[
+                            { value: 1, label: 'T2' },
+                            { value: 2, label: 'T3' },
+                            { value: 3, label: 'T4' },
+                            { value: 4, label: 'T5' },
+                            { value: 5, label: 'T6' },
+                            { value: 6, label: 'T7' },
+                            { value: 0, label: 'CN' }
+                          ].map((day) => {
+                            const isSelected = recWeekdays.includes(day.value);
+                            return (
+                              <button
+                                type="button"
+                                key={day.value}
+                                onClick={() => {
+                                  if (isSelected) {
+                                    if (recWeekdays.length > 1) {
+                                      setRecWeekdays(recWeekdays.filter((d) => d !== day.value));
+                                    }
+                                  } else {
+                                    setRecWeekdays([...recWeekdays, day.value]);
+                                  }
+                                }}
+                                className={`w-9 h-9 rounded-xl border flex items-center justify-center text-xs font-bold transition-all ${
+                                  isSelected
+                                    ? 'bg-green-100 border-green-300 text-green-700'
+                                    : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+                                }`}
+                              >
+                                {day.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Chọn ngày trong tháng</label>
+                        <select
+                          value={recMonthDay}
+                          onChange={(e) => setRecMonthDay(parseInt(e.target.value, 10))}
+                          className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-green-500 bg-white"
+                        >
+                          {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                            <option key={d} value={d}>
+                              Ngày {d} hàng tháng
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 pt-1">
+                  Bật tùy chọn này để lưu các sản phẩm hiện có thành lịch đặt hàng tự động định kỳ cho tương lai.
+                </p>
+              )}
             </section>
           </div>
 

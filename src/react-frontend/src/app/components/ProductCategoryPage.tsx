@@ -11,7 +11,7 @@ import {
 } from '../data/categories';
 import { getMockSupplierForProduct, supplierRegions } from '../data/mockSuppliers';
 import { searchSynonymGroups } from '../data/searchSynonyms';
-import { toCurrencyTextFromLooseValue, toUnitPriceFromLooseValue, useCart } from '../cart/CartProvider';
+import { toCurrencyTextFromLooseValue, toUnitPriceFromLooseValue, toCurrencyTextFromNumber, useCart } from '../cart/CartProvider';
 import { applySeo, buildBreadcrumbJsonLd, buildItemListJsonLd, getSiteName } from '../utils/seo';
 
 type ProductItem = {
@@ -1394,7 +1394,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
                       </button>
                     </div>
                     <div className="flex flex-col gap-1">
-                      <p className="text-red-500 font-bold">{product.price} đ</p>
+                      <p className="text-red-500 font-bold">{toCurrencyTextFromNumber(product.priceValue)}</p>
                       <p className="text-xs text-gray-500">({product.unit})</p>
                     </div>
                   </div>

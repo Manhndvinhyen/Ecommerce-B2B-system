@@ -42,6 +42,7 @@ export const persistAuthSession = (
     email?: string;
     fullName?: string;
     branchName?: string;
+    role?: string;
   }
 ) => {
   clearStoredAuthSession();
@@ -51,6 +52,7 @@ export const persistAuthSession = (
   persistAuthValue(primaryStorage, 'freso_customer_email', values.email);
   persistAuthValue(primaryStorage, 'freso_customer_name', values.fullName);
   persistAuthValue(primaryStorage, 'freso_branch_name', values.branchName);
+  persistAuthValue(primaryStorage, 'freso_role', values.role);
 
   // Keep the non-primary storage clean so "Ghi nho dang nhap" has predictable behavior.
   secondaryStorage.removeItem('freso_customer_token');

@@ -1,5 +1,6 @@
 import {
   Box,
+  CalendarDays,
   CircleUserRound,
   Clock3,
   FileText,
@@ -28,4 +29,5 @@ export const adminMenuItems: AdminMenuItem[] = [
   { id: 'lich-su-mua-hang', label: 'Lịch sử mua hàng', icon: Clock3 },
   { id: 'don-hang', label: 'Quản lý đơn hàng', icon: FileText },
   { id: 'bao-gia', label: 'Đàm phán giá', icon: Handshake },
+  { id: 'dat-hang-dinh-ky', label: 'Đăng ký mua định kỳ', icon: CalendarDays },
 ];

@@ -339,7 +339,7 @@ export function SellerOverviewDashboard() {
   // Handle Approve Negotiation
   const handleApprove = (id: string, buyer: string) => {
     setNegotiations((prev) => {
-      const next = prev.map((neg) => (neg.id === id ? { ...neg, status: 'approved' } : neg));
+      const next = prev.map((neg) => (neg.id === id ? { ...neg, status: 'approved' as const } : neg));
       window.localStorage.setItem('freso_seller_negotiations', JSON.stringify(next));
       return next;
     });
@@ -368,7 +368,7 @@ export function SellerOverviewDashboard() {
     setNegotiations((prev) => {
       const next = prev.map((neg) =>
         neg.id === id
-          ? { ...neg, status: 'countered', counterOffer: parsedPrice }
+          ? { ...neg, status: 'countered' as const, counterOffer: parsedPrice }
           : neg
       );
       window.localStorage.setItem('freso_seller_negotiations', JSON.stringify(next));

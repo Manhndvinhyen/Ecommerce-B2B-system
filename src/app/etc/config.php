@@ -359,6 +359,7 @@ return [
         'Magento_Wishlist' => 1,
         'Magento_WishlistAnalytics' => 1,
         'Magento_WishlistGraphQl' => 1,
+        'MarkShust_DisableTwoFactorAuth' => 1,
         'PayPal_Braintree' => 1,
         'PayPal_BraintreeCustomerBalance' => 1,
         'PayPal_BraintreeGiftCard' => 1,
@@ -367,9 +368,9 @@ return [
         'PayPal_BraintreeGraphQl' => 1,
         'PayPal_BraintreeReward' => 1,
         'Tmdt_Registration' => 1,
-        'Tmdt_Chatbot' => 1,
-        'Tmdt_Catalog' => 1,
         'Tmdt_Search' => 1,
+        'Tmdt_Catalog' => 1,
+        'Tmdt_Chatbot' => 1,
         'Tmdt_Wishlist' => 1
     ]
 ];

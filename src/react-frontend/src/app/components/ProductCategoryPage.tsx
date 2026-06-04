@@ -57,6 +57,14 @@ type GraphQlCategoryNode = {
   children?: GraphQlCategoryNode[];
 };
 
+type OptimizedSearchProduct = {
+  id: number | string;
+  sku: string;
+  name: string;
+  priceValue?: number;
+  image?: string;
+};
+
 type InferredCategory = {
   category: string;
   subcategory?: string;
@@ -400,6 +408,44 @@ const graphqlRequest = async (
   });
 };
 
+const optimizedProductSearchRequest = async (
+  query: string,
+  signal?: AbortSignal
+): Promise<OptimizedSearchProduct[]> => {
+  const params = new URLSearchParams({
+    query,
+    limit: '100'
+  });
+  const response = await fetch(`/rest/V1/tmdt-search/products?${params.toString()}`, {
+    method: 'GET',
+    signal,
+    cache: 'no-store',
+    credentials: 'omit',
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Optimized product search failed: ${response.status}`);
+  }
+
+  const json = await response.json();
+  if (Array.isArray(json)) {
+    return json as OptimizedSearchProduct[];
+  }
+  if (typeof json === 'string') {
+    try {
+      const parsed = JSON.parse(json);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+};
+
 const getStoredPreferredRegion = () => {
   if (typeof window === 'undefined') {
     return '';
@@ -662,73 +708,9 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
         setLoadError('');
         const expandedSearchTerms = buildExpandedSearchTerms(searchQuery);
 
-        const query = `
-          query SearchProducts($search: String!) {
-            products(search: $search, pageSize: 100) {
-              items {
-                id
-                sku
-                name
-                categories {
-                  id
-                  name
-                }
-                small_image {
-                  url
-                }
-                thumbnail {
-                  url
-                }
-                media_gallery_entries {
-                  file
-                  disabled
-                }
-                price_range {
-                  minimum_price {
-                    final_price {
-                      value
-                    }
-                  }
-                }
-              }
-            }
-          }
-        `;
-
         try {
-          const searchResults = await Promise.all(
-            expandedSearchTerms.map(async (term) => {
-              const response = await graphqlRequest(
-                query,
-                {
-                  search: term
-                },
-                controller.signal
-              );
-
-              console.info('[FresoSearch][ProductCategoryPage] GraphQL response received', {
-                searchQuery,
-                term,
-                requestId,
-                status: response.status,
-                ok: response.ok
-              });
-
-              if (!response.ok) {
-                throw new Error(`GraphQL request failed: ${response.status}`);
-              }
-
-              const json = await response.json();
-              if (json?.errors?.length) {
-                console.error('[FresoSearch][ProductCategoryPage] GraphQL returned errors', json.errors);
-                throw new Error(json.errors[0]?.message ?? 'GraphQL error');
-              }
-
-              return (json?.data?.products?.items ?? []) as GraphQlProductItem[];
-            })
-          );
           const items = dedupeByKey(
-            searchResults.flat(),
+            await optimizedProductSearchRequest(searchQuery, controller.signal),
             (item) => item.sku || String(item.id)
           );
           console.info('[FresoSearch][ProductCategoryPage] raw products received', {
@@ -750,8 +732,8 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
 
           const mappedGraphQlProducts = items.map((item) => {
             const inferred = inferCategoryFromSku(item.sku);
-            const productCategory = inferred?.category ?? pickCategoryFromGraphQl(item) ?? category.name;
-            const priceValue = Number(item.price_range?.minimum_price?.final_price?.value ?? 0);
+            const productCategory = inferred?.category ?? category.name;
+            const priceValue = Number(item.priceValue ?? 0);
             const supplier = getMockSupplierForProduct(item.sku, productCategory);
             const localMatch = customLocalProducts.find(
               (p) => String(p.sku).trim().toLowerCase() === item.sku.trim().toLowerCase()
@@ -771,8 +753,8 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
               price: formatPrice(priceValue),
               priceValue,
               unit: inferUnitByCategory(productCategory),
-              image: localImage || pickMagentoProductImage(item, fallbackImage) || fallbackImage,
-              categoryLabel: inferred?.subcategory ?? pickCategoryFromGraphQl(item) ?? productCategory,
+              image: localImage || item.image || fallbackImage,
+              categoryLabel: inferred?.subcategory ?? productCategory,
               supplierName: supplier.name,
               supplierRegion: supplier.region
             };

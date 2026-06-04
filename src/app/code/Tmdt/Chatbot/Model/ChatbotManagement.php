@@ -183,10 +183,12 @@ class ChatbotManagement implements ChatbotInterface
     {
         $baseUrl = $this->storeManager->getStore()->getBaseUrl(UrlInterface::URL_TYPE_WEB);
         $mediaBaseUrl = $this->storeManager->getStore()->getBaseUrl(UrlInterface::URL_TYPE_MEDIA);
-        $urlKey = trim((string) $product->getData('url_key'));
-        $url = $urlKey !== ''
-            ? rtrim($baseUrl, '/') . '/' . $urlKey . '.html'
-            : rtrim($baseUrl, '/') . '/catalog/product/view/id/' . (int) $product->getId();
+        $query = http_build_query([
+            'view' => 'product',
+            'id' => (int) $product->getId(),
+            'sku' => (string) $product->getSku(),
+        ]);
+        $url = rtrim($baseUrl, '/') . '/react/index.html?' . $query;
 
         $imagePath = (string) ($product->getData('small_image') ?: $product->getData('thumbnail') ?: '');
         $image = ($imagePath !== '' && $imagePath !== 'no_selection')

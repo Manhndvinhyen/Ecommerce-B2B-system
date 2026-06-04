@@ -19,6 +19,40 @@ interface Message {
 
 // ========== CONSTANTS ==========
 const CHATBOT_API = '/rest/V1/chatbot/ask';
+const CHATBOT_STORAGE_KEY = 'freso_chatbot_session_v1';
+const DEFAULT_MESSAGES: Message[] = [
+  {
+    sender: 'bot',
+    text: 'Xin chào! 👋 Tôi là trợ lý AI của **TMDT Shop**. Tôi có thể giúp bạn tìm sản phẩm phù hợp. Bạn đang tìm kiếm gì hôm nay?',
+  },
+];
+
+const loadChatbotSession = () => {
+  if (typeof window === 'undefined') {
+    return { messages: DEFAULT_MESSAGES, input: '', isOpen: false };
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(CHATBOT_STORAGE_KEY);
+    if (!raw) {
+      return { messages: DEFAULT_MESSAGES, input: '', isOpen: false };
+    }
+
+    const parsed = JSON.parse(raw) as Partial<{
+      messages: Message[];
+      input: string;
+      isOpen: boolean;
+    }>;
+
+    return {
+      messages: Array.isArray(parsed.messages) && parsed.messages.length > 0 ? parsed.messages : DEFAULT_MESSAGES,
+      input: typeof parsed.input === 'string' ? parsed.input : '',
+      isOpen: Boolean(parsed.isOpen),
+    };
+  } catch {
+    return { messages: DEFAULT_MESSAGES, input: '', isOpen: false };
+  }
+};
 
 // ========== HELPER: Render markdown đơn giản ==========
 function renderMarkdown(text: string): string {
@@ -122,18 +156,26 @@ const ProductCard: React.FC<{ product: Product }> = ({ product }) => (
 
 // ========== COMPONENT ==========
 export const ChatbotWidget: React.FC = () => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      sender: 'bot',
-      text: 'Xin chào! 👋 Tôi là trợ lý AI của **TMDT Shop**. Tôi có thể giúp bạn tìm sản phẩm phù hợp. Bạn đang tìm kiếm gì hôm nay?',
-    },
-  ]);
-  const [input, setInput] = useState('');
+  const initialSessionRef = useRef(loadChatbotSession());
+  const [isOpen, setIsOpen] = useState(initialSessionRef.current.isOpen);
+  const [messages, setMessages] = useState<Message[]>(initialSessionRef.current.messages);
+  const [input, setInput] = useState(initialSessionRef.current.input);
   const [isLoading, setIsLoading] = useState(false);
 
   const chatBoxRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.sessionStorage.setItem(
+      CHATBOT_STORAGE_KEY,
+      JSON.stringify({
+        messages,
+        input,
+        isOpen,
+      })
+    );
+  }, [messages, input, isOpen]);
 
   // Auto scroll xuống cuối khi có tin nhắn mới
   useEffect(() => {

@@ -3,4 +3,10 @@
     <preference for="Tmdt\Catalog\Api\ProductManagementInterface" type="Tmdt\Catalog\Model\ProductManagement" />
     <preference for="Tmdt\Catalog\Api\InventoryManagementInterface" type="Tmdt\Catalog\Model\InventoryManagement" />
     <preference for="Tmdt\Catalog\Api\OrderManagementInterface" type="Tmdt\Catalog\Model\OrderManagement" />
+
+    <type name="Magento\Framework\App\Router\ActionList">
+        <plugin name="tmdt_catalog_action_list_hyphen_resolver"
+                type="Tmdt\Catalog\Plugin\ActionListPlugin"
+                sortOrder="10"/>
+    </type>
 </config>

@@ -12,4 +12,10 @@
             <resource ref="self" />
         </resources>
     </route>
+    <route url="/V1/tmdt-search/products" method="GET">
+        <service class="Tmdt\Search\Api\ProductSearchInterface" method="search" />
+        <resources>
+            <resource ref="anonymous" />
+        </resources>
+    </route>
 </routes>

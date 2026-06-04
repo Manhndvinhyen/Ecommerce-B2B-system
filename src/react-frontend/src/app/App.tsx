@@ -52,14 +52,27 @@ function AppContent() {
   const isOrderTrackingView = view === 'order-tracking';
 
   useEffect(() => {
-    console.info('[FresoSearch][App] route detected', {
-      view,
-      q: params.get('q'),
-      category: params.get('category'),
-      subcategory: params.get('subcategory'),
-      pathname: window.location.pathname,
-      search: window.location.search
-    });
+    const root = document.documentElement;
+    if (isSellerDashboardView) {
+      root.classList.add('seller-theme');
+      root.classList.remove('customer-theme');
+    } else {
+      root.classList.add('customer-theme');
+      root.classList.remove('seller-theme');
+    }
+  }, [isSellerDashboardView]);
+
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.info('[FresoSearch][App] route detected', {
+        view,
+        q: params.get('q'),
+        category: params.get('category'),
+        subcategory: params.get('subcategory'),
+        pathname: window.location.pathname,
+        search: window.location.search
+      });
+    }
   }, [view, category, subcategory]);
 
   useEffect(() => {

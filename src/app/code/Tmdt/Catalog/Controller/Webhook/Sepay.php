@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Tmdt\Catalog\Controller\Webhook;
 
+use Magento\Framework\App\Action\Action;
+use Magento\Framework\App\Action\Context;
 use Magento\Framework\App\Action\HttpPostActionInterface;
 use Magento\Framework\App\CsrfAwareActionInterface;
 use Magento\Framework\App\Request\InvalidRequestException;
@@ -18,28 +20,13 @@ use Magento\Framework\App\Cache\TypeListInterface;
 /**
  * SePay Webhook Controller
  * URL: /tmdt/webhook/sepay
- * SePay POST format (raw JSON):
- * {
- *   "id": 12345,
- *   "gateway": "bidv",
- *   "transactionDate": "2024-01-15 10:30:00",
- *   "accountNumber": "96247VUONGTHUYLINH",
- *   "code": null,
- *   "content": "THANHTOAN DH1A2B3C",
- *   "transferType": "in",
- *   "transferAmount": 540000,
- *   "accumulated": 540000,
- *   "subAccount": null,
- *   "referenceCode": "FT24015123456",
- *   "description": "THANHTOAN DH1A2B3C"
- * }
  */
-class Sepay implements HttpPostActionInterface, CsrfAwareActionInterface
+class Sepay extends Action implements HttpPostActionInterface, CsrfAwareActionInterface
 {
     private const TABLE = 'tmdt_orders';
 
     public function __construct(
-        private readonly RequestInterface $request,
+        Context $context,
         private readonly JsonFactory $jsonFactory,
         private readonly ResourceConnection $resourceConnection,
         private readonly LoggerInterface $logger,
@@ -47,7 +34,9 @@ class Sepay implements HttpPostActionInterface, CsrfAwareActionInterface
         private readonly ProductRepositoryInterface $productRepository,
         private readonly IndexerRegistry $indexerRegistry,
         private readonly TypeListInterface $cacheTypeList
-    ) {}
+    ) {
+        parent::__construct($context);
+    }
 
     public function createCsrfValidationException(RequestInterface $request): ?InvalidRequestException
     {
@@ -65,7 +54,7 @@ class Sepay implements HttpPostActionInterface, CsrfAwareActionInterface
 
         try {
             // Read raw POST body
-            $rawBody = $this->request->getContent();
+            $rawBody = $this->getRequest()->getContent();
             if (empty($rawBody)) {
                 return $result->setData(['success' => false, 'message' => 'Empty request body']);
             }
@@ -93,8 +82,8 @@ class Sepay implements HttpPostActionInterface, CsrfAwareActionInterface
                 return $result->setData(['success' => true, 'message' => 'Ignored: outbound transfer']);
             }
 
-            // Extract order code from content (e.g. "THANHTOAN DH1A2B3C")
-            if (!preg_match('/\bDH[A-Z0-9]{6}\b/i', $content, $matches)) {
+            // Extract order code from content (e.g. "THANHTOAN DH1A2B3C" or "THANHTOANDH1A2B3C")
+            if (!preg_match('/DH[A-Z0-9]{6}\b/i', $content, $matches)) {
                 $this->logger->warning('[SePay Webhook] No order code found in content', ['content' => $content]);
                 return $result->setData(['success' => false, 'message' => 'Không tìm thấy mã đơn hàng trong nội dung chuyển khoản.']);
             }

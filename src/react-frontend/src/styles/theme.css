@@ -120,8 +120,61 @@
 }
 
 @layer base {
+  /* Premium Custom Scrollbar for Customer Theme (Green accent to match Customer Sidebar) */
+  .customer-theme ::-webkit-scrollbar,
+  html.customer-theme::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .customer-theme ::-webkit-scrollbar-track,
+  html.customer-theme::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .customer-theme ::-webkit-scrollbar-thumb,
+  html.customer-theme::-webkit-scrollbar-thumb {
+    background: rgba(0, 177, 79, 0.2);
+    border-radius: 99px;
+  }
+  .customer-theme ::-webkit-scrollbar-thumb:hover,
+  html.customer-theme::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 177, 79, 0.45);
+  }
+  
+  .customer-theme.dark ::-webkit-scrollbar-thumb,
+  html.customer-theme.dark ::-webkit-scrollbar-thumb {
+    background: rgba(16, 185, 129, 0.2);
+  }
+  .customer-theme.dark ::-webkit-scrollbar-thumb:hover,
+  html.customer-theme.dark ::-webkit-scrollbar-thumb:hover {
+    background: rgba(16, 185, 129, 0.45);
+  }
+
+  /* Hide Scrollbar completely for Seller Theme */
+  .seller-theme ::-webkit-scrollbar,
+  html.seller-theme::-webkit-scrollbar {
+    display: none !important;
+  }
+
   * {
     @apply border-border outline-ring/50;
+  }
+
+  /* Firefox Custom Scrollbar Support */
+  html.customer-theme,
+  .customer-theme * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 177, 79, 0.2) transparent;
+  }
+
+  html.customer-theme.dark,
+  .customer-theme.dark * {
+    scrollbar-color: rgba(16, 185, 129, 0.2) transparent;
+  }
+
+  html.seller-theme,
+  .seller-theme * {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none;
   }
 
   body {

@@ -368,9 +368,9 @@ return [
         'PayPal_BraintreeGraphQl' => 1,
         'PayPal_BraintreeReward' => 1,
         'Tmdt_Registration' => 1,
-        'Tmdt_Chatbot' => 0,
-        'Tmdt_Catalog' => 1,
         'Tmdt_Search' => 1,
+        'Tmdt_Catalog' => 1,
+        'Tmdt_Chatbot' => 1,
         'Tmdt_Wishlist' => 1
     ]
 ];

@@ -111,11 +111,64 @@ const normalize = (value: string) =>
     .replace(/\p{Diacritic}/gu, '')
     .toLowerCase();
 
+type GraphQlProductItem = {
+  id: number;
+  sku: string;
+  name: string;
+  categories?: Array<{ name?: string | null }>;
+  small_image?: { url?: string | null } | null;
+  thumbnail?: { url?: string | null } | null;
+  media_gallery_entries?: Array<{
+    file?: string | null;
+    disabled?: boolean | null;
+  }>;
+  price_range?: {
+    minimum_price?: {
+      final_price?: {
+        value?: number;
+      };
+    };
+  };
+};
+
+const fallbackCategoryByQuery = (product: GraphQlProductItem) => {
+  const ignored = new Set(['Root Catalog', 'Default Category', 'Products']);
+  const category = (product.categories ?? [])
+    .map((item) => item.name ?? '')
+    .find((name) => name && !ignored.has(name));
+  return category || 'Rau củ quả';
+};
+
+const getMagentoMediaImageUrl = (file?: string | null) => {
+  if (!file || !file.trim()) return '';
+  const normalizedFile = file.startsWith('/') ? file : `/${file}`;
+  return `${window.location.origin}/media/catalog/product${normalizedFile}`;
+};
+
+const pickMagentoProductImage = (product: GraphQlProductItem, fallbackImage: string) => {
+  const galleryImage = (product.media_gallery_entries ?? []).find((entry) => {
+    const file = entry.file?.trim() ?? '';
+    return file && !file.toLowerCase().includes('placeholder');
+  });
+
+  const candidates = [
+    getMagentoMediaImageUrl(galleryImage?.file),
+    product.small_image?.url ?? '',
+    product.thumbnail?.url ?? '',
+  ];
+
+  return candidates.find((value) => value && !value.toLowerCase().includes('/placeholder/')) || '';
+};
+
+const fallbackHotProducts = hotProducts;
+
 export function HotProducts() {
   const { openAddToCartModal } = useCart();
   const productsPerPage = 5;
   const [page, setPage] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [products, setProducts] = useState(hotProducts);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     const syncCategoryFromUrl = () => {
@@ -128,19 +181,132 @@ export function HotProducts() {
     return () => window.removeEventListener('popstate', syncCategoryFromUrl);
   }, []);
 
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const loadProducts = async () => {
+      setIsLoading(true);
+
+      try {
+        const response = await fetch('/graphql', {
+          method: 'POST',
+          signal: controller.signal,
+          cache: 'no-store',
+          credentials: 'omit',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            query: `
+              query HotProductsHome($pageSize: Int!) {
+                products(pageSize: $pageSize) {
+                  items {
+                    id
+                    sku
+                    name
+                    categories { name }
+                    small_image { url }
+                    thumbnail { url }
+                    media_gallery_entries { file disabled }
+                    price_range {
+                      minimum_price {
+                        final_price { value }
+                      }
+                    }
+                  }
+                }
+              }
+            `,
+            variables: {
+              pageSize: 20
+            }
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`GraphQL request failed: ${response.status}`);
+        }
+
+        const json = await response.json();
+        if (json?.errors?.length) {
+          throw new Error(json.errors[0]?.message ?? 'GraphQL error');
+        }
+
+        const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
+        let customLocalProducts: Array<{ sku?: string; image?: string; categoryLabel?: string; name?: string; price?: number; unit?: string; store_name?: string }> = [];
+        if (customLocalRaw) {
+          try {
+            customLocalProducts = JSON.parse(customLocalRaw);
+          } catch {
+            customLocalProducts = [];
+          }
+        }
+
+        const localBySku = new Map(
+          customLocalProducts
+            .filter((item) => item?.sku)
+            .map((item) => [String(item.sku).trim().toLowerCase(), item] as const)
+        );
+
+        const mapped = (json?.data?.products?.items ?? []).map((item: GraphQlProductItem) => {
+          const category = fallbackCategoryByQuery(item);
+          const localMatch = localBySku.get(item.sku.trim().toLowerCase());
+          const localImage = localMatch?.image ?? '';
+          const resolvedImage =
+            (localImage && !String(localImage).toLowerCase().includes('placeholder') ? localImage : '') ||
+            pickMagentoProductImage(
+              item,
+              category === 'Trái cây'
+                ? 'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=400&h=400&fit=crop'
+                : category === 'Thuỷ hải sản'
+                  ? 'https://images.unsplash.com/photo-1615141982883-c7ad0e69fd62?w=400&h=400&fit=crop'
+                  : 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&h=400&fit=crop'
+            ) ||
+            localImage ||
+            (category === 'Trái cây'
+              ? 'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=400&h=400&fit=crop'
+              : category === 'Thuỷ hải sản'
+                ? 'https://images.unsplash.com/photo-1615141982883-c7ad0e69fd62?w=400&h=400&fit=crop'
+                : 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&h=400&fit=crop');
+
+          return {
+            sku: item.sku,
+            name: localMatch?.name || item.name,
+            category,
+            price: Number(localMatch?.price ?? item.price_range?.minimum_price?.final_price?.value ?? 0),
+            unit: localMatch?.unit || (category === 'Tiện ích bếp' ? 'bộ' : 'kg'),
+            image: resolvedImage,
+            hot: true
+          };
+        });
+
+        const visible = mapped.length > 0 ? mapped : fallbackHotProducts;
+        setProducts(visible);
+      } catch {
+        setProducts(fallbackHotProducts);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadProducts();
+
+    return () => controller.abort();
+  }, []);
+
   const filteredProducts = useMemo(() => {
     if (!selectedCategory) {
-      return hotProducts;
+      return products;
     }
 
     const aliases = categoryAliasMap[selectedCategory] ?? [selectedCategory];
     const normalizedAliases = aliases.map(normalize);
 
-    return hotProducts.filter((product) => {
+    return products.filter((product) => {
       const normalizedProductCategory = normalize(product.category);
       return normalizedAliases.some((alias) => normalizedProductCategory.includes(alias));
     });
-  }, [selectedCategory]);
+  }, [products, selectedCategory]);
 
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / productsPerPage));
   const visibleProducts = useMemo(() => {
@@ -187,6 +353,12 @@ export function HotProducts() {
           </div>
         )}
 
+        {isLoading && (
+          <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+            Đang tải sản phẩm mới từ website...
+          </div>
+        )}
+
         {/* Products Grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           {visibleProducts.map((product, index) => {
@@ -199,13 +371,13 @@ export function HotProducts() {
                 role="button"
                 tabIndex={0}
                 onClick={() => {
-                  const targetUrl = `/react/index.html?view=product&name=${encodeURIComponent(product.name)}`;
+                  const targetUrl = `/react/index.html?view=product&sku=${encodeURIComponent(product.sku)}`;
                   window.location.href = targetUrl;
                 }}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
-                    const targetUrl = `/react/index.html?view=product&name=${encodeURIComponent(product.name)}`;
+                    const targetUrl = `/react/index.html?view=product&sku=${encodeURIComponent(product.sku)}`;
                     window.location.href = targetUrl;
                   }
                 }}

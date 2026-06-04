@@ -142,31 +142,6 @@ const startCustomerSession = async (token: string, storage: Storage): Promise<st
   return redirectUrl || null;
 };
 
-const fetchMagentoCustomerToken = async (identifier: string, password: string): Promise<string | null> => {
-  if (!identifier || !password) {
-    return null;
-  }
-
-  try {
-    const response = await fetch(`${window.location.origin}/rest/V1/integration/customer/token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ username: identifier, password }),
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const token = await response.json().catch(() => null);
-    return typeof token === 'string' ? token.trim() : null;
-  } catch (_error) {
-    return null;
-  }
-};
-
 const verifyMagentoCustomerToken = async (token: string): Promise<boolean> => {
   if (!token) {
     return false;
@@ -302,7 +277,7 @@ export function LoginPage() {
         const secondaryStorage = formData.rememberMe ? window.sessionStorage : window.localStorage;
         const fallbackEmail = data.email || formData.identifier.trim();
         const magentoUsername = (data.email || formData.identifier).trim();
-        const magentoToken = await fetchMagentoCustomerToken(magentoUsername, formData.password);
+        const magentoToken = data.token;
         if (!magentoToken) {
           persistAuthDebug({
             flow: 'password',
@@ -315,7 +290,7 @@ export function LoginPage() {
           });
           throw new Error('Không thể lấy token Magento từ /rest/V1/integration/customer/token.');
         }
-        const customerToken = magentoToken;
+        const customerToken = data.token;
         const isMagentoTokenValid = await verifyMagentoCustomerToken(customerToken);
         persistAuthDebug({
           flow: 'password',

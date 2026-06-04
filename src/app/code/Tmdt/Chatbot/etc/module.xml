@@ -3,6 +3,7 @@
     <module name="Tmdt_Chatbot" setup_version="1.0.0">
         <sequence>
             <module name="Magento_Catalog"/>
+            <module name="Tmdt_Search"/>
         </sequence>
     </module>
 </config>

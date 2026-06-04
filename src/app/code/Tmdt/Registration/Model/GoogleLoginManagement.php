@@ -72,6 +72,12 @@ class GoogleLoginManagement implements GoogleLoginInterface
             throw new AuthenticationException(__('Email Google không khớp với tài khoản doanh nghiệp.'));
         }
 
+        $status = strtolower(trim((string) ($registrationRow['status'] ?? '')));
+        $role = strtolower(trim((string) ($registrationRow['role'] ?? '')));
+        if ($role === 'seller' && $status !== 'approved') {
+            throw new AuthenticationException(__('Tai khoan kinh doanh dang cho duyet hoac da bi tu choi.'));
+        }
+
         try {
             $token = $this->tokenFactory->create()->createCustomerToken((int) $registrationRow['customer_id'])->getToken();
         } catch (\Exception $exception) {
@@ -145,7 +151,7 @@ class GoogleLoginManagement implements GoogleLoginInterface
 
         $row = $connection->fetchRow(
             $connection->select()
-                ->from($tableName, ['customer_id', 'email', 'full_name', 'unit_nickname'])
+                ->from($tableName, ['customer_id', 'email', 'full_name', 'unit_nickname', 'status', 'role'])
                 ->where('login_code = ?', $loginCode)
                 ->limit(1)
         );

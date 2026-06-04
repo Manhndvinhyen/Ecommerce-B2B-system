@@ -115,7 +115,7 @@ export function Header() {
       .then((res) => res.json())
       .then((data) => {
         if (!data || typeof data !== 'object') return;
-        
+
         const firstname = String(data.firstname || '').trim();
         const lastname = String(data.lastname || '').trim();
         const fullName = `${firstname} ${lastname}`.trim();
@@ -150,7 +150,7 @@ export function Header() {
         if (roleAttr) {
           const nextRole = String(roleAttr.value ?? '').trim().toLowerCase();
           const currentRole = window.localStorage.getItem('freso_role') || window.sessionStorage.getItem('freso_role') || '';
-          
+
           if (nextRole !== currentRole) {
             window.localStorage.setItem('freso_role', nextRole);
             window.sessionStorage.setItem('freso_role', nextRole);
@@ -241,7 +241,6 @@ export function Header() {
   };
 
   const displayedUserName = customerName || customerEmail || 'Tài khoản';
-  const currentView = new URLSearchParams(window.location.search).get('view');
   const dashboardBase = currentView === 'seller-dashboard'
     ? `${reactHomePath}?view=seller-dashboard`
     : `${reactHomePath}?view=dashboard`;
@@ -322,7 +321,7 @@ export function Header() {
 
   if (!isLoggedIn) {
     return (
-  <header className="sticky top-0 z-50 bg-white shadow-sm" onClickCapture={handleTopLevelNavigation}>
+      <header className="sticky top-0 z-50 bg-white shadow-sm" onClickCapture={handleTopLevelNavigation}>
         {/* Top Bar - Auth Buttons - Tầng 1 */}
         <div className="bg-gray-50 border-b">
           <div className="container mx-auto px-4 py-2">
@@ -377,11 +376,10 @@ export function Header() {
                                   key={category.name}
                                   href={getCategoryPageLink(category.name)}
                                   onMouseEnter={() => setActiveCategory(category.name)}
-                                  className={`w-full flex items-center justify-between text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
-                                    isActive
+                                  className={`w-full flex items-center justify-between text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${isActive
                                       ? 'bg-green-100 text-green-700 font-semibold shadow-sm'
                                       : 'text-gray-700 hover:bg-white hover:shadow-sm hover:text-green-700'
-                                  }`}
+                                    }`}
                                 >
                                   <span className="pr-3">{category.name}</span>
                                   <ChevronRight className={`size-4 transition-transform ${isActive ? 'translate-x-0.5' : ''}`} />
@@ -410,9 +408,8 @@ export function Header() {
                   </div>
                   <a
                     href={`${reactHomePath}?view=news`}
-                    className={`text-gray-700 font-medium transition-colors hover:text-green-600 ${
-                      currentView === 'news' ? 'text-green-600 font-semibold' : ''
-                    }`}
+                    className={`text-gray-700 font-medium transition-colors hover:text-green-600 ${currentView === 'news' ? 'text-green-600 font-semibold' : ''
+                      }`}
                   >
                     Tin tức
                   </a>
@@ -438,42 +435,17 @@ export function Header() {
                 <a href={isLoggedIn ? '/customer/account' : '/?view=login'} className="p-2 hover:bg-gray-100 rounded-full transition-colors hidden md:block">
                   <User className="size-6 text-gray-700" />
                 </a>
-                <div
-                  className="relative hidden md:block pb-2 -mb-2"
-                  onMouseLeave={() => setIsFavoritesOpen(false)}
+                <a
+                  href={wishlistDetailHref}
+                  className={`p-2 rounded-full transition-all duration-200 ${
+                    currentView === 'wishlist'
+                      ? 'bg-rose-50 text-rose-600 ring-2 ring-rose-100 shadow-sm'
+                      : 'hover:bg-gray-100 text-gray-700 hover:text-rose-600'
+                  }`}
+                  aria-label="Mục yêu thích"
                 >
-                  <button
-                    onClick={() => setIsFavoritesOpen((prev) => !prev)}
-                    onMouseEnter={() => setIsFavoritesOpen(true)}
-                    className={`p-2 rounded-full transition-all duration-200 ${
-                      isFavoritesOpen
-                        ? 'bg-rose-50 text-rose-600 ring-2 ring-rose-100 shadow-sm'
-                        : 'hover:bg-gray-100 text-gray-700'
-                    }`}
-                    aria-label="Mục yêu thích"
-                  >
-                    <Heart className={`size-6 transition-all ${isFavoritesOpen ? 'fill-rose-500 text-rose-500 scale-105' : 'text-gray-700'}`} />
-                  </button>
-
-                  {isFavoritesOpen && (
-                    <div className="absolute top-full right-0 w-56 bg-white border border-rose-100 rounded-xl shadow-xl p-2 z-50">
-                      <a
-                        href={`${reactHomePath}?view=wishlist`}
-                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-rose-50 hover:text-rose-700 transition-colors"
-                      >
-                        <Heart className="size-4" />
-                        Sản phẩm yêu thích
-                      </a>
-                      <a
-                        href="/sales/order/history"
-                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-rose-50 hover:text-rose-700 transition-colors"
-                      >
-                        <Heart className="size-4" />
-                        Đơn hàng yêu thích
-                      </a>
-                    </div>
-                  )}
-                </div>
+                  <Heart className={`size-6 transition-all ${currentView === 'wishlist' ? 'fill-rose-500 text-rose-500 scale-105' : 'text-gray-700'}`} />
+                </a>
                 <a href={`${reactHomePath}?view=cart`} className="relative p-2 hover:bg-gray-100 rounded-full transition-colors">
                   <ShoppingCart className="size-6 text-gray-700" />
                   <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full size-5 flex items-center justify-center">
@@ -494,7 +466,7 @@ export function Header() {
   const params = new URLSearchParams(window.location.search);
 
   return (
-  <header className="sticky top-0 z-50 bg-white shadow-sm" onClickCapture={handleTopLevelNavigation}>
+    <header className="sticky top-0 z-50 bg-white shadow-sm" onClickCapture={handleTopLevelNavigation}>
       {/* Top Bar - Tầng 1 */}
       <div className="bg-white border-b">
         <div className="container mx-auto px-4 py-2.5">
@@ -559,21 +531,20 @@ export function Header() {
                       <div className="px-3 py-2 text-sm font-semibold text-gray-900">{displayedUserName}</div>
                       <div className="grid grid-cols-1 gap-1 text-sm">
                         {visibleMenuItems.map((item) => {
-                            const isActive = activeDashboardTab === item.label;
-                            return (
-                              <a
-                                key={item.id}
-                                href={getDashboardHref(item.label)}
-                                className={`w-full rounded-xl px-4 py-2.5 text-[14px] font-semibold transition-colors ${
-                                  isActive
-                                    ? 'bg-green-50 text-green-700'
-                                    : 'text-gray-700 hover:bg-green-50 hover:text-green-700'
+                          const isActive = activeDashboardTab === item.label;
+                          return (
+                            <a
+                              key={item.id}
+                              href={getDashboardHref(item.label)}
+                              className={`w-full rounded-xl px-4 py-2.5 text-[14px] font-semibold transition-colors ${isActive
+                                  ? 'bg-green-50 text-green-700'
+                                  : 'text-gray-700 hover:bg-green-50 hover:text-green-700'
                                 }`}
-                              >
-                                {item.label}
-                              </a>
-                            );
-                          })}
+                            >
+                              {item.label}
+                            </a>
+                          );
+                        })}
                       </div>
                       <div className="mt-4">
                         <button
@@ -625,11 +596,10 @@ export function Header() {
                                 key={category.name}
                                 href={getCategoryPageLink(category.name)}
                                 onMouseEnter={() => setActiveCategory(category.name)}
-                                className={`w-full flex items-center justify-between text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
-                                  isActive
+                                className={`w-full flex items-center justify-between text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${isActive
                                     ? 'bg-green-100 text-green-700 font-semibold shadow-sm'
                                     : 'text-gray-700 hover:bg-white hover:shadow-sm hover:text-green-700'
-                                }`}
+                                  }`}
                               >
                                 <span className="pr-3">{category.name}</span>
                                 <ChevronRight className={`size-4 transition-transform ${isActive ? 'translate-x-0.5' : ''}`} />
@@ -658,9 +628,8 @@ export function Header() {
                 </div>
                 <a
                   href={`${reactHomePath}?view=news`}
-                  className={`text-gray-700 font-medium transition-colors hover:text-green-600 ${
-                    currentView === 'news' ? 'text-green-600 font-semibold' : ''
-                  }`}
+                  className={`text-gray-700 font-medium transition-colors hover:text-green-600 ${currentView === 'news' ? 'text-green-600 font-semibold' : ''
+                    }`}
                 >
                   Tin tức
                 </a>
@@ -684,13 +653,17 @@ export function Header() {
             {/* Actions */}
             <div className="flex items-center gap-4">
               {isLoggedIn && (
-                <button
-                  onClick={() => setIsFavoritesOpen((prev) => !prev)}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                <a
+                  href={wishlistDetailHref}
+                  className={`p-2 rounded-full transition-all duration-200 ${
+                    currentView === 'wishlist'
+                      ? 'bg-rose-50 text-rose-600 ring-2 ring-rose-100 shadow-sm'
+                      : 'hover:bg-gray-100 text-gray-700 hover:text-rose-600'
+                  }`}
                   aria-label="Mục yêu thích"
                 >
-                  <Heart className="size-6 text-gray-700" />
-                </button>
+                  <Heart className={`size-6 transition-all ${currentView === 'wishlist' ? 'fill-rose-500 text-rose-500 scale-105' : 'text-gray-700'}`} />
+                </a>
               )}
 
               {isLoggedIn && (

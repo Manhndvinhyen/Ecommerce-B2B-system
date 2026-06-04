@@ -5,6 +5,7 @@ import { WishlistAddModal, WishlistModalProduct } from './WishlistAddModal';
 import { useCart, toCurrencyTextFromNumber, toUnitPriceFromLooseValue } from '../cart/CartProvider';
 import { toQuerySlug } from '../data/categories';
 import { applySeo, buildBreadcrumbJsonLd, buildProductJsonLd, getSiteName } from '../utils/seo';
+import { getMockSupplierForProduct } from '../data/mockSuppliers';
 
 type WholesaleTier = {
   qty: number;
@@ -298,7 +299,10 @@ export function ProductDetailPage() {
             expiry: localCustomFields.description?.expiry || parsed.expiry || fallbackProduct.description.expiry
           },
           wholesale_tiers: localCustomFields.wholesale_tiers || item.wholesale_tiers || [],
-          store_name: localCustomFields.store_name
+          store_name: localCustomFields.store_name || (() => {
+            const supplier = getMockSupplierForProduct(item.sku, pickCategoryName(item.categories));
+            return `${supplier.name} · ${supplier.region}`;
+          })()
         });
       } catch (error) {
         if (controller.signal.aborted) {
@@ -331,7 +335,10 @@ export function ProductDetailPage() {
                   expiry: localProd.description?.expiry || 'Sử dụng tốt nhất trong vòng 3 - 7 ngày kể từ ngày giao hàng.'
                 },
                 wholesale_tiers: localProd.wholesale_tiers || [],
-                store_name: localProd.store_name || 'Cửa hàng sỉ Freso'
+                store_name: localProd.store_name || (() => {
+                  const supplier = getMockSupplierForProduct(localProd.sku, localProd.categoryLabel || 'Sản phẩm sỉ');
+                  return `${supplier.name} · ${supplier.region}`;
+                })()
               });
               return;
             }
@@ -421,7 +428,8 @@ export function ProductDetailPage() {
           priceText: toCurrencyTextFromNumber(currentUnitPrice),
           unit: product.unit,
           unitPrice: currentUnitPrice,
-          image: product.image
+          image: product.image,
+          supplierLabel: product.store_name
         },
         quantity,
         sourceElement
@@ -532,7 +540,7 @@ export function ProductDetailPage() {
                     </div>
                     {product.store_name && (
                       <div className="flex justify-between border-b border-dashed border-gray-200 pb-2">
-                        <dt className="text-gray-500">Bán bởi</dt>
+                        <dt className="text-gray-500">Nhà cung cấp</dt>
                         <dd className="font-extrabold text-green-700">{product.store_name}</dd>
                       </div>
                     )}
@@ -679,4 +687,3 @@ export function ProductDetailPage() {
     </>
   );
 }
-

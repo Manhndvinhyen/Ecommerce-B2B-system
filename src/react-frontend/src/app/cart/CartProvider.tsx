@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { PropsWithChildren } from 'react';
 import { CheckCircle2, Minus, Plus, X } from 'lucide-react';
 import { clearStoredAuthSession } from '../utils/authSession';
+import { getMockSupplierForProduct } from '../data/mockSuppliers';
 
 export type AddToCartProduct = {
   id: string;
@@ -12,6 +13,9 @@ export type AddToCartProduct = {
   unit: string;
   unitPrice: number;
   image: string;
+  supplierName?: string;
+  supplierRegion?: string;
+  supplierLabel?: string;
 };
 
 export type CartLineItem = {
@@ -27,6 +31,8 @@ export type CartLineItem = {
   quantity: number;
   selected: boolean;
   note: string;
+  supplierName?: string;
+  supplierRegion?: string;
 };
 
 type MagentoCartItem = {
@@ -102,11 +108,90 @@ const clearCustomerAuthSession = () => {
 let activeCustomerCartIdRequest: Promise<string> | null = null;
 let activeCustomerCartItemsRequest: Promise<MagentoCartItem[]> | null = null;
 let activeAddToCartRequest: Promise<MagentoCartItem[]> | null = null;
+const cartSupplierMapStorageKey = 'freso_cart_supplier_map';
 
 function parseNumberFromText(value: string): number {
   const digits = value.replace(/[^\d]/g, '');
   return digits ? Number.parseInt(digits, 10) : 0;
 }
+
+const parseSupplierLabel = (label?: string) => {
+  const parts = String(label || '')
+    .split('·')
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return {
+    supplierName: parts[0] || '',
+    supplierRegion: parts.slice(1).join(' · ')
+  };
+};
+
+const getSupplierForCartProduct = (product: Pick<AddToCartProduct, 'sku' | 'category'> & Partial<AddToCartProduct>) => {
+  const fromLabel = parseSupplierLabel(product.supplierLabel);
+  const fallback = getMockSupplierForProduct(product.sku, product.category);
+  const productSupplierName = product.supplierName || fromLabel.supplierName;
+  const productSupplierRegion = product.supplierRegion || fromLabel.supplierRegion;
+  const shouldUseFallbackSupplier =
+    fallback.name === 'Tổng công ty Chăn nuôi CP Việt Nam' &&
+    (!productSupplierName ||
+      productSupplierName === 'Tổng kho sỉ Thực phẩm B2B' ||
+      productSupplierName === 'Tổng công ty Chăn nuôi CP Việt Nam');
+
+  return {
+    supplierName: shouldUseFallbackSupplier ? fallback.name : productSupplierName || fallback.name,
+    supplierRegion: shouldUseFallbackSupplier ? fallback.region : productSupplierRegion || fallback.region
+  };
+};
+
+const readStoredSupplierMap = (): Record<string, { supplierName?: string; supplierRegion?: string }> => {
+  if (typeof window === 'undefined') {
+    return {};
+  }
+
+  try {
+    return JSON.parse(window.localStorage.getItem(cartSupplierMapStorageKey) || '{}');
+  } catch {
+    return {};
+  }
+};
+
+const storeSupplierForProduct = (product: AddToCartProduct) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const sku = (product.sku ?? '').trim().toLowerCase();
+  if (!sku) {
+    return;
+  }
+
+  const supplier = getSupplierForCartProduct(product);
+  try {
+    window.localStorage.setItem(
+      cartSupplierMapStorageKey,
+      JSON.stringify({
+        ...readStoredSupplierMap(),
+        [sku]: supplier
+      })
+    );
+  } catch {
+    // ignore storage errors
+  }
+};
+
+export const formatCartSupplierLabel = (item: Pick<CartLineItem, 'sku' | 'category'> & Partial<CartLineItem>) => {
+  const fallback = getMockSupplierForProduct(item.sku, item.category);
+  const shouldUseFallbackSupplier =
+    fallback.name === 'Tổng công ty Chăn nuôi CP Việt Nam' &&
+    (!item.supplierName ||
+      item.supplierName === 'Tổng kho sỉ Thực phẩm B2B' ||
+      item.supplierName === 'Tổng công ty Chăn nuôi CP Việt Nam');
+  const supplierName = shouldUseFallbackSupplier ? fallback.name : item.supplierName || fallback.name;
+  const supplierRegion = shouldUseFallbackSupplier ? fallback.region : item.supplierRegion || fallback.region;
+
+  return [supplierName, supplierRegion].filter(Boolean).join(' · ');
+};
 
 export function CartProvider({ children }: PropsWithChildren) {
   const [cartItems, setCartItems] = useState<CartLineItem[]>([]);
@@ -306,6 +391,7 @@ export function CartProvider({ children }: PropsWithChildren) {
 
   const mapMagentoCartItems = useCallback((items: MagentoCartItem[] = []): CartLineItem[] => {
     const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
+    const storedSupplierMap = readStoredSupplierMap();
     let customLocalProducts: any[] = [];
     if (customLocalRaw) {
       try {
@@ -337,6 +423,13 @@ export function CartProvider({ children }: PropsWithChildren) {
         product.categories?.find((cat) => cat?.name)?.name ??
         (matchingProduct?.categoryLabel || '');
       const unit = matchingProduct?.unit || 'kg';
+      const supplier = getSupplierForCartProduct({
+        sku: product.sku ?? matchingProduct?.sku ?? '',
+        category,
+        supplierName: storedSupplierMap[productSku]?.supplierName,
+        supplierRegion: storedSupplierMap[productSku]?.supplierRegion,
+        supplierLabel: matchingProduct?.store_name
+      });
 
       // Prioritise seller-uploaded image; only use Magento image if it's not a placeholder
       const rawImage = product.small_image?.url || product.thumbnail?.url || '';
@@ -360,6 +453,8 @@ export function CartProvider({ children }: PropsWithChildren) {
         quantity: qty,
         selected: true,
         note: '',
+        supplierName: supplier.supplierName,
+        supplierRegion: supplier.supplierRegion,
       };
     });
   }, []);
@@ -395,6 +490,13 @@ export function CartProvider({ children }: PropsWithChildren) {
         image: match?.image || item.image,
         unitPrice: match ? Number(match.price) : item.unitPrice,
         unit: match?.unit || item.unit,
+        ...getSupplierForCartProduct({
+          sku: item.sku,
+          category: item.category,
+          supplierName: item.supplierName,
+          supplierRegion: item.supplierRegion,
+          supplierLabel: match?.store_name
+        }),
       };
     });
 
@@ -629,6 +731,7 @@ export function CartProvider({ children }: PropsWithChildren) {
   }, []);
 
   const addToCart = useCallback((product: AddToCartProduct, quantity: number) => {
+    storeSupplierForProduct(product);
     setCartItems((prev) => {
       const targetQuantity = clampQuantity(quantity);
       const productSku = (product.sku ?? '').trim().toLowerCase();
@@ -636,12 +739,19 @@ export function CartProvider({ children }: PropsWithChildren) {
 
       let next: CartLineItem[];
       if (existing) {
+        const supplier = getSupplierForCartProduct(product);
         next = prev.map((item) =>
           (item.sku ?? '').trim().toLowerCase() === productSku
-            ? { ...item, quantity: item.quantity + targetQuantity }
+            ? {
+                ...item,
+                quantity: item.quantity + targetQuantity,
+                supplierName: item.supplierName || supplier.supplierName,
+                supplierRegion: item.supplierRegion || supplier.supplierRegion,
+              }
             : item
         );
       } else {
+        const supplier = getSupplierForCartProduct(product);
         const newItem: CartLineItem = {
           id: product.id,
           cartItemId: '',
@@ -655,6 +765,8 @@ export function CartProvider({ children }: PropsWithChildren) {
           quantity: targetQuantity,
           selected: true,
           note: '',
+          supplierName: supplier.supplierName,
+          supplierRegion: supplier.supplierRegion,
         };
         next = [newItem, ...prev];
       }
@@ -682,6 +794,7 @@ export function CartProvider({ children }: PropsWithChildren) {
 
     const quantity = clampQuantity(modalQuantity);
     const selectedProduct = modalProduct;
+    storeSupplierForProduct(selectedProduct);
 
     closeModal();
     try {
@@ -723,6 +836,7 @@ export function CartProvider({ children }: PropsWithChildren) {
       }
       sourceRectRef.current = sourceImageElement?.getBoundingClientRect() ?? null;
       const targetQuantity = clampQuantity(quantity);
+      storeSupplierForProduct(product);
 
       try {
         const items = await addProductToMagentoCart(product, targetQuantity);

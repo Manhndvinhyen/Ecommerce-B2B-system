@@ -13,6 +13,7 @@ import {
   ShoppingBag,
 } from 'lucide-react';
 import { toCurrencyTextFromNumber } from '../cart/CartProvider';
+import { OrderTrackingMap } from './OrderTrackingMap';
 
 type PurchaseHistoryItem = {
   item_id: number;
@@ -181,6 +182,17 @@ export function PurchaseHistoryContent({
     { key: 'processing', label: 'Đang xử lý' },
     { key: 'cancelled', label: 'Đã hủy' },
   ];
+
+  const buildTrackingHref = (order: PurchaseHistoryOrder) => {
+    const params = new URLSearchParams();
+    params.set('view', 'order-tracking');
+    params.set('orderId', order.order_reference);
+    if (order.shipping_address) params.set('address', order.shipping_address);
+    if (order.supplier) params.set('supplier', order.supplier);
+    if (order.customer_region) params.set('region', order.customer_region);
+    if (order.status) params.set('status', order.status);
+    return `/react/index.html?${params.toString()}`;
+  };
 
   return (
     <div className="flex-1 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
@@ -371,6 +383,13 @@ export function PurchaseHistoryContent({
                       <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700">Tổng thanh toán</p>
                       <p className="mt-1 text-xl font-black text-emerald-800">{toCurrencyTextFromNumber(order.total_amount)}</p>
                     </div>
+                    <a
+                      href={buildTrackingHref(order)}
+                      className="mt-3 inline-flex items-center justify-center gap-1.5 rounded-full border border-emerald-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700 transition-colors hover:bg-emerald-50"
+                    >
+                      <Truck className="size-3.5" />
+                      Mở bản đồ tracking
+                    </a>
                     {order.transaction_id && (
                       <div className="mt-3 inline-flex items-center justify-end gap-1.5 rounded-full border border-emerald-200 bg-white px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 self-end">
                         Mã GD: {order.transaction_id}
@@ -386,35 +405,58 @@ export function PurchaseHistoryContent({
                     onClick={() => toggleOrderExpand(order.order_reference)}
                     className="flex w-full items-center justify-between text-xs font-black uppercase tracking-wider text-emerald-600 hover:text-emerald-700 transition"
                   >
-                    <span>{isExpanded ? 'Ẩn chi tiết sản phẩm' : `Xem chi tiết sản phẩm (${order.items.length})`}</span>
+                    <span>{isExpanded ? 'Ẩn theo dõi đơn hàng' : `Theo dõi đơn hàng và sản phẩm (${order.items.length})`}</span>
                     <ChevronDown className={`size-4 transform transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
                   </button>
 
                   {isExpanded && (
-                    <div className="mt-3 space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
-                      {order.items.map((item) => (
-                        <div key={item.item_id} className="flex items-center gap-3 rounded-xl bg-slate-50/60 p-3 hover:bg-slate-100/40 transition-colors">
-                          {item.image ? (
-                            <img src={item.image} alt={item.name} className="size-11 rounded-lg object-cover border border-slate-200" />
-                          ) : (
-                            <div className="flex size-11 items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-300">
-                              <PackageSearch className="size-5" />
-                            </div>
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-xs font-bold text-slate-900">{item.name}</p>
-                            <p className="mt-0.5 text-[10px] text-slate-500 font-semibold">
-                              {item.sku} · {item.category || 'Chưa phân loại'}
-                            </p>
-                          </div>
-                          <div className="text-right text-xs">
-                            <p className="font-bold text-slate-900">
-                              {item.quantity} {item.unit || 'SP'}
-                            </p>
-                            <p className="text-slate-500 font-semibold">{toCurrencyTextFromNumber(item.row_total)}</p>
+                    <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                      <OrderTrackingMap
+                        order={{
+                          orderReference: order.order_reference,
+                          status: order.status,
+                          statusLabel: order.status_label,
+                          supplier: order.supplier,
+                          customerRegion: order.customer_region,
+                          shippingAddress: order.shipping_address,
+                          deliveryDate: order.delivery_date,
+                          deliveryTime: order.delivery_time,
+                        }}
+                      />
+
+                      <div className="rounded-2xl border border-slate-100 bg-white p-4">
+                        <div className="mb-3 flex items-center justify-between">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Sản phẩm trong đơn</p>
+                            <h3 className="text-sm font-black text-slate-900">{order.items.length} mặt hàng</h3>
                           </div>
                         </div>
-                      ))}
+                        <div className="space-y-2.5">
+                          {order.items.map((item) => (
+                            <div key={item.item_id} className="flex items-center gap-3 rounded-xl bg-slate-50/60 p-3 hover:bg-slate-100/40 transition-colors">
+                              {item.image ? (
+                                <img src={item.image} alt={item.name} className="size-11 rounded-lg object-cover border border-slate-200" />
+                              ) : (
+                                <div className="flex size-11 items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-300">
+                                  <PackageSearch className="size-5" />
+                                </div>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-xs font-bold text-slate-900">{item.name}</p>
+                                <p className="mt-0.5 text-[10px] text-slate-500 font-semibold">
+                                  {item.sku} · {item.category || 'Chưa phân loại'}
+                                </p>
+                              </div>
+                              <div className="text-right text-xs">
+                                <p className="font-bold text-slate-900">
+                                  {item.quantity} {item.unit || 'SP'}
+                                </p>
+                                <p className="text-slate-500 font-semibold">{toCurrencyTextFromNumber(item.row_total)}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>

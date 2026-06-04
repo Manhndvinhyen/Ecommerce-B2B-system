@@ -100,9 +100,9 @@ export function WeatherWidget() {
         }
       }
 
-      let lat: number;
-      let lon: number;
-      let cityName = '';
+      let lat: number = 21.0278; // Default fallback to Hanoi
+      let lon: number = 105.8342;
+      let cityName = 'Hà Nội';
       let isGps = false;
 
       if (useGps && navigator.geolocation) {
@@ -110,8 +110,8 @@ export function WeatherWidget() {
         try {
           const position = await new Promise<GeolocationPosition>((resolve, reject) => {
             navigator.geolocation.getCurrentPosition(resolve, reject, {
-              timeout: 5000,
-              enableHighAccuracy: true
+              timeout: 10000,
+              enableHighAccuracy: false
             });
           });
           lat = position.coords.latitude;
@@ -145,29 +145,35 @@ export function WeatherWidget() {
             cityName = 'Vị trí của bạn';
           }
         } catch (geoErr: any) {
-          console.warn('Geolocation GPS failed or denied', geoErr);
-          if (geoErr && geoErr.code === 1) {
-            // User denied Geolocation (PERMISSION_DENIED)
-            setGpsDenied(true);
-            throw new Error('Quyền định vị bị từ chối.');
+          console.warn('Geolocation GPS failed or denied, trying IP location fallback', geoErr);
+          setGpsDenied(true);
+          try {
+            const ipData = await fetchIpLocation();
+            lat = ipData.lat;
+            lon = ipData.lon;
+            cityName = ipData.cityName;
+          } catch (ipErr) {
+            console.warn('IP location failed, using default Hanoi', ipErr);
+            // defaults are already set to Hanoi
           }
-          // Fall back to IP-based if GPS fails due to other reasons
+        }
+      } else {
+        // IP-based geolocation
+        try {
           const ipData = await fetchIpLocation();
           lat = ipData.lat;
           lon = ipData.lon;
           cityName = ipData.cityName;
+        } catch (ipErr) {
+          console.warn('IP location failed, using default Hanoi', ipErr);
+          // defaults are already set to Hanoi
         }
-      } else {
-        // IP-based geolocation
-        const ipData = await fetchIpLocation();
-        lat = ipData.lat;
-        lon = ipData.lon;
-        cityName = ipData.cityName;
       }
 
       // 2. Fetch Weather Data from Open-Meteo
       const weatherRes = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code`
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,rain,precipitation&t=${Date.now()}`,
+        { cache: 'no-store' }
       );
       if (!weatherRes.ok) {
         throw new Error('Không thể tải thông tin thời tiết cho vị trí hiện tại.');
@@ -176,7 +182,21 @@ export function WeatherWidget() {
       const weatherData = await weatherRes.json();
       const temp = Math.round(weatherData.current.temperature_2m);
       const humidity = Math.round(weatherData.current.relative_humidity_2m);
-      const weatherCode = weatherData.current.weather_code;
+      let weatherCode = weatherData.current.weather_code;
+      const rain = weatherData.current.rain || 0;
+      const precipitation = weatherData.current.precipitation || 0;
+
+      // Correct false-positive rain/thunderstorm predictions from global models
+      // If code predicts rain/storm but actual current precipitation/rain is 0:
+      if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99].includes(weatherCode)) {
+        if (precipitation === 0 && rain === 0) {
+          if (temp >= 33) {
+            weatherCode = 1; // Mainly clear / nắng đẹp
+          } else {
+            weatherCode = 3; // Overcast / nhiều mây
+          }
+        }
+      }
 
       // Update State
       setWeather({ cityName, temp, humidity, weatherCode, isGps });
@@ -203,15 +223,33 @@ export function WeatherWidget() {
     }
   };
 
-  // Helper to fetch IP Location details
   const fetchIpLocation = async () => {
-    // We request from free.freeipapi.com (handles CORS and HTTPS cleanly)
-    const ipRes = await fetch('https://free.freeipapi.com/api/json');
+    // 1. Try ipwho.is first (highly accurate, supports HTTPS, no cloudflare block)
+    try {
+      const res = await fetch('https://ipwho.is/', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.latitude && data.longitude) {
+          let cityName = 'Vị trí của bạn';
+          if (data.city) {
+            cityName = formatRegionName(data.city);
+          } else if (data.region) {
+            cityName = formatRegionName(data.region);
+          }
+          return { lat: data.latitude, lon: data.longitude, cityName };
+        }
+      }
+    } catch (e) {
+      console.warn('ipwho.is failed, trying backup freeipapi', e);
+    }
+
+    // 2. Fallback to free.freeipapi.com
+    const ipRes = await fetch(`https://free.freeipapi.com/api/json?t=${Date.now()}`, { cache: 'no-store' });
     if (!ipRes.ok) {
       throw new Error('Lỗi kết nối định vị IP.');
     }
     const ipData = await ipRes.json();
-    
+
     if (!ipData.latitude || !ipData.longitude) {
       throw new Error('Không thể định vị được địa chỉ IP hiện tại.');
     }
@@ -235,6 +273,7 @@ export function WeatherWidget() {
   };
 
   const triggerGpsLocate = () => {
+    localStorage.removeItem(CACHE_KEY);
     loadWeatherData(true);
   };
 
@@ -363,37 +402,7 @@ export function WeatherWidget() {
     );
   }
 
-  if (gpsDenied) {
-    return (
-      <div className="w-full bg-amber-50 border-b border-amber-100 py-3.5 px-4 shadow-sm text-amber-900">
-        <div className="container mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span className="p-1.5 rounded-xl bg-amber-100/80 text-amber-600">
-              <MapPin className="size-5" />
-            </span>
-            <span className="text-xs md:text-sm font-medium">
-              📍 Để biết vị trí của bạn ảnh hưởng như thế nào đến tình trạng giao hàng và thời gian nhận hàng, vui lòng chia sẻ vị trí của bạn.
-            </span>
-          </div>
-          <div className="flex items-center gap-3 self-end sm:self-auto">
-            <button
-              onClick={handleShowInstruction}
-              className="px-3.5 py-1.5 rounded-full text-xs font-bold bg-white hover:bg-amber-100/50 transition-colors border border-amber-200 text-amber-800"
-            >
-              Cách cấp quyền
-            </button>
-            <button
-              onClick={handleDismiss}
-              className="p-1.5 rounded-full hover:bg-black/5 active:bg-black/10 transition-colors text-amber-700"
-              title="Ẩn thông báo"
-            >
-              <X className="size-4" />
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+
 
   if (error || !weather) {
     return (
@@ -403,8 +412,8 @@ export function WeatherWidget() {
             <AlertTriangle className="size-4 text-amber-600" />
             <span>Không thể xác định vị trí thời tiết của bạn. Vui lòng cấp quyền định vị hoặc thử lại.</span>
           </div>
-          <button 
-            onClick={() => loadWeatherData()} 
+          <button
+            onClick={() => loadWeatherData()}
             className="flex items-center gap-1 hover:text-amber-950 transition-colors font-medium ml-4"
           >
             <RefreshCw className="size-3" /> Thử lại
@@ -469,9 +478,11 @@ export function WeatherWidget() {
           </div>
 
           <div className="flex items-center gap-1.5">
-            {/* Manual refresh button */}
             <button
-              onClick={() => loadWeatherData()}
+              onClick={() => {
+                localStorage.removeItem(CACHE_KEY);
+                loadWeatherData(false);
+              }}
               className="p-1.5 rounded-full hover:bg-black/5 active:bg-black/10 transition-colors text-current opacity-60 hover:opacity-100"
               title="Cập nhật thời tiết"
             >

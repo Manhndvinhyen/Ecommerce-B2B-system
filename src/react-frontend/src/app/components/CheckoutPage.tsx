@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { Calendar, Clock, FileText, MapPin, PackageCheck, Phone, ShoppingBag, User, Wind, Thermometer, AlertTriangle, Truck } from 'lucide-react';
-import { toCurrencyTextFromNumber, useCart } from '../cart/CartProvider';
+import { formatCartSupplierLabel, toCurrencyTextFromNumber, useCart } from '../cart/CartProvider';
 
 declare global {
   interface Window {
@@ -173,6 +173,8 @@ type CheckoutItem = {
   unit: string;
   image: string;
   category: string;
+  supplierName?: string;
+  supplierRegion?: string;
 };
 
 type CheckoutPayload = {
@@ -198,7 +200,14 @@ type InvoiceInfo = {
 };
 
 const deliveryTimeOptions = ['07:00 - 09:00', '09:00 - 11:30', '13:00 - 15:30', '16:00 - 18:30', '18:30 - 20:30'];
-const branches = ['Chi nhánh Quận 1', 'Chi nhánh Quận 7', 'Chi nhánh Thủ Đức', 'Chi nhánh Bình Thạnh'];
+const cartSupplierMapStorageKey = 'freso_cart_supplier_map';
+
+const branchCoordinates: Record<string, { lat: number; lng: number; cityName: string }> = {
+  'Chi nhánh Quận 1': { lat: 10.776, lng: 106.700, cityName: 'Quận 1, TP. Hồ Chí Minh' },
+  'Chi nhánh Quận 7': { lat: 10.732, lng: 106.721, cityName: 'Quận 7, TP. Hồ Chí Minh' },
+  'Chi nhánh Thủ Đức': { lat: 10.849, lng: 106.772, cityName: 'Thủ Đức, TP. Hồ Chí Minh' },
+  'Chi nhánh Bình Thạnh': { lat: 10.801, lng: 106.699, cityName: 'Bình Thạnh, TP. Hồ Chí Minh' }
+};
 
 const getCustomerEmail = () =>
   window.localStorage.getItem('freso_customer_email') || window.sessionStorage.getItem('freso_customer_email') || '';
@@ -208,7 +217,10 @@ const getAuthToken = () =>
   window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
 
 const isValidPhone = (value: string) => /^(\+?84|0)\d{9,10}$/.test(value.replace(/\s/g, ''));
-const getRegionFromBranch = (branch: string) => branch.replace(/^Chi nhánh\s+/i, '').trim();
+const getRegionFromBranch = (branch: string) => {
+  if (!branch) return '';
+  return branch.replace(/^Chi nhánh\s+/i, '').trim();
+};
 
 const getMagentoMediaImageUrl = (file?: string | null) => {
   if (!file || !file.trim()) return '';
@@ -255,7 +267,7 @@ const readCheckoutPayload = (): CheckoutPayload | null => {
 };
 
 const buildCheckoutPayload = (items: CheckoutItem[]): CheckoutPayload => {
-  const suppliers = Array.from(new Set(items.map((item) => item.category).filter(Boolean)));
+  const suppliers = Array.from(new Set(items.map((item) => formatCartSupplierLabel(item) || item.category).filter(Boolean)));
   return {
     items,
     subtotal: items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
@@ -264,8 +276,29 @@ const buildCheckoutPayload = (items: CheckoutItem[]): CheckoutPayload => {
   };
 };
 
+const parseSupplierLabel = (label?: string) => {
+  const parts = String(label || '')
+    .split('·')
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return {
+    supplierName: parts[0] || undefined,
+    supplierRegion: parts.slice(1).join(' · ') || undefined
+  };
+};
+
+const readStoredSupplierMap = (): Record<string, { supplierName?: string; supplierRegion?: string }> => {
+  try {
+    return JSON.parse(window.localStorage.getItem(cartSupplierMapStorageKey) || '{}');
+  } catch {
+    return {};
+  }
+};
+
 const mapMagentoCartItems = (items: MagentoCartItem[] = []): CheckoutItem[] => {
   const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
+  const storedSupplierMap = readStoredSupplierMap();
   let customLocalProducts: any[] = [];
   if (customLocalRaw) {
     try {
@@ -280,7 +313,7 @@ const mapMagentoCartItems = (items: MagentoCartItem[] = []): CheckoutItem[] => {
     const qty = Math.max(1, Math.floor(item.quantity ?? 1));
     const sku = (product.sku ?? '').trim().toLowerCase();
     const matchingProduct = customLocalProducts.find(p => (p.sku ?? '').trim().toLowerCase() === sku);
-    
+
     const originalPrice = matchingProduct ? Number(matchingProduct.price) : Number(product.price_range?.minimum_price?.final_price?.value ?? 0);
     const tiers = matchingProduct?.wholesale_tiers || [];
     const activeTier = tiers
@@ -291,6 +324,14 @@ const mapMagentoCartItems = (items: MagentoCartItem[] = []): CheckoutItem[] => {
     const unitPrice = originalPrice * (1 - discountPercent / 100);
     const category = product.categories?.find((cat) => cat?.name)?.name ?? (matchingProduct?.categoryLabel || '');
     const unit = matchingProduct?.unit || 'kg';
+    const supplier = parseSupplierLabel(matchingProduct?.store_name);
+    const storedSupplier = storedSupplierMap[sku] || {};
+
+    const rawImage = product.small_image?.url || product.thumbnail?.url || '';
+    const isPlaceholder = rawImage.toLowerCase().includes('placeholder');
+    const finalImage = !rawImage || isPlaceholder
+      ? (matchingProduct?.image || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop')
+      : rawImage;
     const galleryImage = (product.media_gallery_entries ?? []).find((entry) => {
       const file = entry.file?.trim() ?? '';
       return file && !file.toLowerCase().includes('placeholder');
@@ -310,7 +351,9 @@ const mapMagentoCartItems = (items: MagentoCartItem[] = []): CheckoutItem[] => {
       unitPrice,
       unit,
       image: finalImage,
-      category
+      category,
+      supplierName: storedSupplier.supplierName || supplier.supplierName,
+      supplierRegion: storedSupplier.supplierRegion || supplier.supplierRegion
     };
   });
 };
@@ -394,7 +437,7 @@ export function CheckoutPage() {
   const [deliveryDate, setDeliveryDate] = useState('');
   const [deliveryTime, setDeliveryTime] = useState('');
   const [shippingInfo, setShippingInfo] = useState<ShippingInfo>({
-    branch: branches[0],
+    branch: '',
     address: '',
     receiver: getCustomerName(),
     phone: '',
@@ -420,6 +463,8 @@ export function CheckoutPage() {
   const [leafletLoaded, setLeafletLoaded] = useState<boolean>(false);
   const [mapGpsLoading, setMapGpsLoading] = useState<boolean>(false);
   const [initialCoordinates, setInitialCoordinates] = useState<{ lat: number; lng: number } | null>(null);
+  const [coordinates, setCoordinates] = useState<{ lat: number; lng: number; cityName?: string } | null>(null);
+  const isMapActionRef = useRef<boolean>(false);
   const [mapSearchQuery, setMapSearchQuery] = useState<string>('');
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -491,8 +536,13 @@ export function CheckoutPage() {
 
   // Immediately get initial location on mount to center the map on the user's actual GPS location
   useEffect(() => {
+    const savedShipping = loadSavedShipping();
+    const activeBranch = savedShipping?.branch || '';
+    const defaultCoords = branchCoordinates[activeBranch] || { lat: 10.776, lng: 106.700 };
+
     if (!navigator.geolocation) {
-      setInitialCoordinates({ lat: 21.036, lng: 105.782 });
+      setInitialCoordinates(defaultCoords);
+      setCoordinates(defaultCoords);
       return;
     }
 
@@ -502,7 +552,9 @@ export function CheckoutPage() {
           lat: position.coords.latitude,
           lng: position.coords.longitude
         };
+        isMapActionRef.current = true;
         setInitialCoordinates(coords);
+        setCoordinates(coords);
 
         // Reverse geocode to update address field immediately on load!
         try {
@@ -524,8 +576,9 @@ export function CheckoutPage() {
         }
       },
       (error) => {
-        console.warn('Geolocation denied or failed on load, falling back to Hanoi:', error);
-        setInitialCoordinates({ lat: 21.036, lng: 105.782 });
+        console.warn('Geolocation denied or failed on load, falling back to default branch:', error);
+        setInitialCoordinates(defaultCoords);
+        setCoordinates(defaultCoords);
       },
       { timeout: 8000, enableHighAccuracy: true }
     );
@@ -553,7 +606,9 @@ export function CheckoutPage() {
         unitPrice: item.unitPrice,
         unit: item.unit,
         image: item.image,
-        category: item.category
+        category: item.category,
+        supplierName: item.supplierName,
+        supplierRegion: item.supplierRegion
       }));
 
       const fallbackPayload = selected.length > 0 ? buildCheckoutPayload(selected) : await fetchCustomerCartPayload();
@@ -597,58 +652,77 @@ export function CheckoutPage() {
   }, [checkoutItems, isReady]);
 
   // Debounced effect for shipping address and branch selection changes
-  useEffect(() => {
-    const cleanAddress = shippingInfo.address.trim();
-    if (cleanAddress.length < 5) {
-      setEstimation(null);
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      calculateWeatherAndEta(cleanAddress, shippingInfo.branch);
-    }, 1200);
-
-    return () => clearTimeout(timer);
-  }, [shippingInfo.address, shippingInfo.branch]);
+    useEffect(() => {
+      const cleanAddress = shippingInfo.address.trim();
+      if (cleanAddress.length < 5) {
+        setEstimation(null);
+        return;
+      }
+  
+      const timer = setTimeout(() => {
+        calculateWeatherAndEta(cleanAddress, shippingInfo.branch);
+      }, 1200);
+  
+      return () => clearTimeout(timer);
+    }, [shippingInfo.address, shippingInfo.branch]);
 
   const calculateWeatherAndEta = async (address: string, branch: string) => {
     setEstLoading(true);
     try {
-      const queryAddress = `${address}, ${branch}`.trim();
-      let lat = 21.036; // Default to Cau Giay, Hanoi
-      let lng = 105.782;
-      let cityName = 'Hà Nội';
+      const branchCoords = (branch && branchCoordinates[branch]) || { lat: 10.776, lng: 106.700, cityName: 'TP. Hồ Chí Minh' };
+      let lat = branchCoords.lat;
+      let lng = branchCoords.lng;
+      let cityName = branchCoords.cityName;
 
-      // Call Nominatim Geocoding API to resolve coordinates
-      try {
-        const geoRes = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(queryAddress)}&format=json&limit=1`,
-          { headers: { 'User-Agent': 'FresoWeatherEstimation/1.0' } }
-        );
-        if (geoRes.ok) {
-          const geoData = await geoRes.json();
-          if (geoData && geoData.length > 0) {
-            lat = parseFloat(geoData[0].lat);
-            lng = parseFloat(geoData[0].lon);
-            cityName = geoData[0].display_name.split(',')[0] || 'Vị trí nhận hàng';
-          } else {
-            // Fallback: search for just the branch/region name
-            const fallbackRes = await fetch(
-              `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(branch)}&format=json&limit=1`,
-              { headers: { 'User-Agent': 'FresoWeatherEstimation/1.0' } }
-            );
-            if (fallbackRes.ok) {
-              const fallbackData = await fallbackRes.json();
-              if (fallbackData && fallbackData.length > 0) {
-                lat = parseFloat(fallbackData[0].lat);
-                lng = parseFloat(fallbackData[0].lon);
-                cityName = branch;
-              }
+      if (isMapActionRef.current && coordinates) {
+        lat = coordinates.lat;
+        lng = coordinates.lng;
+        cityName = coordinates.cityName || address.split(',')[0] || branchCoords.cityName;
+        isMapActionRef.current = false; // Reset map action flag
+      } else {
+        // Step 1: Try to geocode the raw typed address as-is (e.g. if the user typed an out-of-city Hanoi address)
+        let resolved = false;
+        try {
+          const geoRes = await fetch(
+            `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`,
+            { headers: { 'User-Agent': 'FresoWeatherEstimation/1.0' } }
+          );
+          if (geoRes.ok) {
+            const geoData = await geoRes.json();
+            if (geoData && geoData.length > 0) {
+              lat = parseFloat(geoData[0].lat);
+              lng = parseFloat(geoData[0].lon);
+              cityName = geoData[0].display_name.split(',')[0] || 'Vị trí nhận hàng';
+              resolved = true;
+              setCoordinates({ lat, lng, cityName });
             }
           }
+        } catch (geoErr) {
+          console.warn('Geocoding raw address failed', geoErr);
         }
-      } catch (geoErr) {
-        console.warn('Geocoding failed, using fallbacks', geoErr);
+
+        // Step 2: Fallback to branch-scoped search in HCMC if raw geocoding yielded no results
+        if (!resolved) {
+          try {
+            const cleanBranch = branch.replace(/^Chi nhánh\s+/i, '');
+            const queryAddress = `${address}, ${cleanBranch}, Hồ Chí Minh, Việt Nam`.trim();
+            const geoRes = await fetch(
+              `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(queryAddress)}&format=json&limit=1`,
+              { headers: { 'User-Agent': 'FresoWeatherEstimation/1.0' } }
+            );
+            if (geoRes.ok) {
+              const geoData = await geoRes.json();
+              if (geoData && geoData.length > 0) {
+                lat = parseFloat(geoData[0].lat);
+                lng = parseFloat(geoData[0].lon);
+                cityName = geoData[0].display_name.split(',')[0] || 'Vị trí nhận hàng';
+                setCoordinates({ lat, lng, cityName });
+              }
+            }
+          } catch (fallbackErr) {
+            console.warn('Geocoding with fallback scope failed', fallbackErr);
+          }
+        }
       }
 
       // Determine the nearest warehouse dynamically by comparing distances to all options
@@ -656,7 +730,8 @@ export function CheckoutPage() {
 
       // Fetch Weather Data from Open-Meteo
       const weatherRes = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m`
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,rain,precipitation&t=${Date.now()}`,
+        { cache: 'no-store' }
       );
       if (!weatherRes.ok) {
         throw new Error('Không thể tải dữ liệu thời tiết.');
@@ -664,8 +739,21 @@ export function CheckoutPage() {
       const weatherData = await weatherRes.json();
       const temperature = Math.round(weatherData.current.temperature_2m);
       const humidity = Math.round(weatherData.current.relative_humidity_2m);
-      const weatherCode = weatherData.current.weather_code;
+      let weatherCode = weatherData.current.weather_code;
       const windSpeed = Math.round(weatherData.current.wind_speed_10m);
+      const rain = weatherData.current.rain || 0;
+      const precipitation = weatherData.current.precipitation || 0;
+
+      // Correct false-positive rain/thunderstorm predictions
+      if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99].includes(weatherCode)) {
+        if (precipitation === 0 && rain === 0) {
+          if (temperature >= 33) {
+            weatherCode = 1; // Mainly clear
+          } else {
+            weatherCode = 3; // Overcast
+          }
+        }
+      }
 
       // Map WMO Code and wind speed to factor and labels
       const weatherDetails = mapWmoToCondition(weatherCode, windSpeed);
@@ -816,6 +904,8 @@ export function CheckoutPage() {
           if (data.display_name) {
             const parts = data.display_name.split(',');
             const cleanAddr = parts.slice(0, 4).map((p: string) => p.trim()).join(', ');
+            isMapActionRef.current = true;
+            setCoordinates({ lat, lng, cityName: parts[0]?.trim() || 'Vị trí nhận hàng' });
             setShippingInfo((prev) => ({ ...prev, address: cleanAddr }));
             setMapSearchQuery(cleanAddr);
           }
@@ -830,6 +920,8 @@ export function CheckoutPage() {
       marker.setLatLng([lat, lng]);
       circle.setLatLng([lat, lng]);
       map.panTo([lat, lng]);
+      isMapActionRef.current = true;
+      setCoordinates({ lat, lng });
       handleLocationSelect(lat, lng);
     });
 
@@ -841,6 +933,8 @@ export function CheckoutPage() {
     marker.on('dragend', () => {
       const { lat, lng } = marker.getLatLng();
       map.panTo([lat, lng]);
+      isMapActionRef.current = true;
+      setCoordinates({ lat, lng });
       handleLocationSelect(lat, lng);
     });
 
@@ -898,6 +992,8 @@ export function CheckoutPage() {
           }
 
           const cleanAddr = data[0].display_name.split(',').slice(0, 4).map((p: string) => p.trim()).join(', ');
+          isMapActionRef.current = true;
+          setCoordinates({ lat, lng, cityName: cleanAddr.split(',')[0] });
           setShippingInfo((prev) => ({ ...prev, address: cleanAddr }));
           setMapSearchQuery(cleanAddr);
         } else {
@@ -939,6 +1035,8 @@ export function CheckoutPage() {
             if (data.display_name) {
               const parts = data.display_name.split(',');
               const cleanAddr = parts.slice(0, 4).map((p: string) => p.trim()).join(', ');
+              isMapActionRef.current = true;
+              setCoordinates({ lat, lng, cityName: parts[0]?.trim() || 'Vị trí hiện tại' });
               setShippingInfo((prev) => ({ ...prev, address: cleanAddr }));
               setMapSearchQuery(cleanAddr);
             }
@@ -1048,7 +1146,7 @@ export function CheckoutPage() {
       supplier,
       deliveryDate,
       deliveryTime,
-      shippingAddress: `${shippingInfo.branch} - ${shippingInfo.address}`,
+      shippingAddress: shippingInfo.branch ? `${shippingInfo.branch} - ${shippingInfo.address}` : shippingInfo.address,
       note: shippingInfo.note,
       invoiceInfo
     };
@@ -1070,7 +1168,7 @@ export function CheckoutPage() {
       totalAmount,
       deliveryDate,
       deliveryTime,
-      shippingAddress: `${shippingInfo.branch} - ${shippingInfo.address}`,
+      shippingAddress: shippingInfo.branch ? `${shippingInfo.branch} - ${shippingInfo.address}` : shippingInfo.address,
       note: shippingInfo.note,
       invoiceInfo
     };
@@ -1137,10 +1235,10 @@ export function CheckoutPage() {
               quantity: item.quantity, unitPrice: item.unitPrice, unit: item.unit, image: item.image
             })),
             supplier, subtotal, totalAmount, deliveryDate, deliveryTime,
-            shippingAddress: `${shippingInfo.branch} - ${shippingInfo.address}`,
+            shippingAddress: shippingInfo.branch ? `${shippingInfo.branch} - ${shippingInfo.address}` : shippingInfo.address,
             note: shippingInfo.note, invoiceInfo
           })
-        }).catch(() => {/* ignore */});
+        }).catch(() => {/* ignore */ });
       }
 
       const preferredRegion = getRegionFromBranch(shippingInfo.branch);
@@ -1310,27 +1408,13 @@ export function CheckoutPage() {
                 Thông tin nhận hàng
               </div>
               <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Chi nhánh</label>
-                  <select
-                    value={shippingInfo.branch}
-                    onChange={(event) => updateShippingField('branch', event.target.value)}
-                    className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-green-500"
-                  >
-                    {branches.map((branch) => (
-                      <option key={branch} value={branch}>
-                        {branch}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
+                <div className="md:col-span-2">
                   <label className="text-sm font-medium text-gray-700">Địa chỉ giao hàng</label>
                   <input
                     value={shippingInfo.address}
                     onChange={(event) => updateShippingField('address', event.target.value)}
                     placeholder="Số nhà, đường, phường/xã"
-                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${errors.address ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
+                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${errors.shipping_address ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
                       }`}
                   />
                   {errors.shipping_address && <p className="mt-1 text-xs text-red-500">{errors.shipping_address}</p>}
@@ -1480,7 +1564,7 @@ export function CheckoutPage() {
                     <input
                       value={shippingInfo.receiver}
                       onChange={(event) => updateShippingField('receiver', event.target.value)}
-                      className={`w-full rounded-xl border py-2 pl-9 pr-3 text-sm outline-none transition-colors ${errors.receiver ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
+                      className={`w-full rounded-xl border py-2 pl-9 pr-3 text-sm outline-none transition-colors ${errors.shipping_receiver ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
                         }`}
                     />
                   </div>
@@ -1494,7 +1578,7 @@ export function CheckoutPage() {
                       value={shippingInfo.phone}
                       onChange={(event) => updateShippingField('phone', event.target.value)}
                       placeholder="VD: 090x xxx xxx"
-                      className={`w-full rounded-xl border py-2 pl-9 pr-3 text-sm outline-none transition-colors ${errors.phone ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
+                      className={`w-full rounded-xl border py-2 pl-9 pr-3 text-sm outline-none transition-colors ${errors.shipping_phone ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
                         }`}
                     />
                   </div>
@@ -1674,9 +1758,8 @@ export function CheckoutPage() {
                   {/* Countdown */}
                   <div className="mb-4 flex items-center justify-between rounded-xl bg-amber-50 border border-amber-200 px-4 py-2">
                     <span className="text-sm text-amber-700 font-medium">⏱ Giữ hàng còn lại</span>
-                    <span className={`text-lg font-bold tabular-nums ${
-                      countdown < 60 ? 'text-red-600' : 'text-amber-700'
-                    }`}>
+                    <span className={`text-lg font-bold tabular-nums ${countdown < 60 ? 'text-red-600' : 'text-amber-700'
+                      }`}>
                       {String(Math.floor(countdown / 60)).padStart(2, '0')}:{String(countdown % 60).padStart(2, '0')}
                     </span>
                   </div>

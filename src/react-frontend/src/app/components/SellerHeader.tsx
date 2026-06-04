@@ -123,26 +123,6 @@ export function SellerHeader() {
     return true;
   });
 
-  const canManageBranches = useMemo(() => {
-    const isOwner = window.localStorage.getItem('freso_is_owner') || window.sessionStorage.getItem('freso_is_owner') || '';
-    const isSuperAdmin = window.localStorage.getItem('freso_is_super_admin') || window.sessionStorage.getItem('freso_is_super_admin') || '';
-    const role = (window.localStorage.getItem('freso_role') || window.sessionStorage.getItem('freso_role') || '').trim().toLowerCase();
-    const parseBool = (val: string) => {
-      const n = val.trim().toLowerCase();
-      return n === '1' || n === 'true' || n === 'yes';
-    };
-    return role !== 'branch' && (parseBool(isOwner) || parseBool(isSuperAdmin) || role === '' || role === 'manager' || role === 'seller');
-  }, [userRole, customerName]);
-
-  const visibleMenuItems = useMemo(() => {
-    return adminMenuItems.filter((item) => {
-      if (item.id === 'quan-ly-gio-hang' || item.id === 'lich-su-mua-hang') {
-        return false;
-      }
-      return canManageBranches || item.id !== 'nhan-vien';
-    });
-  }, [canManageBranches]);
-
   const logoutAndBackHome = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     await handleLogout();

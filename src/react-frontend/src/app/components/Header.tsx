@@ -17,6 +17,7 @@ export function Header() {
   const [branchName, setBranchName] = useState('Chi nhanh 1');
   const [searchTerm, setSearchTerm] = useState('');
   const [userRole, setUserRole] = useState('');
+  const [canManageBranches, setCanManageBranches] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
   const reactHomePath = '/react/index.html';
   const [wishlistDetailHref, setWishlistDetailHref] = useState(`${reactHomePath}?view=wishlist`);
@@ -36,7 +37,10 @@ export function Header() {
   const currentCategory = categoryMenu.find((category) => category.name === activeCategory) ?? categoryMenu[0];
   const isLoggedIn = useMemo(() => Boolean(customerToken), [customerToken]);
   const isEmbeddedInIframe = window.self !== window.top;
-  const currentView = registerParams.get('view');
+  const parseStoredBoolFlag = (value: string) => {
+    const normalized = value.trim().toLowerCase();
+    return normalized === '1' || normalized === 'true' || normalized === 'yes';
+  };
 
   const handleTopLevelNavigation = (event: React.MouseEvent<HTMLElement>) => {
     if (!isEmbeddedInIframe) {
@@ -147,8 +151,14 @@ export function Header() {
           window.sessionStorage.setItem('freso_is_super_admin', hasPrivilege ? '1' : '0');
         }
 
+        const nextRole = roleAttr ? String(roleAttr.value ?? '').trim().toLowerCase() : userRole;
+        const hasBranchManagementPrivilege =
+          nextRole !== 'branch' &&
+          nextRole !== 'customer' &&
+          (parseBoolFlag(String(ownerAttr?.value ?? '')) || parseBoolFlag(String(superAdminAttr?.value ?? '')));
+        setCanManageBranches(hasBranchManagementPrivilege);
+
         if (roleAttr) {
-          const nextRole = String(roleAttr.value ?? '').trim().toLowerCase();
           const currentRole = window.localStorage.getItem('freso_role') || window.sessionStorage.getItem('freso_role') || '';
           
           if (nextRole !== currentRole) {
@@ -242,27 +252,28 @@ export function Header() {
 
   const displayedUserName = customerName || customerEmail || 'Tài khoản';
   const currentView = new URLSearchParams(window.location.search).get('view');
-  const dashboardBase = `${reactHomePath}?view=dashboard`;
+  const dashboardBase = currentView === 'seller-dashboard'
+    ? `${reactHomePath}?view=seller-dashboard`
+    : `${reactHomePath}?view=dashboard`;
   const getDashboardHref = (tabLabel: string) => `${dashboardBase}&tab=${encodeURIComponent(tabLabel)}`;
   const activeDashboardTab = new URLSearchParams(window.location.search).get('tab');
-  
-  const canManageBranches = useMemo(() => {
-    const isOwner = window.localStorage.getItem('freso_is_owner') || window.sessionStorage.getItem('freso_is_owner') || '';
-    const isSuperAdmin = window.localStorage.getItem('freso_is_super_admin') || window.sessionStorage.getItem('freso_is_super_admin') || '';
-    const role = (window.localStorage.getItem('freso_role') || window.sessionStorage.getItem('freso_role') || '').trim().toLowerCase();
-    const parseBool = (val: string) => {
-      const n = val.trim().toLowerCase();
-      return n === '1' || n === 'true' || n === 'yes';
-    };
-    return role !== 'branch' && (parseBool(isOwner) || parseBool(isSuperAdmin) || role === '' || role === 'manager' || role === 'seller');
-  }, [userRole, customerName]);
-
+  const normalizedUserRole = userRole.trim().toLowerCase();
+  const isSellerAccount = normalizedUserRole === 'seller' || normalizedUserRole === 'manager' || normalizedUserRole === 'branch';
   const visibleMenuItems = useMemo(() => {
-    const visibleIds = new Set(['profile-seller', 'nhan-vien', 'lich-su-mua-hang', 'bao-gia']);
+    const customerMenuItemIds = new Set(['profile-seller', 'lich-su-mua-hang', 'don-hang', 'bao-gia']);
+
     return adminMenuItems.filter((item) => {
-      return visibleIds.has(item.id) && (canManageBranches || item.id !== 'nhan-vien');
+      if (item.id === 'dashboard') {
+        return false;
+      }
+
+      if (item.id === 'nhan-vien') {
+        return canManageBranches;
+      }
+
+      return isSellerAccount || customerMenuItemIds.has(item.id);
     });
-  }, [canManageBranches]);
+  }, [canManageBranches, isSellerAccount]);
 
   const logoutAndBackHome = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -278,6 +289,7 @@ export function Header() {
         setCustomerName('');
         setBranchName('Chi nhanh 1');
         setUserRole('');
+        setCanManageBranches(false);
         setIsUserMenuOpen(false);
         return;
       }
@@ -291,11 +303,19 @@ export function Header() {
       const name = window.localStorage.getItem('freso_customer_name') || window.sessionStorage.getItem('freso_customer_name') || '';
       const branch = window.localStorage.getItem('freso_branch_name') || window.sessionStorage.getItem('freso_branch_name') || '';
       const role = window.localStorage.getItem('freso_role') || window.sessionStorage.getItem('freso_role') || '';
+      const isOwner = window.localStorage.getItem('freso_is_owner') || window.sessionStorage.getItem('freso_is_owner') || '';
+      const isSuperAdmin = window.localStorage.getItem('freso_is_super_admin') || window.sessionStorage.getItem('freso_is_super_admin') || '';
+      const normalizedRole = role.trim().toLowerCase();
 
       setCustomerToken(token);
       setCustomerEmail(email);
       setCustomerName(name);
       setUserRole(role);
+      setCanManageBranches(
+        normalizedRole !== 'branch' &&
+          normalizedRole !== 'customer' &&
+          (parseStoredBoolFlag(isOwner) || parseStoredBoolFlag(isSuperAdmin))
+      );
       if (branch.trim()) {
         setBranchName(branch.trim());
       }

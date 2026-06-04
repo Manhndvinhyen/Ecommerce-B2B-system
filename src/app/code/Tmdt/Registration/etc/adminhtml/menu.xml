@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Backend:etc/menu.xsd">
     <menu>
-        <add id="Tmdt_Registration::registration" title="Dang ky doanh nghiep" module="Tmdt_Registration" sortOrder="110" parent="Magento_Backend::content" action="tmdt_registration/registration/index" resource="Tmdt_Registration::registration" />
+        <add id="Tmdt_Registration::registration" title="Duyet ho so kinh doanh" module="Tmdt_Registration" sortOrder="20" parent="Magento_Customer::customer" action="tmdt_registration/registration/index" resource="Tmdt_Registration::registration" />
     </menu>
 </config>

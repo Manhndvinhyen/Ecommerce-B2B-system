@@ -118,7 +118,7 @@ class RegisterManagement implements RegisterInterface
                 'agree_to_terms' => (int) $agreeToTerms,
                 'files_json' => $this->serializer->serialize($storedFiles),
                 'sanitized_payload_json' => $this->buildSanitizedPayloadJson($payload),
-                'status' => $isSeller ? 'approved' : 'pending',
+                'status' => 'pending',
                 'role' => $role,
                 'notes' => null,
             ]);
@@ -131,15 +131,19 @@ class RegisterManagement implements RegisterInterface
         }
 
         $token = '';
-        try {
-            $token = $this->customerTokenService->createCustomerAccessToken($email, $password);
-        } catch (\Throwable $e) {
-            // Keep token empty but succeed registration
+        if (!$isSeller) {
+            try {
+                $token = $this->customerTokenService->createCustomerAccessToken($email, $password);
+            } catch (\Throwable $e) {
+                // Keep token empty but succeed registration
+            }
         }
 
         return [
             'success' => true,
-            'message' => (string) __('Đăng ký đã được lưu vào Magento.'),
+            'message' => (string) ($isSeller
+                ? __('Đăng ký kinh doanh đã được gửi. Vui lòng chờ admin duyệt giấy phép.')
+                : __('Đăng ký đã được lưu vào Magento.')),
             'customer_id' => (int) $createdCustomer->getId(),
             'token' => $token,
             'email' => $email,

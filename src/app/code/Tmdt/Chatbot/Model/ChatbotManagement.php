@@ -9,6 +9,8 @@ use Magento\Catalog\Model\Product\Visibility;
 use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory as ProductCollectionFactory;
 use Magento\Framework\App\CacheInterface;
 use Magento\Framework\App\DeploymentConfig;
+use Magento\Framework\App\Config\ScopeConfigInterface;
+use Magento\Framework\Encryption\EncryptorInterface;
 use Magento\Framework\UrlInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use Tmdt\Chatbot\Api\ChatbotInterface;
@@ -27,6 +29,8 @@ class ChatbotManagement implements ChatbotInterface
     public function __construct(
         private readonly ProductCollectionFactory $productCollectionFactory,
         private readonly DeploymentConfig $deploymentConfig,
+        private readonly ScopeConfigInterface $scopeConfig,
+        private readonly EncryptorInterface $encryptor,
         private readonly StoreManagerInterface $storeManager,
         private readonly CacheInterface $cache,
         private readonly SearchDictionary $searchDictionary
@@ -239,7 +243,7 @@ class ChatbotManagement implements ChatbotInterface
 
     private function callDeepSeek(string $prompt, int $maxTokens = 512, float $temperature = 0.7): ?string
     {
-        $apiKey = (string) $this->deploymentConfig->get('tmdt_chatbot/deepseek/api_key');
+        $apiKey = $this->getDeepSeekApiKey();
         if ($apiKey === '') {
             return null;
         }
@@ -299,5 +303,26 @@ class ChatbotManagement implements ChatbotInterface
         }
 
         return (string) $response;
+    }
+
+    private function getDeepSeekApiKey(): string
+    {
+        $apiKey = trim((string) $this->deploymentConfig->get('tmdt_chatbot/deepseek/api_key'));
+        if ($apiKey === '') {
+            $apiKey = trim((string) $this->scopeConfig->getValue('tmdt_chatbot/deepseek/api_key'));
+        }
+
+        if ($apiKey !== '' && !str_starts_with($apiKey, 'sk-')) {
+            try {
+                $decrypted = trim((string) $this->encryptor->decrypt($apiKey));
+                if ($decrypted !== '') {
+                    $apiKey = $decrypted;
+                }
+            } catch (\Throwable) {
+                // Keep the configured value as-is when it was stored unencrypted.
+            }
+        }
+
+        return $apiKey;
     }
 }

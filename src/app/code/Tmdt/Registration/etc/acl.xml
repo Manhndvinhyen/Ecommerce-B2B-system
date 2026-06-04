@@ -3,8 +3,8 @@
     <acl>
         <resources>
             <resource id="Magento_Backend::admin">
-                <resource id="Magento_Backend::content">
-                    <resource id="Tmdt_Registration::registration" title="Dang ky doanh nghiep" sortOrder="110" />
+                <resource id="Magento_Customer::customer">
+                    <resource id="Tmdt_Registration::registration" title="Duyet ho so kinh doanh" sortOrder="110" />
                 </resource>
             </resource>
         </resources>

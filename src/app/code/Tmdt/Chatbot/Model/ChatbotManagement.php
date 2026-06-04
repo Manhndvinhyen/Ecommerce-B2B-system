@@ -1,306 +1,274 @@
 <?php
+
+declare(strict_types=1);
+
 namespace Tmdt\Chatbot\Model;
 
-use Tmdt\Chatbot\Api\ChatbotInterface;
-use Magento\Catalog\Api\ProductRepositoryInterface;
-use Magento\Framework\Api\SearchCriteriaBuilder;
-use Magento\Framework\App\DeploymentConfig;
-use Magento\Store\Model\StoreManagerInterface;
-use Magento\Framework\UrlInterface;
+use Magento\Catalog\Model\Product\Attribute\Source\Status;
+use Magento\Catalog\Model\Product\Visibility;
+use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory as ProductCollectionFactory;
 use Magento\Framework\App\CacheInterface;
+use Magento\Framework\App\DeploymentConfig;
+use Magento\Framework\UrlInterface;
+use Magento\Store\Model\StoreManagerInterface;
+use Tmdt\Chatbot\Api\ChatbotInterface;
+use Tmdt\Search\Model\SearchDictionary;
 
 class ChatbotManagement implements ChatbotInterface
 {
-    protected $productRepository;
-    protected $searchCriteriaBuilder;
-    protected $deploymentConfig;
-    protected $storeManager;
-    protected $cache;
+    private const CACHE_TAG = 'tmdt_chatbot';
+    private const REPLY_CACHE_TTL = 300;
+    private const PRODUCT_LIMIT = 3;
+    private const KEYWORD_LIMIT = 12;
+    private const SEARCH_ATTRIBUTE = 'tmdt_search_keywords';
 
-    // Cache TTL: 10 phút cho intent, 5 phút cho reply
-    private const INTENT_CACHE_TTL = 600;
-    private const REPLY_CACHE_TTL  = 300;
-    private const CACHE_TAG        = 'tmdt_chatbot';
-
-    // Danh sách model theo thứ tự ưu tiên (fallback nếu model chính quá tải)
-    // Lưu ý: gemini-2.0-flash không còn available với tài khoản mới (404)
-    private $geminiModels = [
-        'gemini-2.5-flash',        // Model chính — mạnh nhất
-        'gemini-2.5-flash-lite',   // Backup nhẹ hơn
-        'gemini-2.0-flash-lite',   // Fallback cuối
-    ];
+    private string $deepSeekModel = 'deepseek-chat';
 
     public function __construct(
-        ProductRepositoryInterface $productRepository,
-        SearchCriteriaBuilder $searchCriteriaBuilder,
-        DeploymentConfig $deploymentConfig,
-        StoreManagerInterface $storeManager,
-        CacheInterface $cache
+        private readonly ProductCollectionFactory $productCollectionFactory,
+        private readonly DeploymentConfig $deploymentConfig,
+        private readonly StoreManagerInterface $storeManager,
+        private readonly CacheInterface $cache,
+        private readonly SearchDictionary $searchDictionary
     ) {
-        $this->productRepository     = $productRepository;
-        $this->searchCriteriaBuilder = $searchCriteriaBuilder;
-        $this->deploymentConfig      = $deploymentConfig;
-        $this->storeManager          = $storeManager;
-        $this->cache                 = $cache;
     }
 
     /**
      * @inheritdoc
      */
-    public function ask($message)
+    public function ask($message): string
     {
-        // ==========================================
-        // BƯỚC 1: Gemini sinh danh sách TÊN SẢN PHẨM CỤ THỂ
-        //
-        // Cốt lõi của "semantic search không cần vector DB":
-        // Thay vì AI sinh khái niệm trừu tượng ("nguyên liệu nấu canh"),
-        // prompt yêu cầu sinh ra tên sản phẩm cụ thể có thể tồn tại trong DB
-        // ("súp lơ", "bắp cải", "cà chua") → LIKE search sẽ khớp được.
-        //
-        // Cache key dựa trên message đã chuẩn hóa (lowercase, trim whitespace)
-        // để cùng câu hỏi không gọi Gemini 2 lần.
-        // ==========================================
-        $normalizedMsg  = mb_strtolower(preg_replace('/\s+/', ' ', trim($message)));
-        $intentCacheKey = 'chatbot_intent_' . md5($normalizedMsg);
-
-        $intentResponse = null;
-
-        // Đọc từ cache trước
-        $cached = $this->cache->load($intentCacheKey);
-        if ($cached !== false) {
-            $intentResponse = $cached;
-        } else {
-            $intentPrompt = "Cửa hàng thực phẩm/tạp hóa VN. Khách: \"$message\"."
-                . " Sinh TÊN SẢN PHẨM CỤ THỂ (1-3 từ) cửa hàng có thể bán đáp ứng nhu cầu."
-                . " Gồm tên chính xác, đồng nghĩa, liên quan."
-                . " VD 'nấu canh'→[\"bắp cải\",\"cà chua\",\"cà rốt\",\"thịt heo\"]"
-                . " VD 'đồ ăn sáng'→[\"trứng\",\"bánh mì\",\"sữa\",\"xúc xích\"]"
-                . " Tối đa 5 từ khóa. Trích max_price VNĐ nếu có, else 0."
-                . " Chỉ JSON: {\"keywords\":[\"...\"],\"max_price\":0}. Không markdown.";
-
-            $intentResponse = $this->callGemini($intentPrompt, 256, 0.1);
-
-            // Lưu vào cache nếu hợp lệ
-            if ($intentResponse && !str_starts_with($intentResponse, 'Lỗi')) {
-                $this->cache->save($intentResponse, $intentCacheKey, [self::CACHE_TAG], self::INTENT_CACHE_TTL);
-            }
+        $message = trim((string) $message);
+        if ($message === '') {
+            return json_encode([
+                'message' => 'Ban hay nhap nhu cau mua hang de minh goi y san pham phu hop nhe.',
+                'products' => [],
+            ], JSON_UNESCAPED_UNICODE);
         }
 
-        // Fallback: tách từng từ trong câu để dùng làm keyword tìm kiếm
-        $fallbackKeywords = array_values(array_filter(
-            array_unique(explode(' ', preg_replace('/\s+/', ' ', trim($message))))
-        ));
+        $keywords = $this->buildSearchKeywords($message);
+        $products = $this->findTopProducts($keywords, self::PRODUCT_LIMIT);
+        $productInfo = $this->buildProductInfo($products);
 
-        $keywords = $fallbackKeywords ?: [$message];
-        $maxPrice = 0;
-
-        if ($intentResponse && !str_starts_with($intentResponse, 'Lỗi')) {
-            $cleanJson  = preg_replace('/```json|```|\n/', '', $intentResponse);
-            $intentData = json_decode(trim($cleanJson), true);
-
-            if (isset($intentData['keywords']) && is_array($intentData['keywords'])) {
-                $expanded = array_values(array_filter(
-                    array_map('trim', $intentData['keywords'])
-                ));
-                if (!empty($expanded)) {
-                    $keywords = $expanded;
-                }
-            }
-            if (isset($intentData['max_price'])) {
-                $maxPrice = (float)$intentData['max_price'];
-            }
-        }
-
-        // ==========================================
-        // BƯỚC 2: Multi-keyword search
-        // Lần lượt tìm theo từng keyword, merge & deduplicate theo SKU.
-        // Không filter status để tránh SQL error trên một số cấu hình Magento;
-        // sản phẩm disabled thường bị filter ở collection layer tự động.
-        // ==========================================
-        $baseUrl      = $this->storeManager->getStore()->getBaseUrl(UrlInterface::URL_TYPE_WEB);
-        $mediaBaseUrl = $this->storeManager->getStore()->getBaseUrl(UrlInterface::URL_TYPE_MEDIA);
-
-        $seenSkus     = [];
-        $productsData = [];
-        $productInfo  = '';
-
-        foreach (array_slice($keywords, 0, 5) as $kw) {
-            $kw = trim($kw);
-            if ($kw === '') {
-                continue;
-            }
-
-            // Xây dựng search criteria cho từng keyword độc lập.
-            // create() tự reset builder state sau khi trả về SearchCriteria.
-            $this->searchCriteriaBuilder->addFilter('name', '%' . $kw . '%', 'like');
-            if ($maxPrice > 0) {
-                $this->searchCriteriaBuilder->addFilter('price', $maxPrice, 'lteq');
-            }
-
-            try {
-                $criteria = $this->searchCriteriaBuilder->setPageSize(3)->create();
-                $items    = $this->productRepository->getList($criteria)->getItems();
-            } catch (\Exception $e) {
-                // Nếu keyword này gây lỗi, bỏ qua và thử keyword tiếp theo
-                continue;
-            }
-
-            foreach ($items as $product) {
-                $sku = $product->getSku();
-                if (isset($seenSkus[$sku])) {
-                    continue;
-                }
-                if (count($productsData) >= 5) {
-                    break 2;
-                }
-
-                $seenSkus[$sku] = true;
-
-                $price  = number_format((float)$product->getPrice(), 0, ',', '.');
-                $urlKey = $product->getUrlKey();
-                $url    = rtrim($baseUrl, '/') . '/' . $urlKey . '.html';
-
-                // Ảnh thumbnail
-                $thumbAttr = $product->getCustomAttribute('thumbnail');
-                $thumbPath = $thumbAttr ? (string)$thumbAttr->getValue() : '';
-                $imageUrl  = ($thumbPath && $thumbPath !== 'no_selection')
-                    ? rtrim($mediaBaseUrl, '/') . '/catalog/product' . $thumbPath
-                    : '';
-
-                // Short description cho ngữ cảnh RAG
-                $descAttr  = $product->getCustomAttribute('short_description');
-                $shortDesc = $descAttr
-                    ? mb_substr(strip_tags((string)$descAttr->getValue()), 0, 120)
-                    : '';
-
-                $productsData[] = [
-                    'name'  => $product->getName(),
-                    'price' => $price . ' VNĐ',
-                    'url'   => $url,
-                    'image' => $imageUrl,
-                ];
-
-                $productInfo .= '- ' . $product->getName()
-                    . ' | Giá: ' . $price . ' VNĐ'
-                    . ($shortDesc ? ' | Mô tả: ' . $shortDesc : '')
-                    . "\n";
-            }
-        }
-
-        // ==========================================
-        // BƯỚC 3: Gemini tư vấn dựa trên kết quả RAG
-        // ==========================================
-        if ($productInfo !== '') {
-            $replyPrompt = "Bạn là nhân viên tư vấn bán hàng nhiệt tình và chuyên nghiệp."
-                . " Khách hỏi: \"$message\"."
-                . " Hệ thống đã tìm thấy các sản phẩm phù hợp:\n$productInfo\n"
-                . "Hãy viết câu trả lời ngắn gọn (2-4 câu), thân thiện,"
-                . " giải thích tại sao những sản phẩm này phù hợp với nhu cầu của khách."
-                . " Danh sách thẻ sản phẩm kèm ảnh, giá, đường dẫn sẽ được hiển thị riêng bên dưới,"
-                . " nên bạn KHÔNG cần liệt kê link hay giá cụ thể."
-                . " Luôn trả lời bằng tiếng Việt.";
-        } else {
-            $replyPrompt = "Bạn là nhân viên tư vấn bán hàng."
-                . " Khách hỏi: \"$message\"."
-                . " Hệ thống đã tìm với các từ khóa: " . implode(', ', array_slice($keywords, 0, 5)) . "."
-                . " Kết quả: KHÔNG có sản phẩm phù hợp trong kho."
-                . " Hãy xin lỗi thân thiện, đề xuất khách thử từ khóa khác hoặc liên hệ nhân viên."
-                . " Luôn trả lời bằng tiếng Việt.";
-        }
-
-        // Cache reply theo (message + danh sách sản phẩm tìm được)
-        $replyCacheKey = 'chatbot_reply_' . md5($normalizedMsg . $productInfo);
-        $finalAnswer   = false;
-
+        $replyCacheKey = 'chatbot_reply_' . md5($this->searchDictionary->normalize($message) . $productInfo);
         $cachedReply = $this->cache->load($replyCacheKey);
         if ($cachedReply !== false) {
-            $finalAnswer = $cachedReply;
+            $reply = $cachedReply;
         } else {
-            $finalAnswer = $this->callGemini($replyPrompt, 512, 0.7);
-            if ($finalAnswer && !str_starts_with($finalAnswer, 'Lỗi')) {
-                $this->cache->save($finalAnswer, $replyCacheKey, [self::CACHE_TAG], self::REPLY_CACHE_TTL);
+            $reply = $this->buildReply($message, $keywords, $productInfo);
+            $this->cache->save($reply, $replyCacheKey, [self::CACHE_TAG], self::REPLY_CACHE_TTL);
+        }
+
+        return json_encode([
+            'message' => $reply,
+            'products' => $products,
+        ], JSON_UNESCAPED_UNICODE);
+    }
+
+    private function buildSearchKeywords(string $message): array
+    {
+        $normalized = $this->searchDictionary->normalize($message);
+        $terms = [$message, $normalized];
+
+        foreach (preg_split('/\s+/', $normalized) ?: [] as $part) {
+            $part = trim((string) $part);
+            if (mb_strlen($part) >= 2) {
+                $terms[] = $part;
             }
         }
 
-        $result = [
-            'message'  => $finalAnswer
-                ?: 'Dạ em đang gặp chút sự cố kết nối, anh/chị vui lòng hỏi lại sau giây lát nhé!',
-            'products' => $productsData,
-        ];
+        preg_match_all('/[\p{L}\p{N}\s_-]{2,}/u', $message, $matches);
+        foreach ($matches[0] ?? [] as $phrase) {
+            $phrase = trim((string) $phrase);
+            if ($phrase !== '') {
+                $terms[] = $phrase;
+            }
+        }
 
-        return json_encode($result, JSON_UNESCAPED_UNICODE);
+        return array_slice($this->searchDictionary->expand($terms), 0, self::KEYWORD_LIMIT);
     }
 
-    /**
-     * Gọi Gemini API sử dụng native PHP curl với fallback model.
-     * Thử lần lượt gemini-2.5-flash → gemini-2.5-flash-lite → gemini-2.0-flash-lite
-     *
-     * @param string $prompt
-     * @param int    $maxTokens  Giới hạn output tokens (256 cho intent JSON, 512 cho reply)
-     * @param float  $temperature 0.1 cho structured output, 0.7 cho creative reply
-     * @return string|null
-     */
-    private function callGemini(string $prompt, int $maxTokens = 512, float $temperature = 0.7): ?string
+    private function findTopProducts(array $keywords, int $limit): array
     {
-        $apiKey = $this->deploymentConfig->get('tmdt_chatbot/gemini/api_key');
+        $filters = [];
+        foreach ($keywords as $keyword) {
+            $keyword = trim((string) $keyword);
+            if ($keyword === '') {
+                continue;
+            }
+            $filters[] = ['attribute' => 'name', 'like' => '%' . $keyword . '%'];
+            $filters[] = ['attribute' => 'sku', 'like' => '%' . $keyword . '%'];
+            $filters[] = ['attribute' => self::SEARCH_ATTRIBUTE, 'like' => '%' . $keyword . '%'];
+        }
 
-        if (empty($apiKey)) {
-            return 'Lỗi: Chưa cấu hình Gemini API Key trong file app/etc/env.php';
+        if (empty($filters)) {
+            return [];
+        }
+
+        $collection = $this->productCollectionFactory->create();
+        $collection->addAttributeToSelect([
+            'name',
+            'sku',
+            'price',
+            'url_key',
+            'thumbnail',
+            'small_image',
+            'short_description',
+            self::SEARCH_ATTRIBUTE,
+        ]);
+        $collection->addAttributeToFilter('status', Status::STATUS_ENABLED);
+        $collection->addAttributeToFilter('visibility', ['in' => [
+            Visibility::VISIBILITY_IN_CATALOG,
+            Visibility::VISIBILITY_IN_SEARCH,
+            Visibility::VISIBILITY_BOTH,
+        ]]);
+        $collection->addAttributeToFilter($filters);
+        $collection->setPageSize(30);
+
+        $scored = [];
+        foreach ($collection as $product) {
+            $score = $this->scoreProduct($product, $keywords);
+            if ($score <= 0) {
+                continue;
+            }
+            $scored[] = [
+                'score' => $score,
+                'product' => $product,
+            ];
+        }
+
+        usort($scored, static fn (array $a, array $b): int => $b['score'] <=> $a['score']);
+
+        $products = [];
+        foreach (array_slice($scored, 0, $limit) as $item) {
+            $products[] = $this->formatProduct($item['product']);
+        }
+
+        return $products;
+    }
+
+    private function scoreProduct(object $product, array $keywords): int
+    {
+        $name = $this->searchDictionary->normalize((string) $product->getName());
+        $sku = $this->searchDictionary->normalize((string) $product->getSku());
+        $searchKeywords = $this->searchDictionary->normalize((string) $product->getData(self::SEARCH_ATTRIBUTE));
+
+        $score = 0;
+        foreach ($keywords as $keyword) {
+            $needle = $this->searchDictionary->normalize((string) $keyword);
+            if ($needle === '') {
+                continue;
+            }
+            if ($name === $needle) {
+                $score += 80;
+            } elseif (str_contains($name, $needle)) {
+                $score += 45;
+            }
+            if ($sku === $needle || str_contains($sku, $needle)) {
+                $score += 30;
+            }
+            if (str_contains($searchKeywords, $needle)) {
+                $score += 25;
+            }
+        }
+
+        return $score;
+    }
+
+    private function formatProduct(object $product): array
+    {
+        $baseUrl = $this->storeManager->getStore()->getBaseUrl(UrlInterface::URL_TYPE_WEB);
+        $mediaBaseUrl = $this->storeManager->getStore()->getBaseUrl(UrlInterface::URL_TYPE_MEDIA);
+        $urlKey = trim((string) $product->getData('url_key'));
+        $url = $urlKey !== ''
+            ? rtrim($baseUrl, '/') . '/' . $urlKey . '.html'
+            : rtrim($baseUrl, '/') . '/catalog/product/view/id/' . (int) $product->getId();
+
+        $imagePath = (string) ($product->getData('small_image') ?: $product->getData('thumbnail') ?: '');
+        $image = ($imagePath !== '' && $imagePath !== 'no_selection')
+            ? rtrim($mediaBaseUrl, '/') . '/catalog/product' . $imagePath
+            : '';
+
+        return [
+            'name' => (string) $product->getName(),
+            'price' => number_format((float) $product->getPrice(), 0, ',', '.') . ' VND',
+            'url' => $url,
+            'image' => $image,
+        ];
+    }
+
+    private function buildProductInfo(array $products): string
+    {
+        $lines = [];
+        foreach ($products as $product) {
+            $lines[] = '- ' . $product['name'] . ' | Gia: ' . $product['price'];
+        }
+
+        return implode("\n", $lines);
+    }
+
+    private function buildReply(string $message, array $keywords, string $productInfo): string
+    {
+        if ($productInfo === '') {
+            $fallback = 'Minh chua tim thay san pham that su phu hop voi yeu cau nay. Ban co the thu noi ro hon ten mat hang, loai nguyen lieu hoac muc gia mong muon.';
+            $aiReply = $this->callDeepSeek(
+                'Khach hoi: "' . $message . '". He thong khong tim thay san pham phu hop voi cac tu khoa: '
+                . implode(', ', array_slice($keywords, 0, 5))
+                . '. Hay xin loi ngan gon va goi y khach thu tu khoa khac. Tra loi bang tieng Viet.',
+                256,
+                0.5
+            );
+
+            return $aiReply ?: $fallback;
+        }
+
+        $aiReply = $this->callDeepSeek(
+            'Ban la nhan vien tu van ban hang B2B. Khach hoi: "' . $message . "\".\n"
+            . "Top 3 san pham lien quan nhat:\n" . $productInfo . "\n"
+            . 'Hay tra loi ngan gon 2-4 cau bang tieng Viet, giai thich vi sao cac san pham nay phu hop. Khong lap lai link vi he thong hien thi the san pham rieng.',
+            512,
+            0.7
+        );
+
+        if ($aiReply) {
+            return $aiReply;
+        }
+
+        return 'Minh da tim thay 3 san pham phu hop nhat voi nhu cau cua ban. Ban co the xem nhanh cac san pham ben duoi de so sanh gia va chon mat hang phu hop.';
+    }
+
+    private function callDeepSeek(string $prompt, int $maxTokens = 512, float $temperature = 0.7): ?string
+    {
+        $apiKey = (string) $this->deploymentConfig->get('tmdt_chatbot/deepseek/api_key');
+        if ($apiKey === '') {
+            return null;
         }
 
         $payload = json_encode([
-            'contents' => [
-                ['parts' => [['text' => $prompt]]],
+            'model' => $this->deepSeekModel,
+            'messages' => [
+                ['role' => 'user', 'content' => $prompt],
             ],
-            'generationConfig' => [
-                'temperature'     => $temperature,
-                'maxOutputTokens' => $maxTokens,
-                'candidateCount'  => 1,
-            ],
-        ]);
+            'temperature' => $temperature,
+            'max_tokens' => $maxTokens,
+        ], JSON_UNESCAPED_UNICODE);
 
-        foreach ($this->geminiModels as $modelName) {
-            $url    = 'https://generativelanguage.googleapis.com/v1beta/models/'
-                . $modelName . ':generateContent?key=' . $apiKey;
-            $result = $this->doCurlPost($url, $payload);
-
-            if ($result === null) {
-                // Lỗi curl cứng — không thử model khác
-                return 'Lỗi kết nối mạng đến Gemini API. Vui lòng kiểm tra internet server.';
-            }
-
-            $decoded = json_decode($result, true);
-
-            // Thành công
-            if (isset($decoded['candidates'][0]['content']['parts'][0]['text'])) {
-                return $decoded['candidates'][0]['content']['parts'][0]['text'];
-            }
-
-            // Các lỗi có thể thử model tiếp theo:
-            // 503 = quá tải, 429 = rate limit, 404 = model deprecated/not available
-            $errorCode = $decoded['error']['code'] ?? 0;
-            if (in_array($errorCode, [503, 429, 404])) {
-                continue;
-            }
-
-            // Lỗi cấu hình thực sự (400 bad request, 403 forbidden...) → dừng ngay
-            $errorMsg = $decoded['error']['message'] ?? 'Unknown error';
-            return 'Lỗi Gemini [' . $errorCode . ']: ' . $errorMsg;
+        if (!is_string($payload)) {
+            return null;
         }
 
-        // Tất cả model đều quá tải
-        return 'Hệ thống AI đang bận, vui lòng thử lại sau vài giây.';
+        $result = $this->doCurlPost('https://api.deepseek.com/chat/completions', $payload, $apiKey);
+        if ($result === null) {
+            return null;
+        }
+
+        $decoded = json_decode($result, true);
+        return isset($decoded['choices'][0]['message']['content'])
+            ? trim((string) $decoded['choices'][0]['message']['content'])
+            : null;
     }
 
-    /**
-     * Thực hiện HTTP POST bằng native PHP curl.
-     * Trả về chuỗi body phản hồi, hoặc null nếu lỗi curl cứng.
-     *
-     * @param string $url
-     * @param string $payload JSON string
-     * @return string|null
-     */
-    private function doCurlPost(string $url, string $payload): ?string
+    private function doCurlPost(string $url, string $payload, string $apiKey): ?string
     {
         $ch = curl_init($url);
         if ($ch === false) {
@@ -309,27 +277,27 @@ class ChatbotManagement implements ChatbotInterface
 
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => $payload,
-            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $payload,
+            CURLOPT_TIMEOUT => 30,
             CURLOPT_CONNECTTIMEOUT => 10,
-            CURLOPT_HTTPHEADER     => [
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $apiKey,
                 'Content-Type: application/json',
                 'Content-Length: ' . strlen($payload),
             ],
-            // SSL verification — bật true trong production (cần CA bundle)
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
         ]);
 
         $response = curl_exec($ch);
-        $errno    = curl_errno($ch);
+        $errno = curl_errno($ch);
         curl_close($ch);
 
         if ($errno !== 0 || $response === false) {
             return null;
         }
 
-        return (string)$response;
+        return (string) $response;
     }
 }

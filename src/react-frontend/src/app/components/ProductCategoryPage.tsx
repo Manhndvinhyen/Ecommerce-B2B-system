@@ -265,6 +265,32 @@ const formatPrice = (value?: number) => {
   return new Intl.NumberFormat('vi-VN').format(value);
 };
 
+const parseSupplierLabel = (label?: string) => {
+  const parts = String(label || '')
+    .split('·')
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return {
+    supplierName: parts[0] || '',
+    supplierRegion: parts.slice(1).join(' · ')
+  };
+};
+
+const resolveSupplierDisplay = (storeName: string | undefined, fallback: { name: string; region: string }) => {
+  const parsed = parseSupplierLabel(storeName);
+  const shouldUseFallbackSupplier =
+    fallback.name === 'Tổng công ty Chăn nuôi CP Việt Nam' &&
+    (!parsed.supplierName ||
+      parsed.supplierName === 'Tổng kho sỉ Thực phẩm B2B' ||
+      parsed.supplierName === 'Tổng công ty Chăn nuôi CP Việt Nam');
+
+  return {
+    supplierName: shouldUseFallbackSupplier ? fallback.name : parsed.supplierName || storeName || fallback.name,
+    supplierRegion: shouldUseFallbackSupplier ? fallback.region : parsed.supplierRegion || fallback.region
+  };
+};
+
 const inferUnitByCategory = (categoryName: string) => {
   const normalized = toQuerySlug(categoryName);
 
@@ -763,6 +789,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
           const mappedCustomProducts: ProductItem[] = customLocalProducts.map((p) => {
             const priceValue = p.special_price ?? p.price;
             const supplier = getMockSupplierForProduct(p.sku, p.categoryLabel);
+            const storeSupplier = resolveSupplierDisplay(p.store_name, supplier);
             return {
               id: p.id || p.sku,
               sku: p.sku,
@@ -772,8 +799,8 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
               unit: p.unit || 'kg',
               image: p.image || fallbackImageByCategory[p.categoryLabel] || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop',
               categoryLabel: p.categoryLabel,
-              supplierName: p.store_name || supplier.name,
-              supplierRegion: supplier.region
+              supplierName: storeSupplier.supplierName || p.store_name || supplier.name,
+              supplierRegion: storeSupplier.supplierRegion || supplier.region
             };
           });
 
@@ -999,6 +1026,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
         const mappedCustomProducts: ProductItem[] = filteredCustomProducts.map((p) => {
           const priceValue = p.special_price ?? p.price;
           const supplier = getMockSupplierForProduct(p.sku, p.categoryLabel);
+          const storeSupplier = resolveSupplierDisplay(p.store_name, supplier);
           const inferred = inferCategoryFromSku(p.sku);
           const subcat = inferred?.subcategory ?? p.categoryLabel;
           return {
@@ -1010,8 +1038,8 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
             unit: p.unit || 'kg',
             image: p.image || fallbackImageByCategory[p.categoryLabel] || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop',
             categoryLabel: subcat,
-            supplierName: p.store_name || supplier.name,
-            supplierRegion: supplier.region
+            supplierName: storeSupplier.supplierName || p.store_name || supplier.name,
+            supplierRegion: storeSupplier.supplierRegion || supplier.region
           };
         });
 
@@ -1356,6 +1384,8 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
                             unit: product.unit,
                             unitPrice: toUnitPriceFromLooseValue(product.price),
                             image: product.image,
+                            supplierName: product.supplierName,
+                            supplierRegion: product.supplierRegion,
                           }, sourceImage);
                         }}
                         aria-label={`Thêm ${product.name} vào giỏ`}

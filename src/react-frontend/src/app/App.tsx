@@ -23,6 +23,7 @@ import { WishlistPage } from './components/WishlistPage';
 import { CheckoutPage } from './components/CheckoutPage';
 import { NewsPage } from './components/NewsPage';
 import { ThankYouPage } from './components/ThankYouPage';
+import { OrderTrackingPage } from './components/OrderTrackingPage';
 import { getCategoryNameFromQuery, getSubcategoryNameFromQuery } from './data/categories';
 import { CartProvider } from './cart/CartProvider';
 import { applySeo, buildCanonicalPath, getSiteName } from './utils/seo';
@@ -48,6 +49,7 @@ function AppContent() {
   const isSellerDashboardView = view === 'seller-dashboard';
   const isNewsView = view === 'news';
   const isThankYouView = view === 'thank-you';
+  const isOrderTrackingView = view === 'order-tracking';
 
   useEffect(() => {
     const root = document.documentElement;
@@ -117,7 +119,7 @@ function AppContent() {
       return;
     }
 
-    if (isCartView || isLoginView || isRegisterView || isForgotPasswordView || isWishlistView || isCheckoutView || isDashboardView || isSellerDashboardView) {
+    if (isCartView || isLoginView || isRegisterView || isForgotPasswordView || isWishlistView || isCheckoutView || isDashboardView || isSellerDashboardView || isOrderTrackingView) {
       applySeo({
         title: `${siteName} | Tài khoản và mua hàng`,
         description: `Khu vực tài khoản, giỏ hàng và thanh toán của ${siteName}.`,
@@ -147,7 +149,8 @@ function AppContent() {
     isCheckoutView,
     isDashboardView,
     isSellerDashboardView,
-    isNewsView
+    isNewsView,
+    isOrderTrackingView
   ]);
 
   if (isDashboardView) {
@@ -228,6 +231,19 @@ function AppContent() {
 
   if (isThankYouView) {
     return <ThankYouPage />;
+  }
+
+  if (isOrderTrackingView) {
+    return (
+      <div className="min-h-screen bg-white">
+        <Header />
+        <main>
+          <OrderTrackingPage />
+        </main>
+        <Footer />
+        <ChatbotWidget />
+      </div>
+    );
   }
 
   return (

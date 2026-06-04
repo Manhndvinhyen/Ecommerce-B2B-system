@@ -152,3 +152,37 @@ Checkpoint Quote 1 - Dam phan gia
 - Can thiet ke module rieng: quote_request, quote_request_item, message/thread.
 - Flow de xuat: buyer gui yeu cau gia -> seller/owner phan hoi -> buyer chap nhan -> tao cart/order voi gia da chap nhan.
 - Sau khi co API, tao component QuoteNegotiationContent va noi vao tab Dam phan gia.
+
+9. Checkpoint Admin he thong va duyet giay phep kinh doanh
+
+Hien trang truoc khi bo sung:
+- Admin he thong dang dung Magento Admin mac dinh.
+- Module Tmdt_Registration co menu admin "Dang ky doanh nghiep".
+- Giay phep kinh doanh da duoc luu tai pub/media/tmdt_registration/licenses/{customer_id}/...
+- Metadata file duoc luu trong bang tmdt_customer_registration.files_json.
+- Admin grid chua hien link giay phep va chua co nut duyet/tu choi.
+- Tai khoan seller dang ky moi dang bi auto approved, nen workflow duyet chua co tac dung.
+
+Muc tieu:
+- Seller/chu doanh nghiep dang ky xong phai o trang thai pending.
+- Admin Magento xem duoc link giay phep kinh doanh trong grid dang ky.
+- Admin co the duyet hoac tu choi dang ky kinh doanh.
+- Seller pending/rejected khong duoc dang nhap vao dashboard kinh doanh.
+- Seller approved moi dang nhap va su dung chuc nang seller/owner.
+
+Da trien khai trong checkpoint nay:
+[x] Doi RegisterManagement de seller moi dang ky co status pending.
+[x] Khong cap token dang nhap ngay cho seller pending.
+[x] Chan password login voi seller status khac approved.
+[x] Chan Google login voi seller status khac approved.
+[x] Them admin action Approve cap nhat status approved.
+[x] Them admin action Reject cap nhat status rejected.
+[x] Hien thi link giay phep kinh doanh trong admin grid.
+[x] Them thao tac Duyet/Tu choi trong admin grid.
+
+Can tiep tuc:
+[ ] Them ly do tu choi thay vi notes mac dinh.
+[ ] Gui email thong bao approve/reject cho doanh nghiep.
+[ ] Them filter admin grid theo status/role.
+[ ] Them dashboard admin tong he thong: tong seller, pending seller, rejected seller, tong order, doanh thu.
+[ ] Kiem tra lai cac tai khoan seller cu dang status approved/pending de migrate du lieu neu can.

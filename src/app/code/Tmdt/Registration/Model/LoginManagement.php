@@ -75,6 +75,7 @@ class LoginManagement implements LoginInterface
             'email' => (string) $registrationRow['email'],
             'full_name' => (string) ($registrationRow['full_name'] ?? ''),
             'branch_name' => (string) ($registrationRow['unit_nickname'] ?? ''),
+            'role' => $role,
             'redirect_url' => '/react/index.html',
         ];
     }

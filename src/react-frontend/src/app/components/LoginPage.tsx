@@ -29,6 +29,7 @@ type LoginApiResponse = {
   email?: string;
   full_name?: string;
   branch_name?: string;
+  role?: string;
   redirect_url?: string;
 };
 
@@ -73,7 +74,8 @@ const parseLoginApiResponse = (rawData: unknown): LoginApiResponse | null => {
       email: typeof rawData[4] === 'string' ? rawData[4] : undefined,
       full_name: typeof rawData[5] === 'string' ? rawData[5] : undefined,
       branch_name: typeof rawData[6] === 'string' ? rawData[6] : undefined,
-      redirect_url: typeof rawData[7] === 'string' ? rawData[7] : undefined,
+      role: typeof rawData[7] === 'string' ? rawData[7] : undefined,
+      redirect_url: typeof rawData[8] === 'string' ? rawData[8] : undefined,
     };
   }
 
@@ -91,6 +93,7 @@ const parseLoginApiResponse = (rawData: unknown): LoginApiResponse | null => {
     email: typeof data.email === 'string' ? data.email : undefined,
     full_name: typeof data.full_name === 'string' ? data.full_name : undefined,
     branch_name: typeof data.branch_name === 'string' ? data.branch_name : undefined,
+    role: typeof data.role === 'string' ? data.role : undefined,
     redirect_url: typeof data.redirect_url === 'string' ? data.redirect_url : undefined,
   };
 };
@@ -306,6 +309,7 @@ export function LoginPage() {
           email: fallbackEmail,
           fullName: data.full_name,
           branchName: data.branch_name,
+          role: data.role,
         });
 
         const sessionRedirect = await startCustomerSession(data.token, primaryStorage);
@@ -373,6 +377,7 @@ export function LoginPage() {
           email: data.email,
           fullName: data.full_name,
           branchName: data.branch_name,
+          role: data.role,
         });
 
         const sessionRedirect = await startCustomerSession(data.token, primaryStorage);

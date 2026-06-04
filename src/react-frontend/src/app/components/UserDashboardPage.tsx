@@ -4,6 +4,7 @@ import { adminMenuItems } from './SidebarMenu';
 import { ProfileContent } from './ProfileContent';
 import { BranchManagementPanel } from './BranchManagementPanel';
 import { PurchaseHistoryContent } from './PurchaseHistoryContent';
+import { RecurringSubscriptionsContent } from './RecurringSubscriptionsContent';
 import { Header } from './Header';
 import { AuthPageFooter } from './auth/AuthPageFooter';
 import { ChatbotWidget } from './ChatbotWidget';
@@ -70,7 +71,7 @@ export function UserDashboardPage() {
   }, []);
 
   const menuItems = useMemo(() => {
-    const visibleIds = new Set(['profile-seller', 'nhan-vien', 'lich-su-mua-hang', 'bao-gia']);
+    const visibleIds = new Set(['profile-seller', 'nhan-vien', 'lich-su-mua-hang', 'bao-gia', 'dat-hang-dinh-ky']);
     return adminMenuItems.filter((item) => visibleIds.has(item.id) && (canManageBranches || item.id !== 'nhan-vien'));
   }, [canManageBranches]);
 
@@ -79,6 +80,7 @@ export function UserDashboardPage() {
   const orderLabel = adminMenuItems.find((item) => item.id === 'don-hang')?.label ?? 'Quản lý đơn hàng';
   const purchaseHistoryLabel = adminMenuItems.find((item) => item.id === 'lich-su-mua-hang')?.label ?? 'Lịch sử mua hàng';
   const quoteLabel = adminMenuItems.find((item) => item.id === 'bao-gia')?.label ?? 'Đàm phán giá';
+  const recurringLabel = adminMenuItems.find((item) => item.id === 'dat-hang-dinh-ky')?.label ?? 'Đăng ký mua định kỳ';
 
   const params = new URLSearchParams(window.location.search);
   const tabFromQuery = params.get('tab');
@@ -108,6 +110,7 @@ export function UserDashboardPage() {
               </div>
             )}
             {activeTab === purchaseHistoryLabel && <PurchaseHistoryContent />}
+            {activeTab === recurringLabel && <RecurringSubscriptionsContent />}
             {activeTab === orderLabel && (
               <PurchaseHistoryContent
                 title="Quản lý đơn hàng của tôi"
@@ -127,6 +130,7 @@ export function UserDashboardPage() {
             {activeTab !== profileLabel &&
               activeTab !== branchLabel &&
               activeTab !== purchaseHistoryLabel &&
+              activeTab !== recurringLabel &&
               activeTab !== orderLabel &&
               activeTab !== quoteLabel && <div className="p-8">Nội dung cho: {activeTab}</div>}
           </div>

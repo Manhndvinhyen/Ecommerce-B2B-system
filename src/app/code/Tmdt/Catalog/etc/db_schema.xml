@@ -83,6 +83,31 @@
             <column name="order_code"/>
         </index>
     </table>
+
+    <table name="tmdt_recurring_schedules" resource="default" engine="innodb" comment="Tmdt Recurring Order Subscriptions">
+        <column xsi:type="int" name="id" padding="10" unsigned="true" nullable="false" identity="true" comment="Subscription ID"/>
+        <column xsi:type="varchar" name="customer_email" length="255" nullable="false" comment="Customer Email"/>
+        <column xsi:type="varchar" name="customer_name" length="255" nullable="false" comment="Customer Name"/>
+        <column xsi:type="varchar" name="frequency" length="32" nullable="false" comment="weekly|monthly"/>
+        <column xsi:type="varchar" name="weekdays" length="64" nullable="true" comment="Comma-separated weekdays 0-6"/>
+        <column xsi:type="int" name="month_day" padding="5" nullable="true" comment="Day of month 1-31"/>
+        <column xsi:type="varchar" name="delivery_time" length="32" nullable="false" comment="Delivery Time Slot"/>
+        <column xsi:type="text" name="items_json" nullable="false" comment="Cart Items JSON"/>
+        <column xsi:type="text" name="shipping_json" nullable="false" comment="Shipping Info JSON"/>
+        <column xsi:type="varchar" name="status" length="32" nullable="false" default="active" comment="active|cancelled"/>
+        <column xsi:type="date" name="last_run_date" nullable="true" comment="Last Run Date"/>
+        <column xsi:type="date" name="next_run_date" nullable="false" comment="Next Run Date"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="id"/>
+        </constraint>
+        <index referenceId="TMDT_RECURRING_SCHEDULES_EMAIL" indexType="btree">
+            <column name="customer_email"/>
+        </index>
+        <index referenceId="TMDT_RECURRING_SCHEDULES_STATUS" indexType="btree">
+            <column name="status"/>
+        </index>
+    </table>
 </schema>
 
 

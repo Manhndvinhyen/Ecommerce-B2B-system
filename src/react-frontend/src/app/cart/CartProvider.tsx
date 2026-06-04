@@ -66,7 +66,43 @@ type CartContextValue = {
 
 const CartContext = createContext<CartContextValue | null>(null);
 
-const formatCurrency = (value: number) => `${new Intl.NumberFormat('vi-VN').format(Math.round(value))}đ`;
+const formatCurrency = (value: number) => {
+  if (typeof window === 'undefined') {
+    return `${new Intl.NumberFormat('vi-VN').format(Math.round(value))}đ`;
+  }
+  const target = window.localStorage.getItem('freso_selected_currency') || 'VND';
+  if (target === 'VND') {
+    return `${new Intl.NumberFormat('vi-VN').format(Math.round(value))}đ`;
+  }
+
+  const ratesRaw = window.localStorage.getItem('freso_currency_rates');
+  let rates: any = null;
+  if (ratesRaw) {
+    try {
+      rates = JSON.parse(ratesRaw);
+    } catch {
+      rates = null;
+    }
+  }
+
+  if (rates && rates[target]) {
+    const rateInfo = rates[target];
+    const rate = rateInfo.sell || rateInfo.transfer || 1;
+    const converted = rate > 0 ? value / rate : value;
+    try {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: target,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(converted);
+    } catch {
+      return `${new Intl.NumberFormat('en-US').format(converted)} ${target}`;
+    }
+  }
+
+  return `${new Intl.NumberFormat('vi-VN').format(Math.round(value))}đ`;
+};
 
 const clampQuantity = (value: number) => Math.max(1, Math.floor(value));
 
@@ -560,6 +596,24 @@ export function CartProvider({ children }: PropsWithChildren) {
       // ignore initial load errors, toast will be handled on add/update actions
     });
   }, [loadCustomerCart]);
+
+  useEffect(() => {
+    const fetchRates = async () => {
+      try {
+        const response = await fetch('/rest/V1/tmdt-catalog/rates');
+        const rawData = await response.json();
+        const data = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+        if (data && data.success && data.rates) {
+          window.localStorage.setItem('freso_currency_rates', JSON.stringify(data.rates));
+          window.dispatchEvent(new CustomEvent('freso:rates-loaded'));
+        }
+      } catch (err) {
+        console.error('Failed to fetch currency rates:', err);
+      }
+    };
+
+    fetchRates();
+  }, []);
 
   const addProductToMagentoCart = useCallback(
     async (product: AddToCartProduct, quantity: number) => {
@@ -1123,13 +1177,31 @@ export function toCurrencyTextFromLooseValue(value: string | number) {
     return formatCurrency(value);
   }
 
-  const parsed = parseNumberFromText(value);
-  return parsed > 0 ? formatCurrency(parsed) : value;
+  if (typeof value === 'string') {
+    if (value.includes('-')) {
+      const parts = value.split('-').map((p) => p.trim());
+      const convertedParts = parts.map((part) => {
+        const val = parseNumberFromText(part);
+        return val > 0 ? formatCurrency(val) : part;
+      });
+      return convertedParts.join(' - ');
+    } else {
+      const parsed = parseNumberFromText(value);
+      return parsed > 0 ? formatCurrency(parsed) : value;
+    }
+  }
+
+  return value;
 }
 
 export function toUnitPriceFromLooseValue(value: string | number) {
   if (typeof value === 'number') {
     return value;
+  }
+
+  if (typeof value === 'string' && value.includes('-')) {
+    const firstPart = value.split('-')[0].trim();
+    return parseNumberFromText(firstPart);
   }
 
   return parseNumberFromText(value);

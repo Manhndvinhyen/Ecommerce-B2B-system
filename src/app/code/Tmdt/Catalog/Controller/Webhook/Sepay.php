@@ -155,7 +155,9 @@ class Sepay extends Action implements HttpPostActionInterface, CsrfAwareActionIn
             );
 
             // Process inventory updates
+            $this->logger->info('[SePay Webhook] Raw items_json from DB: ' . ($row['items_json'] ?? 'null'));
             $items = json_decode((string)($row['items_json'] ?? '[]'), true);
+            $this->logger->info('[SePay Webhook] Decoded items count: ' . (is_array($items) ? count($items) : 'not an array'));
             $sellerRevenues = [];
             $sellerItems = [];
 

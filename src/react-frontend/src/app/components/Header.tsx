@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ShoppingCart, User, Menu, Search, ChevronRight, Heart, Bell, HelpCircle, Store } from 'lucide-react';
+import { ShoppingCart, User, Menu, Search, ChevronRight, Heart, Bell, HelpCircle, Store, ClipboardList } from 'lucide-react';
 import { categoryMenu, getCategoryPageLink } from '../data/categories';
 import { getDefaultWishlistList, hasWishlistAuth } from '../utils/wishlistApi';
 import { adminMenuItems } from './SidebarMenu';
@@ -7,6 +7,22 @@ import { useCart } from '../cart/CartProvider';
 
 export function Header() {
   const { cartItems } = useCart();
+  const [selectedCurrency, setSelectedCurrency] = useState('VND');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setSelectedCurrency(window.localStorage.getItem('freso_selected_currency') || 'VND');
+    }
+  }, []);
+
+  const handleCurrencyChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextCurrency = event.target.value;
+    setSelectedCurrency(nextCurrency);
+    window.localStorage.setItem('freso_selected_currency', nextCurrency);
+    window.dispatchEvent(new CustomEvent('freso:currency-changed', { detail: nextCurrency }));
+    window.location.reload();
+  };
+
   const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState(categoryMenu[0].name);
   const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
@@ -20,6 +36,7 @@ export function Header() {
   const [canManageBranches, setCanManageBranches] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
   const reactHomePath = '/react/index.html';
+  const currentView = new URLSearchParams(window.location.search).get('view') || 'home';
   const [wishlistDetailHref, setWishlistDetailHref] = useState(`${reactHomePath}?view=wishlist`);
   const registerParams = new URLSearchParams(window.location.search);
   registerParams.set('view', 'register');
@@ -358,16 +375,32 @@ export function Header() {
         {/* Top Bar - Auth Buttons - Tầng 1 */}
         <div className="bg-gray-50 border-b">
           <div className="container mx-auto px-4 py-2">
-            <div className="flex items-center justify-end gap-3">
-              <a href={loginHref} className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors">
-                Đăng nhập
-              </a>
-              <a href={registerHref} className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors">
-                Đăng ký
-              </a>
-              <a href="/react/index.html?view=register&seller=1" className="px-4 py-1.5 text-sm border-2 border-orange-500 text-orange-500 rounded-full hover:bg-orange-50 transition-colors whitespace-nowrap">
-                Đăng ký bán hàng
-              </a>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-1.5 text-sm text-gray-600">
+                <span className="font-medium text-gray-500">Tiền tệ:</span>
+                <select
+                  value={selectedCurrency}
+                  onChange={handleCurrencyChange}
+                  className="bg-transparent border border-gray-300 rounded px-1.5 py-0.5 text-xs text-gray-700 outline-none focus:border-green-500 cursor-pointer"
+                >
+                  <option value="VND">VND (đ)</option>
+                  <option value="USD">USD ($)</option>
+                  <option value="EUR">EUR (€)</option>
+                  <option value="CNY">CNY (¥)</option>
+                  <option value="JPY">JPY (¥)</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-3">
+                <a href={loginHref} className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors">
+                  Đăng nhập
+                </a>
+                <a href={registerHref} className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors">
+                  Đăng ký
+                </a>
+                <a href="/react/index.html?view=register&seller=1" className="px-4 py-1.5 text-sm border-2 border-orange-500 text-orange-500 rounded-full hover:bg-orange-50 transition-colors whitespace-nowrap">
+                  Đăng ký bán hàng
+                </a>
+              </div>
             </div>
           </div>
         </div>
@@ -503,7 +536,22 @@ export function Header() {
       {/* Top Bar - Tầng 1 */}
       <div className="bg-white border-b">
         <div className="container mx-auto px-4 py-2.5">
-          <div className="flex items-center justify-end gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 text-sm text-gray-600">
+              <span className="font-medium text-gray-500">Tiền tệ:</span>
+              <select
+                value={selectedCurrency}
+                onChange={handleCurrencyChange}
+                className="bg-transparent border border-gray-300 rounded px-1.5 py-0.5 text-xs text-gray-700 outline-none focus:border-green-500 cursor-pointer"
+              >
+                <option value="VND">VND (đ)</option>
+                <option value="USD">USD ($)</option>
+                <option value="EUR">EUR (€)</option>
+                <option value="CNY">CNY (¥)</option>
+                <option value="JPY">JPY (¥)</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-3">
             {!isLoggedIn ? (
               <>
                 <a href={loginHref} className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors">
@@ -593,6 +641,7 @@ export function Header() {
                 </div>
               </>
             )}
+          </div>
           </div>
         </div>
       </div>
@@ -701,13 +750,12 @@ export function Header() {
 
               {isLoggedIn && (
                 <a
-                  href="/sales/order/history"
-                  className="flex items-center gap-2 text-gray-700 hover:text-green-600 transition-colors"
+                  href={`/react/index.html?view=dashboard&tab=${encodeURIComponent('Lịch sử mua hàng')}`}
+                  className="p-2 rounded-full transition-all duration-200 hover:bg-gray-100 text-gray-700 hover:text-green-600"
+                  title="Lịch sử mua hàng"
+                  aria-label="Lịch sử mua hàng"
                 >
-                  <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <span>Quản lý đơn hàng</span>
+                  <ClipboardList className="size-6 text-gray-700 hover:text-green-600 transition-all" />
                 </a>
               )}
 

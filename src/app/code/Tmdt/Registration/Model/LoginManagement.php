@@ -52,8 +52,13 @@ class LoginManagement implements LoginInterface
         }
 
         $status = strtolower(trim((string) ($registrationRow['status'] ?? '')));
+        $role = strtolower(trim((string) ($registrationRow['role'] ?? '')));
         if ($status === 'inactive') {
             throw new AuthenticationException(__('Tài khoản đã bị khóa. Vui lòng liên hệ quản trị.'));
+        }
+
+        if ($role === 'seller' && $status !== 'approved') {
+            throw new AuthenticationException(__('Tai khoan kinh doanh dang cho duyet hoac da bi tu choi.'));
         }
 
         try {
@@ -83,7 +88,7 @@ class LoginManagement implements LoginInterface
         $isEmail = str_contains($normalizedIdentifier, '@');
 
         $select = $connection->select()
-            ->from($tableName, ['customer_id', 'email', 'phone_number', 'full_name', 'unit_nickname', 'status'])
+            ->from($tableName, ['customer_id', 'email', 'phone_number', 'full_name', 'unit_nickname', 'status', 'role'])
             ->where('login_code = ?', $loginCode)
             ->limit(1);
 

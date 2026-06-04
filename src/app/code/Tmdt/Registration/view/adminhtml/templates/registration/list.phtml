@@ -1,73 +1,346 @@
 <?php
 /** @var \Tmdt\Registration\Block\Adminhtml\Registration $block */
 $rows = $block->getRows();
+$pendingCount = 0;
+$approvedCount = 0;
+$rejectedCount = 0;
+foreach ($rows as $row) {
+    $status = strtolower((string) ($row['status'] ?? ''));
+    if ($status === 'pending') {
+        $pendingCount++;
+    } elseif ($status === 'approved') {
+        $approvedCount++;
+    } elseif ($status === 'rejected') {
+        $rejectedCount++;
+    }
+}
 ?>
-<div class="page-main-actions">
-    <div class="page-actions-placeholder"></div>
-</div>
 
-<div class="admin__data-grid-wrap">
-    <style>
-        .tmdt-registration-table td,
-        .tmdt-registration-table th {
-            white-space: nowrap;
-            vertical-align: top;
+<style>
+    .tmdt-approval-page {
+        max-width: 1280px;
+    }
+
+    .tmdt-approval-header {
+        align-items: flex-start;
+        display: flex;
+        gap: 24px;
+        justify-content: space-between;
+        margin-bottom: 18px;
+    }
+
+    .tmdt-approval-title {
+        color: #303030;
+        font-size: 24px;
+        font-weight: 600;
+        margin: 0 0 6px;
+    }
+
+    .tmdt-approval-note {
+        color: #666;
+        font-size: 13px;
+        margin: 0;
+        max-width: 720px;
+    }
+
+    .tmdt-approval-stats {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(3, minmax(110px, 1fr));
+        min-width: 380px;
+    }
+
+    .tmdt-stat {
+        background: #fff;
+        border: 1px solid #d6d6d6;
+        border-radius: 4px;
+        padding: 12px 14px;
+    }
+
+    .tmdt-stat span {
+        color: #666;
+        display: block;
+        font-size: 12px;
+        margin-bottom: 6px;
+    }
+
+    .tmdt-stat strong {
+        color: #303030;
+        display: block;
+        font-size: 22px;
+        line-height: 1;
+    }
+
+    .tmdt-approval-list {
+        display: grid;
+        gap: 14px;
+    }
+
+    .tmdt-approval-card {
+        background: #fff;
+        border: 1px solid #d6d6d6;
+        border-left: 4px solid #adadad;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, .05);
+        display: grid;
+        gap: 16px;
+        grid-template-columns: minmax(0, 1.35fr) minmax(260px, .85fr) minmax(210px, .45fr);
+        padding: 16px;
+    }
+
+    .tmdt-approval-card.is-pending {
+        border-left-color: #eb5202;
+    }
+
+    .tmdt-approval-card.is-approved {
+        border-left-color: #008a00;
+    }
+
+    .tmdt-approval-card.is-rejected {
+        border-left-color: #b30000;
+    }
+
+    .tmdt-card-title {
+        color: #303030;
+        font-size: 18px;
+        font-weight: 600;
+        margin: 0 0 8px;
+        overflow-wrap: anywhere;
+    }
+
+    .tmdt-meta-grid {
+        display: grid;
+        gap: 10px 18px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .tmdt-field {
+        min-width: 0;
+    }
+
+    .tmdt-field-label {
+        color: #757575;
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: .02em;
+        margin-bottom: 3px;
+        text-transform: uppercase;
+    }
+
+    .tmdt-field-value {
+        color: #303030;
+        display: block;
+        font-size: 13px;
+        overflow-wrap: anywhere;
+    }
+
+    .tmdt-status {
+        border-radius: 12px;
+        display: inline-block;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 4px 10px;
+    }
+
+    .tmdt-status-pending {
+        background: #fff4e5;
+        color: #b45f06;
+    }
+
+    .tmdt-status-approved {
+        background: #e5f7e5;
+        color: #006400;
+    }
+
+    .tmdt-status-rejected {
+        background: #fde7e7;
+        color: #b30000;
+    }
+
+    .tmdt-license-list {
+        display: grid;
+        gap: 8px;
+        margin-top: 8px;
+    }
+
+    .tmdt-license-link {
+        background: #f8f8f8;
+        border: 1px solid #d6d6d6;
+        border-radius: 4px;
+        display: block;
+        max-width: 100%;
+        overflow: hidden;
+        padding: 8px 10px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .tmdt-actions {
+        align-content: start;
+        display: grid;
+        gap: 8px;
+    }
+
+    .tmdt-actions form {
+        margin: 0;
+    }
+
+    .tmdt-actions .action-default {
+        width: 100%;
+    }
+
+    .tmdt-empty {
+        background: #fff;
+        border: 1px dashed #adadad;
+        color: #666;
+        padding: 24px;
+    }
+
+    @media (max-width: 1180px) {
+        .tmdt-approval-header,
+        .tmdt-approval-card {
+            display: block;
         }
-        .tmdt-registration-table .wrap {
-            white-space: normal;
-            max-width: 320px;
+
+        .tmdt-approval-stats {
+            margin-top: 14px;
+            min-width: 0;
         }
-    </style>
-    <table class="data-grid tmdt-registration-table">
-        <thead>
-            <tr>
-                <th class="data-grid-th">ID</th>
-                <th class="data-grid-th">Customer ID</th>
-                <th class="data-grid-th">Doanh nghiệp</th>
-                <th class="data-grid-th">Người đại diện</th>
-                <th class="data-grid-th">Email</th>
-                <th class="data-grid-th">Số điện thoại</th>
-                <th class="data-grid-th">Mã số thuế</th>
-                <th class="data-grid-th">Đối tượng đăng ký</th>
-                <th class="data-grid-th">Tỉnh/Thành</th>
-                <th class="data-grid-th">Quận/Huyện</th>
-                <th class="data-grid-th">Phường/Xã</th>
-                <th class="data-grid-th">Địa chỉ chi tiết</th>
-                <th class="data-grid-th">Tên gợi nhớ đơn vị</th>
-                <th class="data-grid-th">Mã đăng nhập</th>
-                <th class="data-grid-th">Trạng thái</th>
-                <th class="data-grid-th">Nguồn dữ liệu</th>
-                <th class="data-grid-th">Ngày tạo</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php if (!empty($rows)): ?>
-                <?php foreach ($rows as $row): ?>
-                    <tr>
-                        <td><?= isset($row['registration_id']) && $row['registration_id'] !== null ? (int) $row['registration_id'] : '-' ?></td>
-                        <td><?= (int) $row['customer_id'] ?></td>
-                        <td class="wrap"><strong><?= $block->escapeHtml($row['business_name']) ?></strong></td>
-                        <td><?= $block->escapeHtml($row['full_name']) ?></td>
-                        <td><?= $block->escapeHtml($row['email']) ?></td>
-                        <td><?= $block->escapeHtml($row['phone_number']) ?></td>
-                        <td><?= $block->escapeHtml($row['tax_code']) ?></td>
-                        <td><?= $block->escapeHtml($row['registration_type']) ?></td>
-                        <td><?= $block->escapeHtml($row['province']) ?></td>
-                        <td><?= $block->escapeHtml((string) ($row['district'] ?? '')) ?></td>
-                        <td><?= $block->escapeHtml($row['ward']) ?></td>
-                        <td class="wrap"><?= $block->escapeHtml((string) ($row['detail_address'] ?? '')) ?></td>
-                        <td><?= $block->escapeHtml($row['unit_nickname']) ?></td>
-                        <td><?= $block->escapeHtml($row['login_code']) ?></td>
-                        <td><?= $block->escapeHtml(ucfirst((string) $row['status'])) ?></td>
-                        <td><?= $block->escapeHtml((string) ($row['data_source'] ?? '')) ?></td>
-                        <td><?= $block->escapeHtml($row['created_at']) ?></td>
-                    </tr>
-                <?php endforeach; ?>
-            <?php else: ?>
-                <tr>
-                    <td colspan="17">Chưa có lượt đăng ký nào.</td>
-                </tr>
-            <?php endif; ?>
-        </tbody>
-    </table>
+
+        .tmdt-approval-card > div + div {
+            margin-top: 14px;
+        }
+    }
+</style>
+
+<div class="tmdt-approval-page">
+    <div class="tmdt-approval-header">
+        <div>
+            <h1 class="tmdt-approval-title">Duyet ho so kinh doanh</h1>
+            <p class="tmdt-approval-note">
+                Kiem tra giay phep kinh doanh, thong tin ma so thue va thong tin nguoi dai dien truoc khi duyet tai khoan ban hang.
+            </p>
+        </div>
+        <div class="tmdt-approval-stats" aria-label="Thong ke ho so">
+            <div class="tmdt-stat">
+                <span>Cho duyet</span>
+                <strong><?= (int) $pendingCount ?></strong>
+            </div>
+            <div class="tmdt-stat">
+                <span>Da duyet</span>
+                <strong><?= (int) $approvedCount ?></strong>
+            </div>
+            <div class="tmdt-stat">
+                <span>Tu choi</span>
+                <strong><?= (int) $rejectedCount ?></strong>
+            </div>
+        </div>
+    </div>
+
+    <?php if (!empty($rows)): ?>
+        <div class="tmdt-approval-list">
+            <?php foreach ($rows as $row): ?>
+                <?php
+                $status = strtolower((string) ($row['status'] ?? ''));
+                $statusClass = in_array($status, ['pending', 'approved', 'rejected'], true) ? $status : 'pending';
+                $canReview = !empty($row['registration_id']) && $status === 'pending';
+                $addressParts = array_filter([
+                    (string) ($row['detail_address'] ?? ''),
+                    (string) ($row['ward'] ?? ''),
+                    (string) ($row['district'] ?? ''),
+                    (string) ($row['province'] ?? ''),
+                ]);
+                ?>
+                <section class="tmdt-approval-card is-<?= $block->escapeHtmlAttr($statusClass) ?>">
+                    <div>
+                        <h2 class="tmdt-card-title"><?= $block->escapeHtml($row['business_name']) ?></h2>
+                        <div class="tmdt-meta-grid">
+                            <div class="tmdt-field">
+                                <span class="tmdt-field-label">Nguoi dai dien</span>
+                                <span class="tmdt-field-value"><?= $block->escapeHtml($row['full_name']) ?></span>
+                            </div>
+                            <div class="tmdt-field">
+                                <span class="tmdt-field-label">Email</span>
+                                <span class="tmdt-field-value"><?= $block->escapeHtml($row['email']) ?></span>
+                            </div>
+                            <div class="tmdt-field">
+                                <span class="tmdt-field-label">So dien thoai</span>
+                                <span class="tmdt-field-value"><?= $block->escapeHtml($row['phone_number']) ?></span>
+                            </div>
+                            <div class="tmdt-field">
+                                <span class="tmdt-field-label">Ma so thue</span>
+                                <span class="tmdt-field-value"><?= $block->escapeHtml($row['tax_code']) ?></span>
+                            </div>
+                            <div class="tmdt-field">
+                                <span class="tmdt-field-label">Ma dang nhap</span>
+                                <span class="tmdt-field-value"><?= $block->escapeHtml($row['login_code']) ?></span>
+                            </div>
+                            <div class="tmdt-field">
+                                <span class="tmdt-field-label">Loai dang ky</span>
+                                <span class="tmdt-field-value"><?= $block->escapeHtml($row['registration_type']) ?></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="tmdt-meta-grid">
+                            <div class="tmdt-field">
+                                <span class="tmdt-field-label">Trang thai</span>
+                                <span class="tmdt-status tmdt-status-<?= $block->escapeHtmlAttr($statusClass) ?>">
+                                    <?= $block->escapeHtml(ucfirst($status ?: 'pending')) ?>
+                                </span>
+                            </div>
+                            <div class="tmdt-field">
+                                <span class="tmdt-field-label">Ngay tao</span>
+                                <span class="tmdt-field-value"><?= $block->escapeHtml($row['created_at']) ?></span>
+                            </div>
+                        </div>
+                        <div class="tmdt-field" style="margin-top: 12px;">
+                            <span class="tmdt-field-label">Dia chi</span>
+                            <span class="tmdt-field-value"><?= $block->escapeHtml(implode(', ', $addressParts) ?: '-') ?></span>
+                        </div>
+                        <div class="tmdt-field" style="margin-top: 12px;">
+                            <span class="tmdt-field-label">Giay phep kinh doanh</span>
+                            <?php if (!empty($row['license_files'])): ?>
+                                <div class="tmdt-license-list">
+                                    <?php foreach ($row['license_files'] as $file): ?>
+                                        <?php if (!empty($file['url'])): ?>
+                                            <a class="tmdt-license-link" href="<?= $block->escapeUrl($file['url']) ?>" target="_blank" rel="noopener">
+                                                <?= $block->escapeHtml($file['name']) ?>
+                                            </a>
+                                        <?php else: ?>
+                                            <span class="tmdt-license-link"><?= $block->escapeHtml($file['name']) ?></span>
+                                        <?php endif; ?>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php else: ?>
+                                <span class="tmdt-field-value">Chua co tep dinh kem</span>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <div class="tmdt-actions">
+                        <?php if ($canReview): ?>
+                            <form method="post" action="<?= $block->escapeUrl($block->getApproveUrl((int) $row['registration_id'])) ?>">
+                                <input name="form_key" type="hidden" value="<?= $block->escapeHtmlAttr($block->getFormKey()) ?>" />
+                                <button type="submit" class="action-default scalable save">
+                                    <span>Duyet ho so</span>
+                                </button>
+                            </form>
+                            <form method="post" action="<?= $block->escapeUrl($block->getRejectUrl((int) $row['registration_id'])) ?>">
+                                <input name="form_key" type="hidden" value="<?= $block->escapeHtmlAttr($block->getFormKey()) ?>" />
+                                <button type="submit" class="action-default scalable delete">
+                                    <span>Tu choi</span>
+                                </button>
+                            </form>
+                        <?php else: ?>
+                            <span class="tmdt-field-value">Ho so da xu ly</span>
+                        <?php endif; ?>
+                    </div>
+                </section>
+            <?php endforeach; ?>
+        </div>
+    <?php else: ?>
+        <div class="tmdt-empty">Chua co ho so kinh doanh nao can hien thi.</div>
+    <?php endif; ?>
 </div>

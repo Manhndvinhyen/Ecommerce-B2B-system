@@ -19,7 +19,7 @@ use Magento\Framework\App\Cache\TypeListInterface;
 
 /**
  * SePay Webhook Controller
- * URL: /tmdt/webhook/sepay
+ * URL: /api/webhook/sepay
  */
 class Sepay extends Action implements HttpPostActionInterface, CsrfAwareActionInterface
 {
@@ -53,6 +53,13 @@ class Sepay extends Action implements HttpPostActionInterface, CsrfAwareActionIn
         $result = $this->jsonFactory->create();
 
         try {
+            // Restrict endpoint to only /api/webhook/sepay
+            $pathInfo = rtrim($this->getRequest()->getPathInfo(), '/');
+            if ($pathInfo !== '/api/webhook/sepay') {
+                $this->logger->warning('[SePay Webhook] Access attempt on invalid route', ['path' => $pathInfo]);
+                return $result->setData(['success' => false, 'message' => 'Endpoint not allowed']);
+            }
+
             // Read raw POST body
             $rawBody = $this->getRequest()->getContent();
             if (empty($rawBody)) {

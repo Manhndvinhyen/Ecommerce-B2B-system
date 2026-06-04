@@ -44,7 +44,7 @@
     <route url="/V1/tmdt-orders/create" method="POST">
         <service class="Tmdt\Catalog\Api\OrderManagementInterface" method="createOrder"/>
         <resources>
-            <resource ref="self"/>
+            <resource ref="anonymous"/>
         </resources>
     </route>
     <route url="/V1/tmdt-orders/status/:orderCode" method="GET">

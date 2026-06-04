@@ -16,12 +16,15 @@ export const AUTH_STORAGE_KEYS = [
 export const getStoredAuthToken = () =>
   window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
 
-export const clearStoredAuthSession = () => {
+export const clearStoredAuthSession = (options: { broadcastLogout?: boolean } = {}) => {
   AUTH_STORAGE_KEYS.forEach((key) => {
     window.localStorage.removeItem(key);
     window.sessionStorage.removeItem(key);
   });
-  window.localStorage.setItem('freso_last_logout', String(Date.now()));
+
+  if (options.broadcastLogout) {
+    window.localStorage.setItem('freso_last_logout', String(Date.now()));
+  }
 };
 
 export const persistAuthValue = (storage: Storage, key: string, value?: string) => {
@@ -79,7 +82,7 @@ export const buildLoggedOutUrl = () => {
 
 export const logoutCurrentDevice = async (targetUrl = buildLoggedOutUrl()) => {
   const token = getStoredAuthToken();
-  clearStoredAuthSession();
+  clearStoredAuthSession({ broadcastLogout: true });
   await revokeCurrentToken(token);
   window.location.href = targetUrl;
 };

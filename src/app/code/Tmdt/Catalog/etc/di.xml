@@ -3,10 +3,14 @@
     <preference for="Tmdt\Catalog\Api\ProductManagementInterface" type="Tmdt\Catalog\Model\ProductManagement" />
     <preference for="Tmdt\Catalog\Api\InventoryManagementInterface" type="Tmdt\Catalog\Model\InventoryManagement" />
     <preference for="Tmdt\Catalog\Api\OrderManagementInterface" type="Tmdt\Catalog\Model\OrderManagement" />
+    <preference for="Tmdt\Catalog\Api\RatesInterface" type="Tmdt\Catalog\Model\Rates" />
+    <preference for="Tmdt\Catalog\Api\RecurringInterface" type="Tmdt\Catalog\Model\Recurring" />
 
-    <type name="Magento\Framework\App\Router\ActionList">
-        <plugin name="tmdt_catalog_action_list_hyphen_resolver"
-                type="Tmdt\Catalog\Plugin\ActionListPlugin"
-                sortOrder="10"/>
+    <type name="Magento\Framework\Console\CommandList">
+        <arguments>
+            <argument name="commands" xsi:type="array">
+                <item name="tmdt_recurring_process" xsi:type="object">Tmdt\Catalog\Console\Command\ProcessRecurringOrders</item>
+            </argument>
+        </arguments>
     </type>
 </config>

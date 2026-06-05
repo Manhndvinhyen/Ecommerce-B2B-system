@@ -5,6 +5,7 @@ import { WishlistAddModal, WishlistModalProduct } from './WishlistAddModal';
 import { useCart, toCurrencyTextFromNumber, toUnitPriceFromLooseValue } from '../cart/CartProvider';
 import { toQuerySlug } from '../data/categories';
 import { applySeo, buildBreadcrumbJsonLd, buildProductJsonLd, getSiteName } from '../utils/seo';
+import { getMockSupplierForProduct } from '../data/mockSuppliers';
 
 type WholesaleTier = {
   qty: number;
@@ -47,6 +48,20 @@ const getMagentoMediaImageUrl = (file?: string | null) => {
   return `${window.location.origin}/media/catalog/product${normalizedFile}`;
 };
 
+const fixMagentoUrl = (url?: string | null) => {
+  if (!url || !url.trim()) return '';
+  if (typeof window === 'undefined') return url;
+  try {
+    const parsed = new URL(url);
+    if (parsed.pathname.includes('/media/catalog/product')) {
+      return `${window.location.origin}${parsed.pathname}`;
+    }
+    return url;
+  } catch {
+    return url;
+  }
+};
+
 const getBestMagentoProductImage = (
   product: {
     small_image?: { url?: string | null } | null;
@@ -62,8 +77,8 @@ const getBestMagentoProductImage = (
 
   const candidates = [
     getMagentoMediaImageUrl(galleryImage?.file),
-    product.small_image?.url ?? '',
-    product.thumbnail?.url ?? ''
+    fixMagentoUrl(product.small_image?.url),
+    fixMagentoUrl(product.thumbnail?.url)
   ];
 
   return candidates.find((value) => value && !value.toLowerCase().includes('/placeholder/')) || '';
@@ -162,7 +177,6 @@ export function ProductDetailPage() {
   const [isAddingToCart, setIsAddingToCart] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [wishlistProduct, setWishlistProduct] = useState<WishlistModalProduct | null>(null);
-  const holdTimerRef = useRef<number | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
 
   const activeTier = useMemo(() => {
@@ -187,17 +201,6 @@ export function ProductDetailPage() {
     window.localStorage.getItem('freso_customer_token') ||
       window.sessionStorage.getItem('freso_customer_token')
   );
-
-  const stopHold = () => {
-    if (holdTimerRef.current) {
-      window.clearInterval(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
-  };
-
-  useEffect(() => {
-    return () => stopHold();
-  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -240,6 +243,11 @@ export function ProductDetailPage() {
                   final_price { value }
                 }
               }
+              price_tiers {
+                quantity
+                discount { percent_off }
+                final_price { value }
+              }
               country_of_manufacture
             }
           }
@@ -262,6 +270,11 @@ export function ProductDetailPage() {
                 minimum_price {
                   final_price { value }
                 }
+              }
+              price_tiers {
+                quantity
+                discount { percent_off }
+                final_price { value }
               }
               country_of_manufacture
             }
@@ -346,7 +359,7 @@ export function ProductDetailPage() {
           unit: localCustomFields.unit || fallbackProduct.unit,
           origin: localCustomFields.origin || item.country_of_manufacture || fallbackProduct.origin,
           note: localCustomFields.note || shortDescriptionText || fallbackProduct.note,
-          price: localCustomFields.price || price,
+          price: localCustomFields.price ? Number(String(localCustomFields.price).replace(/[^\d.-]/g, '')) : price,
           category: pickCategoryName(item.categories),
           image: resolvedImage,
           description: {
@@ -355,8 +368,14 @@ export function ProductDetailPage() {
             storage: localCustomFields.description?.storage || parsed.storage || fallbackProduct.description.storage,
             expiry: localCustomFields.description?.expiry || parsed.expiry || fallbackProduct.description.expiry
           },
-          wholesale_tiers: localCustomFields.wholesale_tiers || item.wholesale_tiers || [],
-          store_name: localCustomFields.store_name
+          wholesale_tiers: localCustomFields.wholesale_tiers || item.wholesale_tiers || (item.price_tiers ? item.price_tiers.map((t: any) => ({
+            qty: t.quantity,
+            discount: t.discount?.percent_off || Math.round((1 - (t.final_price?.value / price)) * 100)
+          })) : []),
+          store_name: localCustomFields.store_name || (() => {
+            const supplier = getMockSupplierForProduct(item.sku, pickCategoryName(item.categories));
+            return `${supplier.name} · ${supplier.region}`;
+          })()
         });
       } catch (error) {
         if (controller.signal.aborted) {
@@ -383,7 +402,7 @@ export function ProductDetailPage() {
                 unit: localProd.unit || 'kg',
                 origin: localProd.origin || 'Việt Nam',
                 note: localProd.note || 'Sản phẩm sỉ B2B',
-                price: localProd.price,
+                price: localProd.price ? Number(String(localProd.price).replace(/[^\d.-]/g, '')) : 0,
                 category: localProd.categoryLabel || 'Sản phẩm sỉ',
                 image: localImage,
                 description: {
@@ -393,7 +412,10 @@ export function ProductDetailPage() {
                   expiry: localProd.description?.expiry || 'Sử dụng tốt nhất trong vòng 3 - 7 ngày kể từ ngày giao hàng.'
                 },
                 wholesale_tiers: localProd.wholesale_tiers || [],
-                store_name: localProd.store_name || 'Cửa hàng sỉ Freso'
+                store_name: localProd.store_name || (() => {
+                  const supplier = getMockSupplierForProduct(localProd.sku, localProd.categoryLabel || 'Sản phẩm sỉ');
+                  return `${supplier.name} · ${supplier.region}`;
+                })()
               });
               return;
             }
@@ -459,12 +481,6 @@ export function ProductDetailPage() {
     });
   }, [product]);
 
-  const startHold = (delta: number) => {
-    updateQuantity(delta);
-    stopHold();
-    holdTimerRef.current = window.setInterval(() => updateQuantity(delta), 120);
-  };
-
   const handleAddToCart = async () => {
     if (!product || isAddingToCart) {
       return;
@@ -483,7 +499,8 @@ export function ProductDetailPage() {
           priceText: toCurrencyTextFromNumber(currentUnitPrice),
           unit: product.unit,
           unitPrice: currentUnitPrice,
-          image: product.image
+          image: product.image,
+          supplierLabel: product.store_name
         },
         quantity,
         sourceElement
@@ -594,7 +611,7 @@ export function ProductDetailPage() {
                     </div>
                     {product.store_name && (
                       <div className="flex justify-between border-b border-dashed border-gray-200 pb-2">
-                        <dt className="text-gray-500">Bán bởi</dt>
+                        <dt className="text-gray-500">Nhà cung cấp</dt>
                         <dd className="font-extrabold text-green-700">{product.store_name}</dd>
                       </div>
                     )}
@@ -668,11 +685,7 @@ export function ProductDetailPage() {
                     <div className="inline-flex items-center rounded-full border border-gray-300 bg-white">
                       <button
                         type="button"
-                        onMouseDown={() => startHold(-1)}
-                        onMouseUp={stopHold}
-                        onMouseLeave={stopHold}
-                        onTouchStart={() => startHold(-1)}
-                        onTouchEnd={stopHold}
+                        onClick={() => updateQuantity(-1)}
                         className="px-4 py-2 text-gray-500 hover:text-green-700"
                         aria-label="Giảm số lượng"
                       >
@@ -683,11 +696,7 @@ export function ProductDetailPage() {
                       </span>
                       <button
                         type="button"
-                        onMouseDown={() => startHold(1)}
-                        onMouseUp={stopHold}
-                        onMouseLeave={stopHold}
-                        onTouchStart={() => startHold(1)}
-                        onTouchEnd={stopHold}
+                        onClick={() => updateQuantity(1)}
                         className="px-4 py-2 text-gray-500 hover:text-green-700"
                         aria-label="Tăng số lượng"
                       >

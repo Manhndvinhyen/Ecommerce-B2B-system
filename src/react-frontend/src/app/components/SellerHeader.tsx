@@ -111,17 +111,24 @@ export function SellerHeader() {
     const normalized = value.trim().toLowerCase();
     return normalized === '1' || normalized === 'true' || normalized === 'yes';
   };
-  const visibleMenuItems = adminMenuItems.filter((item) => {
-    if (item.id === 'dashboard') {
-      return false;
-    }
+  const visibleMenuItems = useMemo(() => {
+    const sellerMenuItemIds = new Set([
+      'profile-seller',
+      'nhan-vien',
+      'quan-ly-san-pham',
+      'quan-ly-gio-hang',
+      'quan-ly-kho',
+      'don-hang',
+      'bao-gia'
+    ]);
 
-    if (item.id === 'nhan-vien') {
-      return canManageBranches;
-    }
-
-    return true;
-  });
+    return adminMenuItems.filter((item) => {
+      if (item.id === 'nhan-vien') {
+        return canManageBranches;
+      }
+      return sellerMenuItemIds.has(item.id);
+    });
+  }, [canManageBranches]);
 
   const logoutAndBackHome = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();

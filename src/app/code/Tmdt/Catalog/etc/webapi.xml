@@ -44,11 +44,17 @@
     <route url="/V1/tmdt-orders/create" method="POST">
         <service class="Tmdt\Catalog\Api\OrderManagementInterface" method="createOrder"/>
         <resources>
-            <resource ref="self"/>
+            <resource ref="anonymous"/>
         </resources>
     </route>
     <route url="/V1/tmdt-orders/status/:orderCode" method="GET">
         <service class="Tmdt\Catalog\Api\OrderManagementInterface" method="getOrderStatus"/>
+        <resources>
+            <resource ref="anonymous"/>
+        </resources>
+    </route>
+    <route url="/V1/tmdt-orders/warehouses" method="GET">
+        <service class="Tmdt\Catalog\Api\OrderManagementInterface" method="getWarehouses"/>
         <resources>
             <resource ref="anonymous"/>
         </resources>
@@ -77,6 +83,32 @@
         <service class="Tmdt\Catalog\Api\ProductManagementInterface" method="getSellerOrders"/>
         <resources>
             <resource ref="self"/>
+        </resources>
+    </route>
+    <!-- Currency Rates REST API -->
+    <route url="/V1/tmdt-catalog/rates" method="GET">
+        <service class="Tmdt\Catalog\Api\RatesInterface" method="getRates"/>
+        <resources>
+            <resource ref="anonymous"/>
+        </resources>
+    </route>
+    <!-- Recurring Orders / Subscriptions REST API -->
+    <route url="/V1/tmdt-recurring/subscribe" method="POST">
+        <service class="Tmdt\Catalog\Api\RecurringInterface" method="subscribe"/>
+        <resources>
+            <resource ref="anonymous"/>
+        </resources>
+    </route>
+    <route url="/V1/tmdt-recurring/list" method="GET">
+        <service class="Tmdt\Catalog\Api\RecurringInterface" method="listSubscriptions"/>
+        <resources>
+            <resource ref="anonymous"/>
+        </resources>
+    </route>
+    <route url="/V1/tmdt-recurring/cancel" method="POST">
+        <service class="Tmdt\Catalog\Api\RecurringInterface" method="cancelSubscription"/>
+        <resources>
+            <resource ref="anonymous"/>
         </resources>
     </route>
     <!-- NOTE: Webhook is handled by Controller at /tmdt/webhook/sepay (not REST API) -->

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Heart, Plus, ShoppingCart, Trash2 } from 'lucide-react';
+import { Heart, Plus, ShoppingCart, Trash2, Package } from 'lucide-react';
 import { toCurrencyTextFromNumber, toUnitPriceFromLooseValue, useCart } from '../cart/CartProvider';
 import { createWishlistList, getWishlistItems, getWishlistLists, removeWishlistItem } from '../utils/wishlistApi';
 
@@ -231,24 +231,35 @@ export function WishlistPage() {
                   ))}
                 </div>
               ) : (
-                lists.map((list) => (
-                  <button
-                    key={list.id}
-                    type="button"
-                    onClick={() => setActiveListId(list.id)}
-                    className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-sm transition-colors ${
-                      list.id === activeListId
-                        ? 'border-green-500 bg-green-50 text-green-700'
-                        : 'border-gray-200 text-gray-700 hover:border-green-300 hover:bg-green-50/70'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <Heart className="size-4" />
-                      {list.name}
-                    </span>
-                    <span className="text-xs text-gray-500">{list.itemCount}</span>
-                  </button>
-                ))
+                lists.map((list) => {
+                  const isActive = list.id === activeListId;
+                  return (
+                    <button
+                      key={list.id}
+                      type="button"
+                      onClick={() => setActiveListId(list.id)}
+                      className={`flex w-full items-center gap-3 rounded-xl p-3 text-left transition-all duration-200 ${
+                        isActive
+                          ? 'border-2 border-[#0f8a49] bg-white shadow-xs'
+                          : 'border border-gray-100 bg-white hover:bg-gray-50/60'
+                      }`}
+                    >
+                      <div className={`flex items-center justify-center size-10 rounded-xl shrink-0 transition-colors ${
+                        isActive ? 'bg-[#eefcf4] text-[#0f8a49]' : 'bg-gray-100 text-gray-400'
+                      }`}>
+                        <Package className="size-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-bold truncate ${isActive ? 'text-[#0f8a49]' : 'text-gray-900'}`}>
+                          {list.name}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {list.itemCount} sản phẩm
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })
               )}
             </div>
 
@@ -269,18 +280,8 @@ export function WishlistPage() {
           </aside>
 
           <section className="space-y-4">
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-xl font-semibold text-gray-900">{activeList?.name ?? 'Danh sách'}</h2>
-                {activeList && !isDetailView && (
-                  <a
-                    href={`${reactHomePath}?view=wishlist&listId=${encodeURIComponent(activeList.id)}`}
-                    className="rounded-full border border-green-600 px-4 py-2 text-sm font-semibold text-green-700 hover:bg-green-50"
-                  >
-                    Xem chi tiết
-                  </a>
-                )}
-              </div>
+            <div className="flex items-center justify-between pb-1">
+              <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">{activeList?.name ?? 'Danh sách'}</h2>
             </div>
 
             {isLoadingItems && (
@@ -292,25 +293,72 @@ export function WishlistPage() {
             )}
 
             {isEmpty && (
-              <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center">
-                <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-green-50 text-green-600">
-                  <Heart className="size-8" />
-                </div>
-                <p className="text-base font-semibold text-gray-700">
-                  Bạn chưa có sản phẩm yêu thích nào trong danh sách '{activeList?.name ?? ''}'
+              <div className="flex flex-col items-center justify-center py-16 px-4 text-center bg-white rounded-2xl border border-gray-100 shadow-xs">
+                {/* SVG Illustration */}
+                <svg width="280" height="220" viewBox="0 0 280 220" fill="none" xmlns="http://www.w3.org/2000/svg" className="mx-auto mb-6 max-w-full">
+                  {/* Background soft glow */}
+                  <defs>
+                    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+                      <stop offset="0%" stopColor="#f0fdf4" stopOpacity="1" />
+                      <stop offset="100%" stopColor="#f0fdf4" stopOpacity="0" />
+                    </radialGradient>
+                  </defs>
+                  <circle cx="140" cy="120" r="90" fill="url(#glow)" />
+                  <circle cx="70" cy="70" r="16" fill="#eff6ff" />
+                  <circle cx="210" cy="150" r="20" fill="#fdf2f8" />
+                  <circle cx="220" cy="75" r="10" fill="#fef3c7" />
+
+                  {/* Shopping Basket */}
+                  <path d="M100 120V95C100 72.9086 117.909 55 140 55C162.091 55 180 72.9086 180 95V120" stroke="#e2e8f0" strokeWidth="4" strokeLinecap="round" />
+                  <path d="M110 120V95C110 78.4315 123.431 65 140 65C156.569 65 170 78.4315 170 95V120" stroke="#cbd5e1" strokeWidth="3" strokeLinecap="round" />
+                  
+                  <path d="M80 120H200L185 180H95L80 120Z" fill="white" stroke="#cbd5e1" strokeWidth="3" strokeLinejoin="round" />
+                  <path d="M83 125H197L186 170H94L83 125Z" fill="#f8fafc" />
+
+                  {/* Basket stripes */}
+                  <line x1="110" y1="130" x2="115" y2="165" stroke="#cbd5e1" strokeWidth="3" strokeLinecap="round" />
+                  <line x1="140" y1="130" x2="140" y2="165" stroke="#cbd5e1" strokeWidth="3" strokeLinecap="round" />
+                  <line x1="170" y1="130" x2="165" y2="165" stroke="#cbd5e1" strokeWidth="3" strokeLinecap="round" />
+                  <line x1="90" y1="148" x2="190" y2="148" stroke="#cbd5e1" strokeWidth="2.5" strokeLinecap="round" />
+
+                  {/* Floating elements */}
+                  <path d="M64 68C64 65.7909 65.7909 64 68 64C70.2091 64 72 65.7909 72 68C72 70.5 69.5 73 68 74.5C66.5 73 64 70.5 64 68Z" fill="#ec4899" />
+                  <path d="M208 146C208 143.791 209.791 142 212 142C214.209 142 216 143.791 216 146C216 148.5 213.5 151 212 152.5C210.5 151 208 148.5 208 146Z" fill="#3b82f6" />
+                  
+                  {/* Sparkles */}
+                  <path d="M220 75L222 72L225 75L222 78L220 75Z" fill="#fbbf24" />
+                  <path d="M70 70L71 67L73 70L71 73L70 70Z" fill="#34d399" />
+
+                  {/* Character leaning */}
+                  {/* Legs */}
+                  <path d="M175 140L190 185H178L168 148" fill="#1e3a8a" opacity="0.8" />
+                  <path d="M162 135L178 185H166L155 142" fill="#1d4ed8" />
+                  {/* Body */}
+                  <path d="M165 110C165 102 170 95 178 95C186 95 190 102 190 110V140H165V110Z" fill="#ec4899" />
+                  {/* Arms */}
+                  <path d="M162 118C158 122 155 128 152 132L156 135" stroke="#f472b6" strokeWidth="3" strokeLinecap="round" />
+                  <path d="M178 118C182 122 186 128 188 132" stroke="#f472b6" strokeWidth="3" strokeLinecap="round" />
+                  {/* Phone */}
+                  <rect x="145" y="125" width="8" height="14" rx="2" fill="#1e293b" stroke="#94a3b8" strokeWidth="1" />
+                  <circle cx="149" cy="137" r="0.75" fill="white" />
+                  {/* Head */}
+                  <circle cx="178" cy="85" r="10" fill="#fed7aa" />
+                  <path d="M168 85C168 78 172 75 178 75C184 75 188 78 188 85C188 87 182 86 178 89C174 86 168 87 168 85Z" fill="#1e293b" />
+                </svg>
+
+                <h3 className="text-lg font-bold text-gray-800 mb-2">
+                  Bạn chưa có sản phẩm yêu thích nào trong danh sách "{activeList?.name ?? ''}"
+                </h3>
+                <p className="text-sm text-gray-500 max-w-md mb-6 leading-relaxed">
+                  Hãy khám phá ngay những sản phẩm mới nhất của Freso và thêm ngay vào danh sách yêu thích nhé!
                 </p>
-                <p className="mt-2 text-sm text-gray-500">
-                  Hãy khám phá ngay những sản phẩm mới nhất và thêm vào danh sách yêu thích nhé!
-                </p>
-                {!isDetailView && (
-                  <button
-                    type="button"
-                    onClick={() => (window.location.href = reactHomePath)}
-                    className="mt-5 rounded-full bg-green-600 px-6 py-2 text-sm font-semibold text-white hover:bg-green-700"
-                  >
-                    Khám phá ngay
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => (window.location.href = reactHomePath)}
+                  className="rounded-full bg-[#0f8a49] hover:bg-[#0c703b] px-8 py-3 text-sm font-bold text-white transition-all shadow-md shadow-green-600/10 active:scale-95"
+                >
+                  Khám phá ngay
+                </button>
               </div>
             )}
 

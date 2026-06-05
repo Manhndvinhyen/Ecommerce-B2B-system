@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Heart, ChevronRight, ShoppingCart } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
-import { toCurrencyTextFromLooseValue, toUnitPriceFromLooseValue, useCart } from '../cart/CartProvider';
+import { toCurrencyTextFromLooseValue, toUnitPriceFromLooseValue, toCurrencyTextFromNumber, useCart } from '../cart/CartProvider';
 
 const hotProducts = [
   {
@@ -145,16 +145,30 @@ const getMagentoMediaImageUrl = (file?: string | null) => {
   return `${window.location.origin}/media/catalog/product${normalizedFile}`;
 };
 
-const pickMagentoProductImage = (product: GraphQlProductItem, fallbackImage: string) => {
-  const galleryImage = (product.media_gallery_entries ?? []).find((entry) => {
+const fixMagentoUrl = (url?: string | null) => {
+  if (!url || !url.trim()) return '';
+  if (typeof window === 'undefined') return url;
+  try {
+    const parsed = new URL(url);
+    if (parsed.pathname.includes('/media/catalog/product')) {
+      return `${window.location.origin}${parsed.pathname}`;
+    }
+    return url;
+  } catch {
+    return url;
+  }
+};
+
+const pickMagentoProductImage = (product: any, fallback: string) => {
+  const galleryImage = (product?.media_gallery_entries ?? []).find((entry: any) => {
     const file = entry.file?.trim() ?? '';
     return file && !file.toLowerCase().includes('placeholder');
   });
 
   const candidates = [
     getMagentoMediaImageUrl(galleryImage?.file),
-    product.small_image?.url ?? '',
-    product.thumbnail?.url ?? '',
+    fixMagentoUrl(product?.small_image?.url),
+    fixMagentoUrl(product?.thumbnail?.url)
   ];
 
   return candidates.find((value) => value && !value.toLowerCase().includes('/placeholder/')) || '';
@@ -436,7 +450,7 @@ export function HotProducts() {
                     </button>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <p className="text-red-500 font-bold">{product.price}</p>
+                    <p className="text-red-500 font-bold">{toCurrencyTextFromLooseValue(product.price)}</p>
                     <p className="text-xs text-gray-500">({product.unit}) - Chưa bao gồm VAT</p>
                   </div>
                 </div>

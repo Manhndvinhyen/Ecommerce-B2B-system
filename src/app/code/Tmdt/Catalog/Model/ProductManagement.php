@@ -114,14 +114,31 @@ class ProductManagement implements ProductManagementInterface
                 $product->setCategoryIds($categoryIds);
             }
 
-            // Save Product
-            $this->productRepository->save($product);
-
             // Handle Base64 image upload if set
             if (!empty($data['image'])) {
                 $this->processBase64Image($product, $data['image']);
-                $this->productRepository->save($product);
             }
+
+            // Save wholesale tiers
+            if (isset($data['wholesale_tiers']) && is_array($data['wholesale_tiers'])) {
+                $tierPrices = [];
+                $tierPriceFactory = \Magento\Framework\App\ObjectManager::getInstance()->get(\Magento\Catalog\Api\Data\ProductTierPriceInterfaceFactory::class);
+                foreach ($data['wholesale_tiers'] as $tier) {
+                    $qty = isset($tier['qty']) ? (float)$tier['qty'] : 0;
+                    $discountPercent = isset($tier['discount']) ? (float)$tier['discount'] : 0;
+                    if ($qty > 0 && $discountPercent > 0 && $discountPercent <= 100) {
+                        $tierPriceValue = (float)$product->getPrice() * (1 - ($discountPercent / 100));
+                        $tierPrice = $tierPriceFactory->create();
+                        $tierPrice->setCustomerGroupId(\Magento\Customer\Model\Group::CUST_GROUP_ALL);
+                        $tierPrice->setQty($qty);
+                        $tierPrice->setValue($tierPriceValue);
+                        $tierPrices[] = $tierPrice;
+                    }
+                }
+                $product->setTierPrices($tierPrices);
+            }
+
+            $this->productRepository->save($product);
 
             // Set Stock level natively
             $qty = isset($data['qty']) ? (float) $data['qty'] : 0.0;
@@ -207,6 +224,25 @@ class ProductManagement implements ProductManagementInterface
             // Handle Base64 image upload if set
             if (!empty($data['image'])) {
                 $this->processBase64Image($product, $data['image']);
+            }
+
+            // Save wholesale tiers
+            if (isset($data['wholesale_tiers']) && is_array($data['wholesale_tiers'])) {
+                $tierPrices = [];
+                $tierPriceFactory = \Magento\Framework\App\ObjectManager::getInstance()->get(\Magento\Catalog\Api\Data\ProductTierPriceInterfaceFactory::class);
+                foreach ($data['wholesale_tiers'] as $tier) {
+                    $qty = isset($tier['qty']) ? (float)$tier['qty'] : 0;
+                    $discountPercent = isset($tier['discount']) ? (float)$tier['discount'] : 0;
+                    if ($qty > 0 && $discountPercent > 0 && $discountPercent <= 100) {
+                        $tierPriceValue = (float)$product->getPrice() * (1 - ($discountPercent / 100));
+                        $tierPrice = $tierPriceFactory->create();
+                        $tierPrice->setCustomerGroupId(\Magento\Customer\Model\Group::CUST_GROUP_ALL);
+                        $tierPrice->setQty($qty);
+                        $tierPrice->setValue($tierPriceValue);
+                        $tierPrices[] = $tierPrice;
+                    }
+                }
+                $product->setTierPrices($tierPrices);
             }
 
             $this->productRepository->save($product);
@@ -349,19 +385,67 @@ class ProductManagement implements ProductManagementInterface
         ";
         
         $results = $connection->fetchAll($query, ['seller_id' => $sellerId]);
+        
+        $productIds = [];
+        foreach ($results as $row) {
+            $productIds[] = (int) $row['id'];
+        }
+
+        // Fetch Tier Prices
+        $tierPricesByProductId = [];
+        if (!empty($productIds)) {
+            $tierPriceTable = $connection->getTableName('catalog_product_entity_tier_price');
+            $tierPricesQuery = "
+                SELECT entity_id, qty, value 
+                FROM {$tierPriceTable} 
+                WHERE entity_id IN (" . implode(',', $productIds) . ")
+            ";
+            $tierRows = $connection->fetchAll($tierPricesQuery);
+            foreach ($tierRows as $row) {
+                $pId = (int)$row['entity_id'];
+                if (!isset($tierPricesByProductId[$pId])) {
+                    $tierPricesByProductId[$pId] = [];
+                }
+                $tierPricesByProductId[$pId][] = [
+                    'qty' => (float)$row['qty'],
+                    'value' => (float)$row['value']
+                ];
+            }
+        }
+
         $products = [];
         
         foreach ($results as $row) {
+            $productId = (int) $row['id'];
+            $basePrice = $row['price'] !== null ? (float) $row['price'] : 0.0;
+            
+            $wholesaleTiers = [];
+            if (isset($tierPricesByProductId[$productId]) && $basePrice > 0) {
+                foreach ($tierPricesByProductId[$productId] as $t) {
+                    $discount = round((1 - ($t['value'] / $basePrice)) * 100);
+                    if ($discount > 0) {
+                        $wholesaleTiers[] = [
+                            'qty' => $t['qty'],
+                            'discount' => $discount
+                        ];
+                    }
+                }
+                usort($wholesaleTiers, function($a, $b) {
+                    return $a['qty'] <=> $b['qty'];
+                });
+            }
+
             $products[] = [
-                'id' => (int) $row['id'],
+                'id' => $productId,
                 'sku' => (string) $row['sku'],
                 'name' => (string) $row['name'],
-                'price' => $row['price'] !== null ? (float) $row['price'] : 0.0,
+                'price' => $basePrice,
                 'special_price' => $row['special_price'] !== null ? (float) $row['special_price'] : null,
                 'qty' => $row['qty'] !== null ? (float) $row['qty'] : 0.0,
                 'is_in_stock' => $row['is_in_stock'] !== null ? (bool) $row['is_in_stock'] : false,
                 'unit' => (string) $row['unit'],
-                'image' => $row['image'] ? '/media/catalog/product/' . ltrim((string) $row['image'], '/') : ''
+                'image' => $row['image'] ? '/media/catalog/product/' . ltrim((string) $row['image'], '/') : '',
+                'wholesale_tiers' => $wholesaleTiers
             ];
         }
         

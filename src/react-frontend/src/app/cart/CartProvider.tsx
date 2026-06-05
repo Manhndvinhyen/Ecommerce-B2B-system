@@ -2,6 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { PropsWithChildren } from 'react';
 import { CheckCircle2, Minus, Plus, X } from 'lucide-react';
 import { clearStoredAuthSession } from '../utils/authSession';
+import { inferCategoryFromSku } from '../data/categories';
+import { getMockSupplierForProduct } from '../data/mockSuppliers';
 
 export type AddToCartProduct = {
   id: string;
@@ -12,6 +14,9 @@ export type AddToCartProduct = {
   unit: string;
   unitPrice: number;
   image: string;
+  supplierName?: string;
+  supplierRegion?: string;
+  supplierLabel?: string;
 };
 
 export type CartLineItem = {
@@ -27,6 +32,8 @@ export type CartLineItem = {
   quantity: number;
   selected: boolean;
   note: string;
+  supplierName?: string;
+  supplierRegion?: string;
 };
 
 type MagentoCartItem = {
@@ -38,6 +45,7 @@ type MagentoCartItem = {
     categories?: Array<{ name?: string | null }> | null;
     small_image?: { url?: string | null } | null;
     thumbnail?: { url?: string | null } | null;
+    media_gallery_entries?: Array<{ file?: string | null; disabled?: boolean | null }> | null;
     price_range?: {
       minimum_price?: {
         final_price?: { value?: number | null } | null;
@@ -60,7 +68,43 @@ type CartContextValue = {
 
 const CartContext = createContext<CartContextValue | null>(null);
 
-const formatCurrency = (value: number) => `${new Intl.NumberFormat('vi-VN').format(Math.round(value))}đ`;
+const formatCurrency = (value: number) => {
+  if (typeof window === 'undefined') {
+    return `${new Intl.NumberFormat('vi-VN').format(Math.round(value))}đ`;
+  }
+  const target = window.localStorage.getItem('freso_selected_currency') || 'VND';
+  if (target === 'VND') {
+    return `${new Intl.NumberFormat('vi-VN').format(Math.round(value))}đ`;
+  }
+
+  const ratesRaw = window.localStorage.getItem('freso_currency_rates');
+  let rates: any = null;
+  if (ratesRaw) {
+    try {
+      rates = JSON.parse(ratesRaw);
+    } catch {
+      rates = null;
+    }
+  }
+
+  if (rates && rates[target]) {
+    const rateInfo = rates[target];
+    const rate = rateInfo.sell || rateInfo.transfer || 1;
+    const converted = rate > 0 ? value / rate : value;
+    try {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: target,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(converted);
+    } catch {
+      return `${new Intl.NumberFormat('en-US').format(converted)} ${target}`;
+    }
+  }
+
+  return `${new Intl.NumberFormat('vi-VN').format(Math.round(value))}đ`;
+};
 
 const clampQuantity = (value: number) => Math.max(1, Math.floor(value));
 
@@ -102,11 +146,127 @@ const clearCustomerAuthSession = () => {
 let activeCustomerCartIdRequest: Promise<string> | null = null;
 let activeCustomerCartItemsRequest: Promise<MagentoCartItem[]> | null = null;
 let activeAddToCartRequest: Promise<MagentoCartItem[]> | null = null;
+const cartSupplierMapStorageKey = 'freso_cart_supplier_map';
 
 function parseNumberFromText(value: string): number {
   const digits = value.replace(/[^\d]/g, '');
   return digits ? Number.parseInt(digits, 10) : 0;
 }
+
+const parseSupplierLabel = (label?: string) => {
+  const parts = String(label || '')
+    .split('·')
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return {
+    supplierName: parts[0] || '',
+    supplierRegion: parts.slice(1).join(' · ')
+  };
+};
+
+const getSupplierForCartProduct = (product: Pick<AddToCartProduct, 'sku' | 'category'> & Partial<AddToCartProduct>) => {
+  const fromLabel = parseSupplierLabel(product.supplierLabel);
+  const fallback = getMockSupplierForProduct(product.sku, product.category);
+  const productSupplierName = product.supplierName || fromLabel.supplierName;
+  const productSupplierRegion = product.supplierRegion || fromLabel.supplierRegion;
+  const shouldUseFallbackSupplier =
+    fallback.name === 'Tổng công ty Chăn nuôi CP Việt Nam' &&
+    (!productSupplierName ||
+      productSupplierName === 'Tổng kho sỉ Thực phẩm B2B' ||
+      productSupplierName === 'Tổng công ty Chăn nuôi CP Việt Nam');
+
+  return {
+    supplierName: shouldUseFallbackSupplier ? fallback.name : productSupplierName || fallback.name,
+    supplierRegion: shouldUseFallbackSupplier ? fallback.region : productSupplierRegion || fallback.region
+  };
+};
+
+const readStoredSupplierMap = (): Record<string, { supplierName?: string; supplierRegion?: string }> => {
+  if (typeof window === 'undefined') {
+    return {};
+  }
+
+  try {
+    return JSON.parse(window.localStorage.getItem(cartSupplierMapStorageKey) || '{}');
+  } catch {
+    return {};
+  }
+};
+
+const storeSupplierForProduct = (product: AddToCartProduct) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const sku = (product.sku ?? '').trim().toLowerCase();
+  if (!sku) {
+    return;
+  }
+
+  const supplier = getSupplierForCartProduct(product);
+  try {
+    window.localStorage.setItem(
+      cartSupplierMapStorageKey,
+      JSON.stringify({
+        ...readStoredSupplierMap(),
+        [sku]: supplier
+      })
+    );
+  } catch {
+    // ignore storage errors
+  }
+};
+
+export const formatCartSupplierLabel = (item: Pick<CartLineItem, 'sku' | 'category'> & Partial<CartLineItem>) => {
+  const fallback = getMockSupplierForProduct(item.sku, item.category);
+  const shouldUseFallbackSupplier =
+    fallback.name === 'Tổng công ty Chăn nuôi CP Việt Nam' &&
+    (!item.supplierName ||
+      item.supplierName === 'Tổng kho sỉ Thực phẩm B2B' ||
+      item.supplierName === 'Tổng công ty Chăn nuôi CP Việt Nam');
+  const supplierName = shouldUseFallbackSupplier ? fallback.name : item.supplierName || fallback.name;
+  const supplierRegion = shouldUseFallbackSupplier ? fallback.region : item.supplierRegion || fallback.region;
+
+  return [supplierName, supplierRegion].filter(Boolean).join(' · ');
+};
+
+const getLocalCustomProducts = () => {
+  if (typeof window === 'undefined') return [];
+  const customLocalRaw = window.localStorage.getItem('freso_custom_products');
+  if (!customLocalRaw) return [];
+  try {
+    return JSON.parse(customLocalRaw);
+  } catch {
+    return [];
+  }
+};
+
+const applyWholesaleDiscountToLocalItem = (item: CartLineItem, newQuantity: number): CartLineItem => {
+  const customLocalProducts = getLocalCustomProducts();
+  const productSku = (item.sku ?? '').trim().toLowerCase();
+  const matchingProduct = customLocalProducts.find((p: any) => (p.sku ?? '').trim().toLowerCase() === productSku);
+  
+  if (!matchingProduct) {
+    return { ...item, quantity: newQuantity };
+  }
+  
+  const originalPrice = Number(matchingProduct.price);
+  const tiers = matchingProduct.wholesale_tiers || [];
+  const activeTier = tiers
+    .filter((t: any) => newQuantity >= t.qty)
+    .sort((a: any, b: any) => b.qty - a.qty)[0];
+
+  const discountPercent = activeTier ? activeTier.discount : 0;
+  const unitPrice = originalPrice * (1 - discountPercent / 100);
+  
+  return {
+    ...item,
+    quantity: newQuantity,
+    unitPrice,
+    priceText: formatCurrency(unitPrice)
+  };
+};
 
 export function CartProvider({ children }: PropsWithChildren) {
   const [cartItems, setCartItems] = useState<CartLineItem[]>([]);
@@ -306,6 +466,7 @@ export function CartProvider({ children }: PropsWithChildren) {
 
   const mapMagentoCartItems = useCallback((items: MagentoCartItem[] = []): CartLineItem[] => {
     const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
+    const storedSupplierMap = readStoredSupplierMap();
     let customLocalProducts: any[] = [];
     if (customLocalRaw) {
       try {
@@ -335,11 +496,44 @@ export function CartProvider({ children }: PropsWithChildren) {
       const unitPrice = originalPrice * (1 - discountPercent / 100);
       const category =
         product.categories?.find((cat) => cat?.name)?.name ??
-        (matchingProduct?.categoryLabel || '');
+        matchingProduct?.categoryLabel ??
+        (inferCategoryFromSku(product.sku ?? '')?.category || 'Rau củ quả');
       const unit = matchingProduct?.unit || 'kg';
+      const supplier = getSupplierForCartProduct({
+        sku: product.sku ?? matchingProduct?.sku ?? '',
+        category,
+        supplierName: storedSupplierMap[productSku]?.supplierName,
+        supplierRegion: storedSupplierMap[productSku]?.supplierRegion,
+        supplierLabel: matchingProduct?.store_name
+      });
 
-      // Prioritise seller-uploaded image; only use Magento image if it's not a placeholder
-      const rawImage = product.small_image?.url || product.thumbnail?.url || '';
+      const galleryImage = (product.media_gallery_entries ?? []).find((entry) => {
+        const file = entry.file?.trim() ?? '';
+        return file && !file.toLowerCase().includes('placeholder');
+      });
+
+      const getMagentoMediaImageUrl = (file?: string | null) => {
+        if (!file || !file.trim()) return '';
+        const normalizedFile = file.startsWith('/') ? file : `/${file}`;
+        return `${window.location.origin}/media/catalog/product${normalizedFile}`;
+      };
+
+      const fixMagentoUrl = (url?: string | null) => {
+        if (!url || !url.trim()) return '';
+        if (typeof window === 'undefined') return url;
+        try {
+          const parsed = new URL(url);
+          if (parsed.pathname.includes('/media/catalog/product')) {
+            return `${window.location.origin}${parsed.pathname}`;
+          }
+          return url;
+        } catch {
+          return url;
+        }
+      };
+
+      const galleryUrl = getMagentoMediaImageUrl(galleryImage?.file);
+      const rawImage = galleryUrl || fixMagentoUrl(product.small_image?.url) || fixMagentoUrl(product.thumbnail?.url) || '';
       const fallbackImage = fallbackImageByCategory[category] || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop';
       const finalImage =
         matchingProduct?.image ||
@@ -360,6 +554,8 @@ export function CartProvider({ children }: PropsWithChildren) {
         quantity: qty,
         selected: true,
         note: '',
+        supplierName: supplier.supplierName,
+        supplierRegion: supplier.supplierRegion,
       };
     });
   }, []);
@@ -390,12 +586,21 @@ export function CartProvider({ children }: PropsWithChildren) {
       const match = customLocalProducts.find(
         (p) => (p.sku ?? '').trim().toLowerCase() === localSku
       );
-      return {
+      const category = match?.categoryLabel || item.category || (inferCategoryFromSku(item.sku ?? '')?.category || 'Rau củ quả');
+      const enrichedItem = {
         ...item,
         image: match?.image || item.image,
-        unitPrice: match ? Number(match.price) : item.unitPrice,
+        category,
         unit: match?.unit || item.unit,
+        ...getSupplierForCartProduct({
+          sku: item.sku,
+          category,
+          supplierName: item.supplierName,
+          supplierRegion: item.supplierRegion,
+          supplierLabel: match?.store_name
+        }),
       };
+      return applyWholesaleDiscountToLocalItem(enrichedItem, enrichedItem.quantity);
     });
 
     const magentoSkus = new Set(mappedMagento.map((i) => (i.sku ?? '').trim().toLowerCase()));
@@ -427,6 +632,7 @@ export function CartProvider({ children }: PropsWithChildren) {
                   categories { name }
                   small_image { url }
                   thumbnail { url }
+                  media_gallery_entries { file disabled }
                   price_range { minimum_price { final_price { value } } }
                 }
               }
@@ -459,6 +665,24 @@ export function CartProvider({ children }: PropsWithChildren) {
     });
   }, [loadCustomerCart]);
 
+  useEffect(() => {
+    const fetchRates = async () => {
+      try {
+        const response = await fetch('/rest/V1/tmdt-catalog/rates');
+        const rawData = await response.json();
+        const data = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+        if (data && data.success && data.rates) {
+          window.localStorage.setItem('freso_currency_rates', JSON.stringify(data.rates));
+          window.dispatchEvent(new CustomEvent('freso:rates-loaded'));
+        }
+      } catch (err) {
+        console.error('Failed to fetch currency rates:', err);
+      }
+    };
+
+    fetchRates();
+  }, []);
+
   const addProductToMagentoCart = useCallback(
     async (product: AddToCartProduct, quantity: number) => {
       const targetQuantity = clampQuantity(quantity);
@@ -481,6 +705,7 @@ export function CartProvider({ children }: PropsWithChildren) {
                   categories { name }
                   small_image { url }
                   thumbnail { url }
+                  media_gallery_entries { file disabled }
                   price_range { minimum_price { final_price { value } } }
                 }
               }
@@ -552,6 +777,7 @@ export function CartProvider({ children }: PropsWithChildren) {
                   categories { name }
                   small_image { url }
                   thumbnail { url }
+                  media_gallery_entries { file disabled }
                   price_range { minimum_price { final_price { value } } }
                 }
               }
@@ -585,6 +811,7 @@ export function CartProvider({ children }: PropsWithChildren) {
                   categories { name }
                   small_image { url }
                   thumbnail { url }
+                  media_gallery_entries { file disabled }
                   price_range { minimum_price { final_price { value } } }
                 }
               }
@@ -629,6 +856,7 @@ export function CartProvider({ children }: PropsWithChildren) {
   }, []);
 
   const addToCart = useCallback((product: AddToCartProduct, quantity: number) => {
+    storeSupplierForProduct(product);
     setCartItems((prev) => {
       const targetQuantity = clampQuantity(quantity);
       const productSku = (product.sku ?? '').trim().toLowerCase();
@@ -636,18 +864,26 @@ export function CartProvider({ children }: PropsWithChildren) {
 
       let next: CartLineItem[];
       if (existing) {
-        next = prev.map((item) =>
-          (item.sku ?? '').trim().toLowerCase() === productSku
-            ? { ...item, quantity: item.quantity + targetQuantity }
-            : item
-        );
+        const supplier = getSupplierForCartProduct(product);
+        next = prev.map((item) => {
+          if ((item.sku ?? '').trim().toLowerCase() === productSku) {
+            const updatedItem = applyWholesaleDiscountToLocalItem(item, item.quantity + targetQuantity);
+            return {
+              ...updatedItem,
+              supplierName: item.supplierName || supplier.supplierName,
+              supplierRegion: item.supplierRegion || supplier.supplierRegion,
+            };
+          }
+          return item;
+        });
       } else {
+        const supplier = getSupplierForCartProduct(product);
         const newItem: CartLineItem = {
           id: product.id,
           cartItemId: '',
           sku: product.sku,
           name: product.name,
-          category: product.category,
+          category: product.category || (inferCategoryFromSku(product.sku ?? '')?.category || 'Rau củ quả'),
           unit: product.unit,
           unitPrice: product.unitPrice,
           image: product.image,
@@ -655,8 +891,13 @@ export function CartProvider({ children }: PropsWithChildren) {
           quantity: targetQuantity,
           selected: true,
           note: '',
+          supplierName: supplier.supplierName,
+          supplierRegion: supplier.supplierRegion,
         };
-        next = [newItem, ...prev];
+        // Recalculate right away just in case product.unitPrice passed in did not account for tiers
+        // Though ProductDetailPage already calculates it, it's safer to standardize.
+        const finalizedItem = applyWholesaleDiscountToLocalItem(newItem, targetQuantity);
+        next = [finalizedItem, ...prev];
       }
 
       // Persist local (seller) cart items so they survive page refresh
@@ -682,6 +923,7 @@ export function CartProvider({ children }: PropsWithChildren) {
 
     const quantity = clampQuantity(modalQuantity);
     const selectedProduct = modalProduct;
+    storeSupplierForProduct(selectedProduct);
 
     closeModal();
     try {
@@ -723,6 +965,7 @@ export function CartProvider({ children }: PropsWithChildren) {
       }
       sourceRectRef.current = sourceImageElement?.getBoundingClientRect() ?? null;
       const targetQuantity = clampQuantity(quantity);
+      storeSupplierForProduct(product);
 
       try {
         const items = await addProductToMagentoCart(product, targetQuantity);
@@ -770,10 +1013,10 @@ export function CartProvider({ children }: PropsWithChildren) {
     const targetQuantity = clampQuantity(quantity);
 
     if (!targetItem.cartItemId) {
-      // Local-only item: update quantity in state and localStorage
+      // Local-only item: update quantity and recalculate wholesale price
       setCartItems((prev) => {
         const next = prev.map((item) =>
-          item.id === itemId ? { ...item, quantity: targetQuantity } : item
+          item.id === itemId ? applyWholesaleDiscountToLocalItem(item, targetQuantity) : item
         );
         const localItems = next.filter((i) => !i.cartItemId);
         try {
@@ -1009,13 +1252,31 @@ export function toCurrencyTextFromLooseValue(value: string | number) {
     return formatCurrency(value);
   }
 
-  const parsed = parseNumberFromText(value);
-  return parsed > 0 ? formatCurrency(parsed) : value;
+  if (typeof value === 'string') {
+    if (value.includes('-')) {
+      const parts = value.split('-').map((p) => p.trim());
+      const convertedParts = parts.map((part) => {
+        const val = parseNumberFromText(part);
+        return val > 0 ? formatCurrency(val) : part;
+      });
+      return convertedParts.join(' - ');
+    } else {
+      const parsed = parseNumberFromText(value);
+      return parsed > 0 ? formatCurrency(parsed) : value;
+    }
+  }
+
+  return value;
 }
 
 export function toUnitPriceFromLooseValue(value: string | number) {
   if (typeof value === 'number') {
     return value;
+  }
+
+  if (typeof value === 'string' && value.includes('-')) {
+    const firstPart = value.split('-')[0].trim();
+    return parseNumberFromText(firstPart);
   }
 
   return parseNumberFromText(value);

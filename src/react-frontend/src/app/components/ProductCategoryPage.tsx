@@ -7,11 +7,13 @@ import {
   categoryMenu,
   getCategoryPageLink,
   getSubcategoryNameFromQuery,
-  toQuerySlug
+  toQuerySlug,
+  inferCategoryFromSku,
+  InferredCategory
 } from '../data/categories';
 import { getMockSupplierForProduct, supplierRegions } from '../data/mockSuppliers';
 import { searchSynonymGroups } from '../data/searchSynonyms';
-import { toCurrencyTextFromLooseValue, toUnitPriceFromLooseValue, useCart } from '../cart/CartProvider';
+import { toCurrencyTextFromLooseValue, toUnitPriceFromLooseValue, toCurrencyTextFromNumber, useCart } from '../cart/CartProvider';
 import { applySeo, buildBreadcrumbJsonLd, buildItemListJsonLd, getSiteName } from '../utils/seo';
 
 type ProductItem = {
@@ -66,10 +68,6 @@ type OptimizedSearchProduct = {
   categoryLabel?: string;
 };
 
-type InferredCategory = {
-  category: string;
-  subcategory?: string;
-};
 
 const dedupeByKey = <T,>(items: T[], keyFn: (item: T) => string) => {
   const seen = new Set<string>();
@@ -119,144 +117,6 @@ const dedupeProductsByName = (products: ProductItem[]) => {
   return Array.from(map.values());
 };
 
-const pickSubcategoryFromText = (
-  haystack: string,
-  rules: Array<{ keywords: string[]; label: string }>,
-  fallback?: string
-) => {
-  const matched = rules.find((rule) => rule.keywords.some((keyword) => haystack.includes(keyword)));
-  return matched?.label ?? fallback;
-};
-
-const inferCategoryFromSku = (sku: string): InferredCategory | null => {
-  const normalized = toQuerySlug(sku);
-
-  // New professional SKU scheme: <CATEGORY_INITIALS>_<NNN>
-  // Examples: RCQ_001 (Rau củ quả), TC_001 (Trái cây), TPTS_001 (Thực phẩm tươi sống)
-  const normalizedUpper = String(sku || '').toUpperCase();
-
-  if (/^RCQ_\d{3,}$/.test(normalizedUpper)) {
-    return { category: 'Rau củ quả', subcategory: 'Rau phổ thông' };
-  }
-  if (/^TC_\d{3,}$/.test(normalizedUpper)) {
-    return { category: 'Trái cây', subcategory: 'Trái cây phổ thông' };
-  }
-  if (/^TPTS_\d{3,}$/.test(normalizedUpper)) {
-    return { category: 'Thực phẩm tươi sống', subcategory: 'Giò-chả-nem' };
-  }
-  if (/^THS_\d{3,}$/.test(normalizedUpper)) {
-    return { category: 'Thuỷ hải sản', subcategory: 'Hải sản chế biến' };
-  }
-  if (/^TPDL_\d{3,}$/.test(normalizedUpper)) {
-    return { category: 'Thực phẩm đông lạnh', subcategory: 'Giò-chả-nem' };
-  }
-  if (/^TPK_\d{3,}$/.test(normalizedUpper)) {
-    return { category: 'Thực phẩm khô', subcategory: 'Thực phẩm khô khác' };
-  }
-  if (/^TIB_\d{3,}$/.test(normalizedUpper)) {
-    return { category: 'Tiện ích bếp', subcategory: 'Sản phẩm khác' };
-  }
-
-  if (normalized.startsWith('rau-cu-qua-')) {
-    return {
-      category: 'Rau củ quả',
-      subcategory: pickSubcategoryFromText(
-        normalized,
-        [
-          { keywords: ['chilli', 'red-bell-pepper'], label: 'Rau gia vị' },
-          { keywords: ['carrot', 'potato'], label: 'Củ quả' }
-        ],
-        'Rau phổ thông'
-      )
-    };
-  }
-
-  if (normalized.startsWith('cat-tc-')) {
-    return {
-      category: 'Trái cây',
-      subcategory: normalized.includes('tao') ? 'Trái cây nhập khẩu' : 'Trái cây phổ thông'
-    };
-  }
-
-  if (normalized.startsWith('cat-tpts-')) {
-    return {
-      category: 'Thực phẩm tươi sống',
-      subcategory: pickSubcategoryFromText(normalized, [
-        { keywords: ['heo'], label: 'Thịt heo' },
-        { keywords: ['bo', 'be'], label: 'Thịt bò-bê' },
-        { keywords: ['trau', 'nghe'], label: 'Thịt trâu-nghé' },
-        { keywords: ['de'], label: 'Thịt dê' },
-        { keywords: ['ga'], label: 'Thịt gà' },
-        { keywords: ['vit', 'ngong'], label: 'Thịt vịt-gan-ngỗng' },
-        { keywords: ['chim'], label: 'Thịt chim' },
-        { keywords: ['ech'], label: 'Thịt ếch' },
-        { keywords: ['trung'], label: 'Trứng' }
-      ], 'Giò-chả-nem')
-    };
-  }
-
-  if (normalized.startsWith('cat-ths-')) {
-    return {
-      category: 'Thuỷ hải sản',
-      subcategory: pickSubcategoryFromText(normalized, [
-        { keywords: ['ca'], label: 'Cá' },
-        { keywords: ['tom'], label: 'Tôm' },
-        { keywords: ['cua'], label: 'Cua' },
-        { keywords: ['muc'], label: 'Mực' },
-        { keywords: ['ngao', 'oc'], label: 'Ngao ốc' }
-      ], 'Hải sản chế biến')
-    };
-  }
-
-  if (normalized.startsWith('cat-tpdl-')) {
-    return {
-      category: 'Thực phẩm đông lạnh',
-      subcategory: pickSubcategoryFromText(normalized, [
-        { keywords: ['heo'], label: 'Thịt heo' },
-        { keywords: ['bo', 'be'], label: 'Thịt bò-bê' },
-        { keywords: ['trau', 'nghe'], label: 'Thịt trâu-nghé' },
-        { keywords: ['de'], label: 'Thịt dê' },
-        { keywords: ['ga'], label: 'Thịt gà' },
-        { keywords: ['vit', 'ngong'], label: 'Thịt vịt-gan-ngỗng' },
-        { keywords: ['chim'], label: 'Thịt chim' },
-        { keywords: ['ech'], label: 'Thịt ếch' },
-        { keywords: ['trung'], label: 'Trứng' },
-        { keywords: ['xuc-xich', 'lap-xuong'], label: 'Xúc xích - lạp xưởng' }
-      ], 'Giò-chả-nem')
-    };
-  }
-
-  if (normalized.startsWith('cat-tpk-')) {
-    return {
-      category: 'Thực phẩm khô',
-      subcategory: pickSubcategoryFromText(normalized, [
-        { keywords: ['gia-vi'], label: 'Gia vị' },
-        { keywords: ['gao'], label: 'Gạo' },
-        { keywords: ['bot'], label: 'Bột' },
-        { keywords: ['bun', 'mien', 'pho', 'nui'], label: 'Bún-miến-phở-nui' },
-        { keywords: ['hat'], label: 'Hạt khô' },
-        { keywords: ['do-uong'], label: 'Đồ uống' },
-        { keywords: ['kem', 'bo', 'pho-mai'], label: 'Kem-bơ-phô mai' },
-        { keywords: ['mut', 'siro'], label: 'Mứt siro' },
-        { keywords: ['tra', 'ca-phe'], label: 'Trà - cà phê đóng gói' }
-      ], 'Thực phẩm khô khác')
-    };
-  }
-
-  if (normalized.startsWith('cat-tib-')) {
-    return {
-      category: 'Tiện ích bếp',
-      subcategory: pickSubcategoryFromText(normalized, [
-        { keywords: ['dung-cu-an-uong'], label: 'Dụng cụ ăn uống' },
-        { keywords: ['do-dung-bep', 'noi'], label: 'Đồ dùng bếp' },
-        { keywords: ['chat-tay-rua', 'rua-chen'], label: 'Chất tẩy rửa' },
-        { keywords: ['dung-cu-ve-sinh', 'ban-chai', 'co-noi'], label: 'Dụng cụ vệ sinh' }
-      ], 'Sản phẩm khác')
-    };
-  }
-
-  return null;
-};
 
 const formatPrice = (value?: number) => {
   if (typeof value !== 'number' || Number.isNaN(value)) {
@@ -264,6 +124,32 @@ const formatPrice = (value?: number) => {
   }
 
   return new Intl.NumberFormat('vi-VN').format(value);
+};
+
+const parseSupplierLabel = (label?: string) => {
+  const parts = String(label || '')
+    .split('·')
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return {
+    supplierName: parts[0] || '',
+    supplierRegion: parts.slice(1).join(' · ')
+  };
+};
+
+const resolveSupplierDisplay = (storeName: string | undefined, fallback: { name: string; region: string }) => {
+  const parsed = parseSupplierLabel(storeName);
+  const shouldUseFallbackSupplier =
+    fallback.name === 'Tổng công ty Chăn nuôi CP Việt Nam' &&
+    (!parsed.supplierName ||
+      parsed.supplierName === 'Tổng kho sỉ Thực phẩm B2B' ||
+      parsed.supplierName === 'Tổng công ty Chăn nuôi CP Việt Nam');
+
+  return {
+    supplierName: shouldUseFallbackSupplier ? fallback.name : parsed.supplierName || storeName || fallback.name,
+    supplierRegion: shouldUseFallbackSupplier ? fallback.region : parsed.supplierRegion || fallback.region
+  };
 };
 
 const inferUnitByCategory = (categoryName: string) => {
@@ -364,6 +250,20 @@ const getMagentoMediaImageUrl = (file?: string | null) => {
   return `${window.location.origin}/media/catalog/product${normalizedFile}`;
 };
 
+const fixMagentoUrl = (url?: string | null) => {
+  if (!url || !url.trim()) return '';
+  if (typeof window === 'undefined') return url;
+  try {
+    const parsed = new URL(url);
+    if (parsed.pathname.includes('/media/catalog/product')) {
+      return `${window.location.origin}${parsed.pathname}`;
+    }
+    return url;
+  } catch {
+    return url;
+  }
+};
+
 const pickMagentoProductImage = (product: GraphQlProductItem, fallbackImage: string) => {
   const galleryImage = (product.media_gallery_entries ?? []).find((entry) => {
     const file = entry.file?.trim() ?? '';
@@ -371,8 +271,8 @@ const pickMagentoProductImage = (product: GraphQlProductItem, fallbackImage: str
   });
 
   const galleryUrl = getMagentoMediaImageUrl(galleryImage?.file);
-  const primaryUrl = product.small_image?.url ?? '';
-  const thumbnailUrl = product.thumbnail?.url ?? '';
+  const primaryUrl = fixMagentoUrl(product.small_image?.url);
+  const thumbnailUrl = fixMagentoUrl(product.thumbnail?.url);
 
   return [galleryUrl, primaryUrl, thumbnailUrl].find((value) => {
     if (!value) return false;
@@ -747,6 +647,13 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
               ? localMatch.image
               : '';
 
+            let resolvedItemImage = item.image || '';
+            if (resolvedItemImage && !resolvedItemImage.startsWith('http') && !resolvedItemImage.startsWith('data:')) {
+              resolvedItemImage = getMagentoMediaImageUrl(resolvedItemImage);
+            } else {
+              resolvedItemImage = fixMagentoUrl(resolvedItemImage);
+            }
+
             return {
               id: item.id,
               sku: item.sku,
@@ -754,8 +661,13 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
               price: formatPrice(priceValue),
               priceValue,
               unit: inferUnitByCategory(productCategory),
+<<<<<<< HEAD
               image: localImage || item.image || fallbackImage,
               categoryLabel: inferred?.subcategory ?? item.categoryLabel ?? productCategory,
+=======
+              image: localImage || resolvedItemImage || fallbackImage,
+              categoryLabel: inferred?.subcategory ?? productCategory,
+>>>>>>> 277ad336d717dc9874693402ba8daa975c6dbc35
               supplierName: supplier.name,
               supplierRegion: supplier.region
             };
@@ -764,6 +676,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
           const mappedCustomProducts: ProductItem[] = customLocalProducts.map((p) => {
             const priceValue = p.special_price ?? p.price;
             const supplier = getMockSupplierForProduct(p.sku, p.categoryLabel);
+            const storeSupplier = resolveSupplierDisplay(p.store_name, supplier);
             return {
               id: p.id || p.sku,
               sku: p.sku,
@@ -773,8 +686,8 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
               unit: p.unit || 'kg',
               image: p.image || fallbackImageByCategory[p.categoryLabel] || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop',
               categoryLabel: p.categoryLabel,
-              supplierName: p.store_name || supplier.name,
-              supplierRegion: supplier.region
+              supplierName: storeSupplier.supplierName || p.store_name || supplier.name,
+              supplierRegion: storeSupplier.supplierRegion || supplier.region
             };
           });
 
@@ -1000,6 +913,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
         const mappedCustomProducts: ProductItem[] = filteredCustomProducts.map((p) => {
           const priceValue = p.special_price ?? p.price;
           const supplier = getMockSupplierForProduct(p.sku, p.categoryLabel);
+          const storeSupplier = resolveSupplierDisplay(p.store_name, supplier);
           const inferred = inferCategoryFromSku(p.sku);
           const subcat = inferred?.subcategory ?? p.categoryLabel;
           return {
@@ -1011,8 +925,8 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
             unit: p.unit || 'kg',
             image: p.image || fallbackImageByCategory[p.categoryLabel] || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop',
             categoryLabel: subcat,
-            supplierName: p.store_name || supplier.name,
-            supplierRegion: supplier.region
+            supplierName: storeSupplier.supplierName || p.store_name || supplier.name,
+            supplierRegion: storeSupplier.supplierRegion || supplier.region
           };
         });
 
@@ -1357,6 +1271,8 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
                             unit: product.unit,
                             unitPrice: toUnitPriceFromLooseValue(product.price),
                             image: product.image,
+                            supplierName: product.supplierName,
+                            supplierRegion: product.supplierRegion,
                           }, sourceImage);
                         }}
                         aria-label={`Thêm ${product.name} vào giỏ`}
@@ -1365,7 +1281,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
                       </button>
                     </div>
                     <div className="flex flex-col gap-1">
-                      <p className="text-red-500 font-bold">{product.price} đ</p>
+                      <p className="text-red-500 font-bold">{toCurrencyTextFromNumber(product.priceValue)}</p>
                       <p className="text-xs text-gray-500">({product.unit})</p>
                     </div>
                   </div>

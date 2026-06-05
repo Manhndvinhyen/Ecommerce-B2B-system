@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Heart, Minus, Plus, Search, ShoppingBag } from 'lucide-react';
-import { toCurrencyTextFromNumber, useCart } from '../cart/CartProvider';
+import { Heart, Minus, Plus, Search, ShoppingBag, Store } from 'lucide-react';
+import { formatCartSupplierLabel, toCurrencyTextFromNumber, useCart } from '../cart/CartProvider';
 
 export function ShoppingCartPage() {
   const {
@@ -48,7 +48,9 @@ export function ShoppingCartPage() {
   const handleCheckout = () => {
     if (selectedCount === 0) return;
     const suppliers = Array.from(
-      new Set(selectedItems.map((item) => item.category).filter(Boolean))
+      new Set(
+        selectedItems.map((item) => formatCartSupplierLabel(item)).filter(Boolean)
+      )
     );
 
     const payload = {
@@ -60,7 +62,9 @@ export function ShoppingCartPage() {
         unitPrice: item.unitPrice,
         unit: item.unit,
         image: item.image,
-        category: item.category
+        category: item.category,
+        supplierName: item.supplierName,
+        supplierRegion: item.supplierRegion
       })),
       subtotal: selectedTotal,
       suppliers,
@@ -107,6 +111,30 @@ export function ShoppingCartPage() {
       return passSelectedFilter && passSearch;
     });
   }, [cartItems, searchTerm, showSelectedOnly]);
+
+  const groupedItems = useMemo(() => {
+    const groups: Record<string, typeof filteredItems> = {};
+    filteredItems.forEach((item) => {
+      const shopName = formatCartSupplierLabel(item);
+      if (!groups[shopName]) {
+        groups[shopName] = [];
+      }
+      groups[shopName].push(item);
+    });
+    return Object.entries(groups).map(([shopName, items]) => ({
+      shopName,
+      items,
+      subtotal: items.reduce((sum, item) => sum + (item.selected ? item.quantity * item.unitPrice : 0), 0)
+    }));
+  }, [filteredItems]);
+
+  const toggleShopItems = (shopName: string, selected: boolean) => {
+    const shopGroup = groupedItems.find((g) => g.shopName === shopName);
+    if (!shopGroup) return;
+    shopGroup.items.forEach((item) => {
+      setCartItemSelected(item.id, selected);
+    });
+  };
 
   const selectedItems = cartItems.filter((item) => item.selected);
   const selectedCount = selectedItems.length;
@@ -179,128 +207,170 @@ export function ShoppingCartPage() {
           </div>
         </section>
 
-        <section className="space-y-4">
-          {filteredItems.map((item) => {
-            const lineTotal = item.quantity * item.unitPrice;
-
-            // Check if the product has wholesale tiers in local catalog
-            const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
-            let customLocalProducts: any[] = [];
-            if (customLocalRaw) {
-              try {
-                customLocalProducts = JSON.parse(customLocalRaw);
-              } catch (e) {
-                customLocalProducts = [];
-              }
-            }
-            const sku = (item.sku ?? '').trim().toLowerCase();
-const matchingProduct = customLocalProducts.find(p => (p.sku ?? '').trim().toLowerCase() === sku);
-            const originalPrice = matchingProduct ? Number(matchingProduct.price) : item.unitPrice;
-            const tiers = matchingProduct?.wholesale_tiers || [];
-            const activeTier = tiers
-              .filter((t: any) => item.quantity >= t.qty)
-              .sort((a: any, b: any) => b.qty - a.qty)[0];
-            const discountPercent = activeTier ? activeTier.discount : 0;
-            const hasDiscount = discountPercent > 0;
+        <section className="space-y-6">
+          {groupedItems.map((group) => {
+            const isAllGroupSelected = group.items.every((item) => item.selected);
+            const isSomeGroupSelected = group.items.some((item) => item.selected);
 
             return (
-              <article key={item.id} className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-                <div className="px-5 py-4">
-                  <div className="grid gap-4 lg:grid-cols-[auto_1fr_auto_auto_auto] lg:items-center">
-                    <div className="pt-1">
-                      <input
-                        type="checkbox"
-                        checked={item.selected}
-                        onChange={(event) => setCartItemSelected(item.id, event.target.checked)}
-                        className="size-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
-                      />
-                    </div>
-
-                    <div className="flex items-start gap-4">
-                      <img
-                        src={item.image}
-                        alt={item.name}
-                        className="size-20 rounded-xl object-cover"
-                        loading="lazy"
-                        decoding="async"
-                      />
-                      <div>
-                        <h3 className="text-base font-semibold text-gray-900">{item.name}</h3>
-                        <p className="mt-1 text-sm text-gray-400">Danh mục: {item.category}</p>
-                        <p className="mt-1 text-sm text-gray-400">Đơn vị tính: {item.unit}</p>
-                        <div className="mt-2 text-sm font-medium text-gray-700">
-                          Đơn giá:{' '}
-                          {hasDiscount ? (
-                            <div className="inline-flex flex-wrap items-center gap-1.5 mt-0.5">
-                              <span className="line-through text-gray-400">
-                                {toCurrencyTextFromNumber(originalPrice)}
-                              </span>
-                              <span className="px-1.5 py-0.2 bg-red-100 text-red-600 rounded text-[10px] font-bold">
-                                -{discountPercent}% sỉ
-                              </span>
-                              <span className="text-green-700 font-bold">
-                                {toCurrencyTextFromNumber(item.unitPrice)}
-                              </span>
-                            </div>
-                          ) : (
-                            <span>{toCurrencyTextFromNumber(item.unitPrice)}</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="inline-flex items-center rounded-xl border border-gray-300">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setCartItemQuantity(item.id, item.quantity - 1)
-                        }
-                        className="px-3 py-2 text-gray-500 hover:text-green-700"
-                      >
-                        <Minus className="size-4" />
-                      </button>
-                      <span className="min-w-14 border-x border-gray-200 px-2 text-center text-sm font-semibold text-gray-800">
-                        {item.quantity}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setCartItemQuantity(item.id, item.quantity + 1)
-                        }
-                        className="px-3 py-2 text-gray-500 hover:text-green-700"
-                      >
-                        <Plus className="size-4" />
-                      </button>
-                    </div>
-
-                    <div className="text-left lg:text-right">
-                      <p className="text-xs uppercase tracking-wide text-gray-400">Thành tiền</p>
-                      <p className="text-lg font-bold text-gray-900">{toCurrencyTextFromNumber(lineTotal)}</p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => removeCartItem(item.id)}
-                      className="justify-self-start rounded-lg bg-rose-50 px-3 py-2 text-sm font-medium text-rose-500 hover:bg-rose-100"
-                    >
-                      Xóa
-                    </button>
-                  </div>
-
-                  <div className="mt-4 lg:ml-8">
+              <div key={group.shopName} className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                {/* Shop Header */}
+                <div className="bg-gradient-to-r from-gray-50/80 to-white px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
                     <input
-                      value={item.note}
-                      onChange={(event) => setCartItemNote(item.id, event.target.value)}
-                      placeholder="Nhập ghi chú"
-                      className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-green-500"
+                      type="checkbox"
+                      checked={isAllGroupSelected}
+                      ref={(el) => {
+                        if (el) {
+                          el.indeterminate = isSomeGroupSelected && !isAllGroupSelected;
+                        }
+                      }}
+                      onChange={(event) => toggleShopItems(group.shopName, event.target.checked)}
+                      className="size-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer"
                     />
+                    <div className="flex items-center gap-2 font-bold text-gray-850">
+                      <Store className="size-4 text-green-650" />
+                      <span>{group.shopName}</span>
+                    </div>
                   </div>
+                  <span className="text-xs font-semibold text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full">
+                    {group.items.length} sản phẩm
+                  </span>
                 </div>
-              </article>
+
+                {/* Shop Items List */}
+                <div className="divide-y divide-gray-100">
+                  {group.items.map((item) => {
+                    const lineTotal = item.quantity * item.unitPrice;
+
+                    // Check if the product has wholesale tiers in local catalog
+                    const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
+                    let customLocalProducts: any[] = [];
+                    if (customLocalRaw) {
+                      try {
+                        customLocalProducts = JSON.parse(customLocalRaw);
+                      } catch (e) {
+                        customLocalProducts = [];
+                      }
+                    }
+                    const sku = (item.sku ?? '').trim().toLowerCase();
+                    const matchingProduct = customLocalProducts.find(p => (p.sku ?? '').trim().toLowerCase() === sku);
+                    const originalPrice = matchingProduct ? Number(matchingProduct.price) : item.unitPrice;
+                    const tiers = matchingProduct?.wholesale_tiers || [];
+                    const activeTier = tiers
+                      .filter((t: any) => item.quantity >= t.qty)
+                      .sort((a: any, b: any) => b.qty - a.qty)[0];
+                    const discountPercent = activeTier ? activeTier.discount : 0;
+                    const hasDiscount = discountPercent > 0;
+
+                    return (
+                      <article key={item.id} className="p-5 hover:bg-gray-50/20 transition-colors">
+                        <div className="grid gap-4 lg:grid-cols-[auto_1fr_auto_auto_auto] lg:items-center">
+                          <div className="pt-1">
+                            <input
+                              type="checkbox"
+                              checked={item.selected}
+                              onChange={(event) => setCartItemSelected(item.id, event.target.checked)}
+                              className="size-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer"
+                            />
+                          </div>
+
+                          <div className="flex items-start gap-4">
+                            <img
+                              src={item.image}
+                              alt={item.name}
+                              className="size-20 rounded-xl object-cover"
+                              loading="lazy"
+                              decoding="async"
+                            />
+                            <div>
+                              <h3 className="text-base font-semibold text-gray-900">{item.name}</h3>
+                              <p className="mt-1 text-sm text-gray-400">Danh mục: {item.category}</p>
+                              <p className="mt-1 text-sm text-gray-400">Đơn vị tính: {item.unit}</p>
+                              <div className="mt-2 text-sm font-medium text-gray-700">
+                                Đơn giá:{' '}
+                                {hasDiscount ? (
+                                  <div className="inline-flex flex-wrap items-center gap-1.5 mt-0.5">
+                                    <span className="line-through text-gray-400">
+                                      {toCurrencyTextFromNumber(originalPrice)}
+                                    </span>
+                                    <span className="px-1.5 py-0.2 bg-red-100 text-red-600 rounded text-[10px] font-bold">
+                                      -{discountPercent}% sỉ
+                                    </span>
+                                    <span className="text-green-700 font-bold">
+                                      {toCurrencyTextFromNumber(item.unitPrice)}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span>{toCurrencyTextFromNumber(item.unitPrice)}</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="inline-flex items-center rounded-xl border border-gray-300 bg-white">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCartItemQuantity(item.id, item.quantity - 1)
+                              }
+                              className="px-3 py-2 text-gray-500 hover:text-green-700"
+                            >
+                              <Minus className="size-4" />
+                            </button>
+                            <span className="min-w-14 border-x border-gray-200 px-2 text-center text-sm font-semibold text-gray-800">
+                              {item.quantity}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCartItemQuantity(item.id, item.quantity + 1)
+                              }
+                              className="px-3 py-2 text-gray-500 hover:text-green-700"
+                            >
+                              <Plus className="size-4" />
+                            </button>
+                          </div>
+
+                          <div className="text-left lg:text-right">
+                            <p className="text-xs uppercase tracking-wide text-gray-400">Thành tiền</p>
+                            <p className="text-lg font-bold text-gray-900">{toCurrencyTextFromNumber(lineTotal)}</p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => removeCartItem(item.id)}
+                            className="justify-self-start rounded-lg bg-rose-50 px-3 py-2 text-sm font-medium text-rose-500 hover:bg-rose-100"
+                          >
+                            Xóa
+                          </button>
+                        </div>
+
+                        <div className="mt-4 lg:ml-8">
+                          <input
+                            value={item.note}
+                            onChange={(event) => setCartItemNote(item.id, event.target.value)}
+                            placeholder="Nhập ghi chú"
+                            className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-green-500 bg-white"
+                          />
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+
+                {/* Shop Footer / Subtotal */}
+                <div className="bg-gray-50/40 px-5 py-3.5 border-t border-gray-100 flex justify-between items-center">
+                  <span className="text-sm font-medium text-gray-500">
+                    Tạm tính của shop ({group.items.filter((i) => i.selected).length} sản phẩm):
+                  </span>
+                  <span className="text-lg font-bold text-green-700">{toCurrencyTextFromNumber(group.subtotal)}</span>
+                </div>
+              </div>
             );
           })}
 
-          {filteredItems.length === 0 && (
+          {groupedItems.length === 0 && (
             <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-14 text-center">
               <ShoppingBag className="mx-auto mb-3 size-10 text-gray-300" />
               <p className="text-gray-500">Giỏ hàng đang trống. Chưa có dữ liệu sản phẩm được thêm.</p>

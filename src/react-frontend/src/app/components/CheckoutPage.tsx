@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
-import { Calendar, Clock, FileText, MapPin, PackageCheck, Phone, ShoppingBag, User, Wind, Thermometer, AlertTriangle, Truck } from 'lucide-react';
-import { toCurrencyTextFromNumber, useCart } from '../cart/CartProvider';
+import { Calendar, Clock, FileText, MapPin, PackageCheck, Phone, ShoppingBag, User, Wind, Thermometer, AlertTriangle, Truck, Store } from 'lucide-react';
+import { formatCartSupplierLabel, toCurrencyTextFromNumber, useCart } from '../cart/CartProvider';
+import { inferCategoryFromSku } from '../data/categories';
 
 declare global {
   interface Window {
@@ -46,6 +47,107 @@ function findNearestWarehouse(lat: number, lon: number) {
   return { warehouse: nearest, distance: minDistance };
 }
 
+// Determine warehouse dynamically based on supplier region and database warehouses list
+const getWarehouseForSupplier = (supplierLabel: string, dbList: any[] = []) => {
+  const parts = supplierLabel.split('·').map(p => p.trim());
+  const supplierRegion = parts[1] || parts[0] || '';
+  const normalizedRegion = supplierRegion.toLowerCase();
+
+  let nameKeyword = 'Bình Dương';
+  if (normalizedRegion.includes('hà nội') || normalizedRegion.includes('ha noi') || normalizedRegion.includes('bắc giang') || normalizedRegion.includes('bac giang') || normalizedRegion.includes('bắc') || normalizedRegion.includes('bac')) {
+    nameKeyword = 'Bắc Giang';
+  } else if (normalizedRegion.includes('đà lạt') || normalizedRegion.includes('da lat')) {
+    nameKeyword = 'Bắc Giang';
+  }
+
+  const found = dbList.find(w => w.name && w.name.includes(nameKeyword));
+  if (found) {
+    return { name: found.name, lat: found.lat, lon: found.lng || found.lon, lng: found.lng || found.lon };
+  }
+
+  // Fallback to static coordinates if API not loaded/fails
+  if (nameKeyword === 'Bắc Giang') {
+    return { name: 'Kho Bắc Giang', lat: 21.2730, lon: 106.1946, lng: 106.1946 };
+  }
+  return { name: 'Kho Bình Dương', lat: 10.9805, lon: 106.6517, lng: 106.6517 };
+};
+
+// Calculate agricultural item weight based on unit type and quantity
+function calculateItemWeight(unit: string, quantity: number): number {
+  const normalizedUnit = String(unit || '').toLowerCase().trim();
+  if (normalizedUnit === 'kg') return quantity;
+  if (normalizedUnit === 'bao') return quantity * 30; // 30kg per bag
+  if (normalizedUnit === 'yến' || normalizedUnit === 'yen') return quantity * 10;
+  if (normalizedUnit === 'tạ' || normalizedUnit === 'ta') return quantity * 100;
+  if (normalizedUnit === 'thùng' || normalizedUnit === 'thung') return quantity * 10;
+  if (normalizedUnit === 'khay' || normalizedUnit === 'hộp' || normalizedUnit === 'hop') return quantity * 0.5;
+  return quantity * 1.0; // default 1kg
+}
+
+interface CarrierRate {
+  code: string;
+  name: string;
+  fee: number;
+  eta: string;
+}
+
+// Calculate dynamic rates for GHN and GHTK based on distance and weight
+function calculateCarrierRates(distance: number, totalWeight: number): CarrierRate[] {
+  // Giao Hàng Nhanh (GHN)
+  let ghnBase = 22000;
+  let ghnOverweight = 3000;
+  let ghnDistFactor = 0;
+  let ghnEta = '1 ngày';
+
+  if (distance <= 20) {
+    ghnBase = 22000;
+    ghnOverweight = 3000;
+    ghnEta = 'Trong ngày';
+  } else if (distance <= 100) {
+    ghnBase = 35000;
+    ghnOverweight = 5000;
+    ghnEta = '1-2 ngày';
+  } else {
+    ghnBase = 50000;
+    ghnOverweight = 10000;
+    ghnDistFactor = (distance - 100) * 500;
+    ghnEta = '2-3 ngày';
+  }
+
+  const ghnExtraWeight = Math.max(0, totalWeight - 2);
+  const ghnFee = Math.round((ghnBase + ghnExtraWeight * ghnOverweight + ghnDistFactor) / 1000) * 1000;
+
+  // Giao Hàng Tiết Kiệm (GHTK)
+  let ghtkBase = 16500;
+  let ghtkOverweight = 2500;
+  let ghtkDistFactor = 0;
+  let ghtkEta = '1-2 ngày';
+
+  if (distance <= 20) {
+    ghtkBase = 16500;
+    ghtkOverweight = 2500;
+    ghtkEta = '1-2 ngày';
+  } else if (distance <= 100) {
+    ghtkBase = 28000;
+    ghtkOverweight = 4000;
+    ghtkEta = '2-3 ngày';
+  } else {
+    ghtkBase = 42000;
+    ghtkOverweight = 8000;
+    ghtkDistFactor = (distance - 100) * 400;
+    ghtkEta = '3-5 ngày';
+  }
+
+  const ghtkExtraWeight = Math.max(0, totalWeight - 2);
+  const ghtkFee = Math.round((ghtkBase + ghtkExtraWeight * ghtkOverweight + ghtkDistFactor) / 1000) * 1000;
+
+  return [
+    { code: 'ghn', name: 'Giao Hàng Nhanh (GHN)', fee: ghnFee, eta: ghnEta },
+    { code: 'ghtk', name: 'Giao Hàng Tiết Kiệm (GHTK)', fee: ghtkFee, eta: ghtkEta }
+  ];
+}
+
+
 // Format duration to human readable format (e.g. 1 giờ 52 phút)
 function formatDuration(minutes: number): string {
   if (minutes < 60) return `${minutes} phút`;
@@ -73,6 +175,9 @@ interface WeatherEstimation {
   temperatureNotice: string;
   windNotice: string;
   weatherNotice: string;
+  weightKg: number;
+  shippingFee?: number;
+  carrierRates: CarrierRate[];
 }
 
 // Map WMO Code to exact weather factor and translations
@@ -173,6 +278,8 @@ type CheckoutItem = {
   unit: string;
   image: string;
   category: string;
+  supplierName?: string;
+  supplierRegion?: string;
 };
 
 type CheckoutPayload = {
@@ -198,7 +305,29 @@ type InvoiceInfo = {
 };
 
 const deliveryTimeOptions = ['07:00 - 09:00', '09:00 - 11:30', '13:00 - 15:30', '16:00 - 18:30', '18:30 - 20:30'];
-const branches = ['Chi nhánh Quận 1', 'Chi nhánh Quận 7', 'Chi nhánh Thủ Đức', 'Chi nhánh Bình Thạnh'];
+const cartSupplierMapStorageKey = 'freso_cart_supplier_map';
+
+const branchCoordinates: Record<string, { lat: number; lng: number; cityName: string }> = {
+  'Chi nhánh Quận 1': { lat: 10.776, lng: 106.700, cityName: 'Quận 1, TP. Hồ Chí Minh' },
+  'Chi nhánh Quận 7': { lat: 10.732, lng: 106.721, cityName: 'Quận 7, TP. Hồ Chí Minh' },
+  'Chi nhánh Thủ Đức': { lat: 10.849, lng: 106.772, cityName: 'Thủ Đức, TP. Hồ Chí Minh' },
+  'Chi nhánh Bình Thạnh': { lat: 10.801, lng: 106.699, cityName: 'Bình Thạnh, TP. Hồ Chí Minh' }
+};
+
+const findClosestBranch = (lat: number, lng: number): string => {
+  let closestBranch = 'Chi nhánh Quận 1';
+  let minDistance = Infinity;
+
+  Object.entries(branchCoordinates).forEach(([branchName, coords]) => {
+    const dist = calculateDistance(lat, lng, coords.lat, coords.lng);
+    if (dist < minDistance) {
+      minDistance = dist;
+      closestBranch = branchName;
+    }
+  });
+
+  return closestBranch;
+};
 
 const getCustomerEmail = () =>
   window.localStorage.getItem('freso_customer_email') || window.sessionStorage.getItem('freso_customer_email') || '';
@@ -208,7 +337,10 @@ const getAuthToken = () =>
   window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
 
 const isValidPhone = (value: string) => /^(\+?84|0)\d{9,10}$/.test(value.replace(/\s/g, ''));
-const getRegionFromBranch = (branch: string) => branch.replace(/^Chi nhánh\s+/i, '').trim();
+const getRegionFromBranch = (branch: string) => {
+  if (!branch) return '';
+  return branch.replace(/^Chi nhánh\s+/i, '').trim();
+};
 
 const getMagentoMediaImageUrl = (file?: string | null) => {
   if (!file || !file.trim()) return '';
@@ -255,7 +387,7 @@ const readCheckoutPayload = (): CheckoutPayload | null => {
 };
 
 const buildCheckoutPayload = (items: CheckoutItem[]): CheckoutPayload => {
-  const suppliers = Array.from(new Set(items.map((item) => item.category).filter(Boolean)));
+  const suppliers = Array.from(new Set(items.map((item) => formatCartSupplierLabel(item) || item.category).filter(Boolean)));
   return {
     items,
     subtotal: items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
@@ -264,8 +396,29 @@ const buildCheckoutPayload = (items: CheckoutItem[]): CheckoutPayload => {
   };
 };
 
+const parseSupplierLabel = (label?: string) => {
+  const parts = String(label || '')
+    .split('·')
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return {
+    supplierName: parts[0] || undefined,
+    supplierRegion: parts.slice(1).join(' · ') || undefined
+  };
+};
+
+const readStoredSupplierMap = (): Record<string, { supplierName?: string; supplierRegion?: string }> => {
+  try {
+    return JSON.parse(window.localStorage.getItem(cartSupplierMapStorageKey) || '{}');
+  } catch {
+    return {};
+  }
+};
+
 const mapMagentoCartItems = (items: MagentoCartItem[] = []): CheckoutItem[] => {
   const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
+  const storedSupplierMap = readStoredSupplierMap();
   let customLocalProducts: any[] = [];
   if (customLocalRaw) {
     try {
@@ -280,7 +433,7 @@ const mapMagentoCartItems = (items: MagentoCartItem[] = []): CheckoutItem[] => {
     const qty = Math.max(1, Math.floor(item.quantity ?? 1));
     const sku = (product.sku ?? '').trim().toLowerCase();
     const matchingProduct = customLocalProducts.find(p => (p.sku ?? '').trim().toLowerCase() === sku);
-    
+
     const originalPrice = matchingProduct ? Number(matchingProduct.price) : Number(product.price_range?.minimum_price?.final_price?.value ?? 0);
     const tiers = matchingProduct?.wholesale_tiers || [];
     const activeTier = tiers
@@ -289,18 +442,40 @@ const mapMagentoCartItems = (items: MagentoCartItem[] = []): CheckoutItem[] => {
 
     const discountPercent = activeTier ? activeTier.discount : 0;
     const unitPrice = originalPrice * (1 - discountPercent / 100);
-    const category = product.categories?.find((cat) => cat?.name)?.name ?? (matchingProduct?.categoryLabel || '');
+    const category = product.categories?.find((cat) => cat?.name)?.name ?? matchingProduct?.categoryLabel ?? (inferCategoryFromSku(product.sku ?? '')?.category || 'Rau củ quả');
     const unit = matchingProduct?.unit || 'kg';
-    const galleryImage = (product.media_gallery_entries ?? []).find((entry) => {
+    const supplier = parseSupplierLabel(matchingProduct?.store_name);
+    const storedSupplier = storedSupplierMap[sku] || {};
+
+    const fixMagentoUrl = (url?: string | null) => {
+      if (!url || !url.trim()) return '';
+      if (typeof window === 'undefined') return url;
+      try {
+        const parsed = new URL(url);
+        if (parsed.pathname.includes('/media/catalog/product')) {
+          return `${window.location.origin}${parsed.pathname}`;
+        }
+        return url;
+      } catch {
+        return url;
+      }
+    };
+
+    const rawImage = fixMagentoUrl(product.small_image?.url) || fixMagentoUrl(product.thumbnail?.url) || '';
+    const isPlaceholder = rawImage.toLowerCase().includes('placeholder');
+    const fallbackImage = matchingProduct?.image || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop';
+
+    const galleryImage = (product.media_gallery_entries ?? []).find((entry: any) => {
       const file = entry.file?.trim() ?? '';
       return file && !file.toLowerCase().includes('placeholder');
     });
+    
     const finalImage =
       (isRealImageUrl(getMagentoMediaImageUrl(galleryImage?.file)) ? getMagentoMediaImageUrl(galleryImage?.file) : '') ||
-      (isRealImageUrl(product.small_image?.url) ? product.small_image?.url : '') ||
-      (isRealImageUrl(product.thumbnail?.url) ? product.thumbnail?.url : '') ||
+      (isRealImageUrl(fixMagentoUrl(product.small_image?.url)) ? fixMagentoUrl(product.small_image?.url) : '') ||
+      (isRealImageUrl(fixMagentoUrl(product.thumbnail?.url)) ? fixMagentoUrl(product.thumbnail?.url) : '') ||
       matchingProduct?.image ||
-      'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop';
+      (!rawImage || isPlaceholder ? fallbackImage : rawImage);
 
     return {
       id: String(item.id),
@@ -310,7 +485,9 @@ const mapMagentoCartItems = (items: MagentoCartItem[] = []): CheckoutItem[] => {
       unitPrice,
       unit,
       image: finalImage,
-      category
+      category,
+      supplierName: storedSupplier.supplierName || supplier.supplierName,
+      supplierRegion: storedSupplier.supplierRegion || supplier.supplierRegion
     };
   });
 };
@@ -394,7 +571,7 @@ export function CheckoutPage() {
   const [deliveryDate, setDeliveryDate] = useState('');
   const [deliveryTime, setDeliveryTime] = useState('');
   const [shippingInfo, setShippingInfo] = useState<ShippingInfo>({
-    branch: branches[0],
+    branch: '',
     address: '',
     receiver: getCustomerName(),
     phone: '',
@@ -412,15 +589,54 @@ export function CheckoutPage() {
   const [toastMessage, setToastMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Subscription / Recurring Order states
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recFrequency, setRecFrequency] = useState<'weekly' | 'monthly'>('weekly');
+  const [recWeekdays, setRecWeekdays] = useState<number[]>([1, 4]); // Mon & Thu
+  const [recMonthDay, setRecMonthDay] = useState<number>(1);
+
   // Weather and ETA estimation states
-  const [estimation, setEstimation] = useState<WeatherEstimation | null>(null);
+  const [estimations, setEstimations] = useState<Record<string, WeatherEstimation>>({});
+  const [dbWarehouses, setDbWarehouses] = useState<any[]>([]);
+  const [selectedCarriers, setSelectedCarriers] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    fetch('/rest/V1/tmdt-orders/warehouses')
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setDbWarehouses(data);
+        }
+      })
+      .catch((err) => console.error('Failed to load DB warehouses:', err));
+  }, []);
+
+  const estimation = useMemo(() => {
+    return Object.values(estimations)[0] || null;
+  }, [estimations]);
+
   const [estLoading, setEstLoading] = useState<boolean>(false);
+
 
   // SOTA Leaflet Map states and refs
   const [leafletLoaded, setLeafletLoaded] = useState<boolean>(false);
   const [mapGpsLoading, setMapGpsLoading] = useState<boolean>(false);
   const [initialCoordinates, setInitialCoordinates] = useState<{ lat: number; lng: number } | null>(null);
+  const [coordinates, setCoordinates] = useState<{ lat: number; lng: number; cityName?: string } | null>(null);
+  const isMapActionRef = useRef<boolean>(false);
   const [mapSearchQuery, setMapSearchQuery] = useState<string>('');
+
+  useEffect(() => {
+    if (coordinates) {
+      const closest = findClosestBranch(coordinates.lat, coordinates.lng);
+      setShippingInfo((prev) => {
+        if (prev.branch !== closest) {
+          return { ...prev, branch: closest };
+        }
+        return prev;
+      });
+    }
+  }, [coordinates]);
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
@@ -484,15 +700,54 @@ export function CheckoutPage() {
     () => checkoutItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
     [checkoutItems]
   );
-  const shippingFee = 0;
+
+  const checkoutGroups = useMemo(() => {
+    const groups: Record<string, CheckoutItem[]> = {};
+    checkoutItems.forEach((item) => {
+      const supplierLabel = formatCartSupplierLabel(item);
+      if (!groups[supplierLabel]) {
+        groups[supplierLabel] = [];
+      }
+      groups[supplierLabel].push(item);
+    });
+    return Object.entries(groups).map(([supplierLabel, items]) => {
+      const groupSubtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+      return {
+        supplierLabel,
+        items,
+        subtotal: groupSubtotal
+      };
+    });
+  }, [checkoutItems]);
+
+  const shippingFee = useMemo(() => {
+    return Object.entries(estimations).reduce((sum, [label, est]) => {
+      const carrierCode = selectedCarriers[label] || 'ghtk';
+      const rate = est.carrierRates?.find(r => r.code === carrierCode);
+      return sum + (rate ? rate.fee : (est.shippingFee || 0));
+    }, 0);
+  }, [estimations, selectedCarriers]);
+
+  const weatherSurcharge = useMemo(() => {
+    return Object.values(estimations).reduce((sum, est) => sum + (est.surcharge || 0), 0);
+  }, [estimations]);
+
   const shippingDiscount = 0;
-  const weatherSurcharge = estimation ? estimation.surcharge : 0;
-  const totalAmount = subtotal + shippingFee - shippingDiscount + weatherSurcharge;
+
+  const totalAmount = useMemo(() => {
+    return subtotal + shippingFee - shippingDiscount + weatherSurcharge;
+  }, [subtotal, shippingFee, shippingDiscount, weatherSurcharge]);
+
 
   // Immediately get initial location on mount to center the map on the user's actual GPS location
   useEffect(() => {
+    const savedShipping = loadSavedShipping();
+    const activeBranch = savedShipping?.branch || '';
+    const defaultCoords = branchCoordinates[activeBranch] || { lat: 10.776, lng: 106.700 };
+
     if (!navigator.geolocation) {
-      setInitialCoordinates({ lat: 21.036, lng: 105.782 });
+      setInitialCoordinates(defaultCoords);
+      setCoordinates(defaultCoords);
       return;
     }
 
@@ -502,7 +757,9 @@ export function CheckoutPage() {
           lat: position.coords.latitude,
           lng: position.coords.longitude
         };
+        isMapActionRef.current = true;
         setInitialCoordinates(coords);
+        setCoordinates(coords);
 
         // Reverse geocode to update address field immediately on load!
         try {
@@ -524,8 +781,9 @@ export function CheckoutPage() {
         }
       },
       (error) => {
-        console.warn('Geolocation denied or failed on load, falling back to Hanoi:', error);
-        setInitialCoordinates({ lat: 21.036, lng: 105.782 });
+        console.warn('Geolocation denied or failed on load, falling back to default branch:', error);
+        setInitialCoordinates(defaultCoords);
+        setCoordinates(defaultCoords);
       },
       { timeout: 8000, enableHighAccuracy: true }
     );
@@ -553,7 +811,9 @@ export function CheckoutPage() {
         unitPrice: item.unitPrice,
         unit: item.unit,
         image: item.image,
-        category: item.category
+        category: item.category,
+        supplierName: item.supplierName,
+        supplierRegion: item.supplierRegion
       }));
 
       const fallbackPayload = selected.length > 0 ? buildCheckoutPayload(selected) : await fetchCustomerCartPayload();
@@ -597,66 +857,84 @@ export function CheckoutPage() {
   }, [checkoutItems, isReady]);
 
   // Debounced effect for shipping address and branch selection changes
-  useEffect(() => {
-    const cleanAddress = shippingInfo.address.trim();
-    if (cleanAddress.length < 5) {
-      setEstimation(null);
-      return;
-    }
+    useEffect(() => {
+      const cleanAddress = shippingInfo.address.trim();
+      if (cleanAddress.length < 5) {
+        setEstimations({});
+        return;
+      }
+  
+      const timer = setTimeout(() => {
+        calculateWeatherAndEta(cleanAddress, shippingInfo.branch);
+      }, 1200);
+  
+      return () => clearTimeout(timer);
+    }, [shippingInfo.address, shippingInfo.branch]);
 
-    const timer = setTimeout(() => {
-      calculateWeatherAndEta(cleanAddress, shippingInfo.branch);
-    }, 1200);
-
-    return () => clearTimeout(timer);
-  }, [shippingInfo.address, shippingInfo.branch]);
 
   const calculateWeatherAndEta = async (address: string, branch: string) => {
     setEstLoading(true);
     try {
-      const queryAddress = `${address}, ${branch}`.trim();
-      let lat = 21.036; // Default to Cau Giay, Hanoi
-      let lng = 105.782;
-      let cityName = 'Hà Nội';
+      const branchCoords = (branch && branchCoordinates[branch]) || { lat: 10.776, lng: 106.700, cityName: 'TP. Hồ Chí Minh' };
+      let lat = branchCoords.lat;
+      let lng = branchCoords.lng;
+      let cityName = branchCoords.cityName;
 
-      // Call Nominatim Geocoding API to resolve coordinates
-      try {
-        const geoRes = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(queryAddress)}&format=json&limit=1`,
-          { headers: { 'User-Agent': 'FresoWeatherEstimation/1.0' } }
-        );
-        if (geoRes.ok) {
-          const geoData = await geoRes.json();
-          if (geoData && geoData.length > 0) {
-            lat = parseFloat(geoData[0].lat);
-            lng = parseFloat(geoData[0].lon);
-            cityName = geoData[0].display_name.split(',')[0] || 'Vị trí nhận hàng';
-          } else {
-            // Fallback: search for just the branch/region name
-            const fallbackRes = await fetch(
-              `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(branch)}&format=json&limit=1`,
-              { headers: { 'User-Agent': 'FresoWeatherEstimation/1.0' } }
-            );
-            if (fallbackRes.ok) {
-              const fallbackData = await fallbackRes.json();
-              if (fallbackData && fallbackData.length > 0) {
-                lat = parseFloat(fallbackData[0].lat);
-                lng = parseFloat(fallbackData[0].lon);
-                cityName = branch;
-              }
+      if (isMapActionRef.current && coordinates) {
+        lat = coordinates.lat;
+        lng = coordinates.lng;
+        cityName = coordinates.cityName || address.split(',')[0] || branchCoords.cityName;
+        isMapActionRef.current = false; // Reset map action flag
+      } else {
+        // Step 1: Try to geocode the raw typed address as-is (e.g. if the user typed an out-of-city Hanoi address)
+        let resolved = false;
+        try {
+          const geoRes = await fetch(
+            `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`,
+            { headers: { 'User-Agent': 'FresoWeatherEstimation/1.0' } }
+          );
+          if (geoRes.ok) {
+            const geoData = await geoRes.json();
+            if (geoData && geoData.length > 0) {
+              lat = parseFloat(geoData[0].lat);
+              lng = parseFloat(geoData[0].lon);
+              cityName = geoData[0].display_name.split(',')[0] || 'Vị trí nhận hàng';
+              resolved = true;
+              setCoordinates({ lat, lng, cityName });
             }
           }
+        } catch (geoErr) {
+          console.warn('Geocoding raw address failed', geoErr);
         }
-      } catch (geoErr) {
-        console.warn('Geocoding failed, using fallbacks', geoErr);
-      }
 
-      // Determine the nearest warehouse dynamically by comparing distances to all options
-      const { warehouse, distance } = findNearestWarehouse(lat, lng);
+        // Step 2: Fallback to branch-scoped search in HCMC if raw geocoding yielded no results
+        if (!resolved) {
+          try {
+            const cleanBranch = branch.replace(/^Chi nhánh\s+/i, '');
+            const queryAddress = `${address}, ${cleanBranch}, Hồ Chí Minh, Việt Nam`.trim();
+            const geoRes = await fetch(
+              `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(queryAddress)}&format=json&limit=1`,
+              { headers: { 'User-Agent': 'FresoWeatherEstimation/1.0' } }
+            );
+            if (geoRes.ok) {
+              const geoData = await geoRes.json();
+              if (geoData && geoData.length > 0) {
+                lat = parseFloat(geoData[0].lat);
+                lng = parseFloat(geoData[0].lon);
+                cityName = geoData[0].display_name.split(',')[0] || 'Vị trí nhận hàng';
+                setCoordinates({ lat, lng, cityName });
+              }
+            }
+          } catch (fallbackErr) {
+            console.warn('Geocoding with fallback scope failed', fallbackErr);
+          }
+        }
+      }
 
       // Fetch Weather Data from Open-Meteo
       const weatherRes = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m`
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,rain,precipitation&t=${Date.now()}`,
+        { cache: 'no-store' }
       );
       if (!weatherRes.ok) {
         throw new Error('Không thể tải dữ liệu thời tiết.');
@@ -664,15 +942,24 @@ export function CheckoutPage() {
       const weatherData = await weatherRes.json();
       const temperature = Math.round(weatherData.current.temperature_2m);
       const humidity = Math.round(weatherData.current.relative_humidity_2m);
-      const weatherCode = weatherData.current.weather_code;
+      let weatherCode = weatherData.current.weather_code;
       const windSpeed = Math.round(weatherData.current.wind_speed_10m);
+      const rain = weatherData.current.rain || 0;
+      const precipitation = weatherData.current.precipitation || 0;
+
+      // Correct false-positive rain/thunderstorm predictions
+      if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99].includes(weatherCode)) {
+        if (precipitation === 0 && rain === 0) {
+          if (temperature >= 33) {
+            weatherCode = 1; // Mainly clear
+          } else {
+            weatherCode = 3; // Overcast
+          }
+        }
+      }
 
       // Map WMO Code and wind speed to factor and labels
       const weatherDetails = mapWmoToCondition(weatherCode, windSpeed);
-
-      // Calculate ETA: base minutes is rounded distance * 1.5 + 12
-      const baseDurationMinutes = Math.round(distance * 1.5) + 12;
-      const finalDurationMinutes = Math.round(baseDurationMinutes * weatherDetails.factor);
 
       // Temperature rules
       let surcharge = 0;
@@ -685,32 +972,57 @@ export function CheckoutPage() {
         temperatureNotice = '⚠️ Nhiệt độ cao. Sản phẩm sẽ được ưu tiên vận chuyển bằng xe lạnh.';
       }
 
-      // Wind rules
+      // Gió mạnh
       let windNotice = '';
       if (windSpeed > 40) {
         windNotice = '⚠️ Gió mạnh. Thời gian giao hàng có thể kéo dài.';
       }
 
-      setEstimation({
-        lat,
-        lng,
-        cityName,
-        temperature,
-        humidity,
-        condition: weatherDetails.condition,
-        conditionVi: weatherDetails.conditionVi,
-        conditionEmoji: weatherDetails.emoji,
-        windSpeed,
-        distanceKm: distance,
-        warehouseName: warehouse.name,
-        baseDurationMinutes,
-        finalDurationMinutes,
-        weatherFactor: weatherDetails.factor,
-        surcharge,
-        temperatureNotice,
-        windNotice,
-        weatherNotice: weatherDetails.notice
+      const nextEstimations: Record<string, WeatherEstimation> = {};
+      const uniqueSupplierLabels = Array.from(new Set(checkoutItems.map(item => formatCartSupplierLabel(item))));
+
+      uniqueSupplierLabels.forEach((supplierLabel) => {
+        const warehouse = getWarehouseForSupplier(supplierLabel, dbWarehouses);
+        const distance = calculateDistance(lat, lng, warehouse.lat, warehouse.lng || warehouse.lon);
+        const baseDurationMinutes = Math.round(distance * 1.5) + 12;
+        const finalDurationMinutes = Math.round(baseDurationMinutes * weatherDetails.factor);
+        
+        // Sum weights of all products in this shop
+        const shopItems = checkoutItems.filter(item => formatCartSupplierLabel(item) === supplierLabel);
+        const shopWeight = shopItems.reduce((sum, item) => sum + calculateItemWeight(item.unit, item.quantity), 0);
+
+        // Get carrier rates
+        const carrierRates = calculateCarrierRates(distance, shopWeight);
+
+        // Keep fallback shippingFee logic for legacy code compatibility
+        const shopShippingFee = Math.max(15000, Math.round(distance * 2000 / 1000) * 1000);
+
+        nextEstimations[supplierLabel] = {
+          lat,
+          lng,
+          cityName,
+          temperature,
+          humidity,
+          condition: weatherDetails.condition,
+          conditionVi: weatherDetails.conditionVi,
+          conditionEmoji: weatherDetails.emoji,
+          windSpeed,
+          distanceKm: distance,
+          warehouseName: warehouse.name,
+          baseDurationMinutes,
+          finalDurationMinutes,
+          weatherFactor: weatherDetails.factor,
+          surcharge,
+          shippingFee: shopShippingFee,
+          temperatureNotice,
+          windNotice,
+          weatherNotice: weatherDetails.notice,
+          weightKg: shopWeight,
+          carrierRates
+        };
       });
+
+      setEstimations(nextEstimations);
 
     } catch (err) {
       console.error('Weather estimation error:', err);
@@ -816,6 +1128,8 @@ export function CheckoutPage() {
           if (data.display_name) {
             const parts = data.display_name.split(',');
             const cleanAddr = parts.slice(0, 4).map((p: string) => p.trim()).join(', ');
+            isMapActionRef.current = true;
+            setCoordinates({ lat, lng, cityName: parts[0]?.trim() || 'Vị trí nhận hàng' });
             setShippingInfo((prev) => ({ ...prev, address: cleanAddr }));
             setMapSearchQuery(cleanAddr);
           }
@@ -830,6 +1144,8 @@ export function CheckoutPage() {
       marker.setLatLng([lat, lng]);
       circle.setLatLng([lat, lng]);
       map.panTo([lat, lng]);
+      isMapActionRef.current = true;
+      setCoordinates({ lat, lng });
       handleLocationSelect(lat, lng);
     });
 
@@ -841,6 +1157,8 @@ export function CheckoutPage() {
     marker.on('dragend', () => {
       const { lat, lng } = marker.getLatLng();
       map.panTo([lat, lng]);
+      isMapActionRef.current = true;
+      setCoordinates({ lat, lng });
       handleLocationSelect(lat, lng);
     });
 
@@ -898,6 +1216,8 @@ export function CheckoutPage() {
           }
 
           const cleanAddr = data[0].display_name.split(',').slice(0, 4).map((p: string) => p.trim()).join(', ');
+          isMapActionRef.current = true;
+          setCoordinates({ lat, lng, cityName: cleanAddr.split(',')[0] });
           setShippingInfo((prev) => ({ ...prev, address: cleanAddr }));
           setMapSearchQuery(cleanAddr);
         } else {
@@ -939,6 +1259,8 @@ export function CheckoutPage() {
             if (data.display_name) {
               const parts = data.display_name.split(',');
               const cleanAddr = parts.slice(0, 4).map((p: string) => p.trim()).join(', ');
+              isMapActionRef.current = true;
+              setCoordinates({ lat, lng, cityName: parts[0]?.trim() || 'Vị trí hiện tại' });
               setShippingInfo((prev) => ({ ...prev, address: cleanAddr }));
               setMapSearchQuery(cleanAddr);
             }
@@ -974,7 +1296,7 @@ export function CheckoutPage() {
   };
 
   const validateField = (field: keyof ShippingInfo, value: string) => {
-    if (field === 'note') return '';
+    if (field === 'note' || field === 'branch') return '';
     if (!value.trim()) return 'Vui lòng nhập thông tin này.';
     if (field === 'phone' && !isValidPhone(value)) return 'Số điện thoại chưa hợp lệ.';
     return '';
@@ -1048,7 +1370,7 @@ export function CheckoutPage() {
       supplier,
       deliveryDate,
       deliveryTime,
-      shippingAddress: `${shippingInfo.branch} - ${shippingInfo.address}`,
+      shippingAddress: shippingInfo.branch ? `${shippingInfo.branch} - ${shippingInfo.address}` : shippingInfo.address,
       note: shippingInfo.note,
       invoiceInfo
     };
@@ -1070,13 +1392,29 @@ export function CheckoutPage() {
       totalAmount,
       deliveryDate,
       deliveryTime,
-      shippingAddress: `${shippingInfo.branch} - ${shippingInfo.address}`,
+      shippingAddress: shippingInfo.branch ? `${shippingInfo.branch} - ${shippingInfo.address}` : shippingInfo.address,
       note: shippingInfo.note,
       invoiceInfo
     };
 
     try {
       setIsSubmitting(true);
+
+      const suppliersShippingMap: Record<string, any> = {};
+      Object.entries(estimations).forEach(([supplierLabel, est]) => {
+        const carrierCode = selectedCarriers[supplierLabel] || 'ghtk';
+        const rate = est.carrierRates?.find(r => r.code === carrierCode) || est.carrierRates?.[0];
+
+        suppliersShippingMap[supplierLabel] = {
+          warehouse: est.warehouseName,
+          distance: est.distanceKm,
+          shippingFee: rate ? rate.fee : est.shippingFee,
+          surcharge: est.surcharge,
+          eta: rate ? rate.eta : formatDuration(est.finalDurationMinutes),
+          carrier: rate ? rate.name : 'Giao Hàng Tiết Kiệm (GHTK)',
+          weight: est.weightKg
+        };
+      });
 
       // Step 1: Create order in backend and get orderCode
       const createRes = await fetch('/rest/V1/tmdt-orders/create', {
@@ -1086,7 +1424,6 @@ export function CheckoutPage() {
           ...(getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {})
         },
         body: JSON.stringify({
-          // Flat params matching Magento interface (no nested array)
           customerEmail: getCustomerEmail() || 'guest',
           customerName: getCustomerName(),
           totalAmount,
@@ -1095,7 +1432,9 @@ export function CheckoutPage() {
             name: item.name,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
-            unit: item.unit
+            unit: item.unit,
+            supplierName: item.supplierName,
+            supplierRegion: item.supplierRegion
           }))),
           shippingJson: JSON.stringify({
             branch: shippingInfo.branch,
@@ -1104,49 +1443,116 @@ export function CheckoutPage() {
             phone: shippingInfo.phone,
             note: shippingInfo.note,
             deliveryDate,
-            deliveryTime
+            deliveryTime,
+            suppliers: suppliersShippingMap
           })
         })
       });
 
       let orderCode: string;
       let expiresAt: string;
+      let childOrdersList: any[] = [];
 
       if (createRes.ok) {
         const orderData = await createRes.json();
         orderCode = orderData?.orderCode ?? `DH${Date.now().toString(36).toUpperCase().slice(-6)}`;
         expiresAt = orderData?.expiresAt ?? new Date(Date.now() + 15 * 60 * 1000).toISOString();
+        childOrdersList = orderData?.childOrders ?? [];
       } else {
         // Fallback: generate local order code if API fails
         orderCode = `DH${Date.now().toString(36).toUpperCase().slice(-6)}`;
         expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+        childOrdersList = [
+          {
+            orderCode,
+            supplier: supplier || 'Tổng kho sỉ Thực phẩm B2B · Hà Nội',
+            subtotal,
+            totalAmount,
+            items: checkoutItems
+          }
+        ];
       }
 
-      // Step 2: Also save purchase history
+      // Step 2: Also save purchase history for each child order
       const token = getAuthToken();
-      if (token) {
-        fetch('/rest/V1/tmdt-search/purchase-history', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            customerEmail: getCustomerEmail(),
-            orderReference: orderCode,
-            customerRegion: getRegionFromBranch(shippingInfo.branch),
-            items: checkoutItems.map((item) => ({
-              sku: item.sku, name: item.name, category: item.category,
-              quantity: item.quantity, unitPrice: item.unitPrice, unit: item.unit, image: item.image
-            })),
-            supplier, subtotal, totalAmount, deliveryDate, deliveryTime,
-            shippingAddress: `${shippingInfo.branch} - ${shippingInfo.address}`,
-            note: shippingInfo.note, invoiceInfo
-          })
-        }).catch(() => {/* ignore */});
+      if (token && childOrdersList && childOrdersList.length > 0) {
+        for (const child of childOrdersList) {
+          const childSupplierLabel = child.supplier;
+          
+          await fetch('/rest/V1/tmdt-search/purchase-history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              customerEmail: getCustomerEmail(),
+              orderReference: child.orderCode,
+              customerRegion: getRegionFromBranch(shippingInfo.branch),
+              items: child.items.map((item: any) => {
+                const match = checkoutItems.find(i => i.sku === item.sku);
+                return {
+                  sku: item.sku,
+                  name: item.name,
+                  category: match?.category || 'Rau củ quả',
+                  quantity: item.quantity,
+                  unitPrice: item.unitPrice,
+                  unit: item.unit || 'kg',
+                  image: match?.image || ''
+                };
+              }),
+              supplier: childSupplierLabel,
+              subtotal: child.subtotal,
+              totalAmount: child.totalAmount,
+              deliveryDate,
+              deliveryTime,
+              shippingAddress: shippingInfo.branch ? `${shippingInfo.branch} - ${shippingInfo.address}` : shippingInfo.address,
+              note: shippingInfo.note,
+              invoiceInfo
+            })
+          }).catch(() => {/* ignore */ });
+        }
       }
+
 
       const preferredRegion = getRegionFromBranch(shippingInfo.branch);
       if (preferredRegion) {
         window.localStorage.setItem(preferredRegionStorageKey, preferredRegion);
         window.sessionStorage.setItem(preferredRegionStorageKey, preferredRegion);
+      }
+
+      // Save recurring subscription if checked
+      if (isRecurring) {
+        try {
+          await fetch('/rest/V1/tmdt-recurring/subscribe', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {})
+            },
+            body: JSON.stringify({
+              customerEmail: getCustomerEmail() || 'guest',
+              customerName: getCustomerName(),
+              frequency: recFrequency,
+              weekdays: recFrequency === 'weekly' ? recWeekdays.join(',') : null,
+              monthDay: recFrequency === 'monthly' ? recMonthDay : null,
+              deliveryTime: deliveryTime || '07:00 - 09:00',
+              itemsJson: JSON.stringify(checkoutItems.map((item) => ({
+                sku: item.sku,
+                name: item.name,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                unit: item.unit
+              }))),
+              shippingJson: JSON.stringify({
+                branch: shippingInfo.branch,
+                address: shippingInfo.address,
+                receiver: shippingInfo.receiver,
+                phone: shippingInfo.phone,
+                note: shippingInfo.note
+              })
+            })
+          });
+        } catch (subErr) {
+          console.error('Failed to create recurring subscription', subErr);
+        }
       }
 
       // Step 3: Show VietQR modal
@@ -1188,75 +1594,78 @@ export function CheckoutPage() {
                 Tóm tắt đơn hàng
               </div>
               <div className="space-y-4">
-                {checkoutItems.map((item) => {
-                  const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
-                  let customLocalProducts: any[] = [];
-                  if (customLocalRaw) {
-                    try {
-                      customLocalProducts = JSON.parse(customLocalRaw);
-                    } catch {
-                      customLocalProducts = [];
-                    }
-                  }
-                  const sku = (item.sku ?? '').trim().toLowerCase();
-                  const matchingProduct = customLocalProducts.find(p => (p.sku ?? '').trim().toLowerCase() === sku);
-                  const originalPrice = matchingProduct ? Number(matchingProduct.price) : item.unitPrice;
-                  const tiers = matchingProduct?.wholesale_tiers || [];
-                  const activeTier = tiers
-                    .filter((t: any) => item.quantity >= t.qty)
-                    .sort((a: any, b: any) => b.qty - a.qty)[0];
-                  const discountPercent = activeTier ? activeTier.discount : 0;
-                  const hasDiscount = discountPercent > 0;
-
+                {checkoutGroups.map((group) => {
+                  const shopEst = estimations[group.supplierLabel];
                   return (
-                    <div key={item.id} className="flex items-center gap-4 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
-                      <img src={item.image} alt={item.name} className="size-14 rounded-xl object-cover" />
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-gray-900">{item.name}</p>
-                        <div className="text-xs text-gray-500 flex flex-wrap items-center gap-1.5 mt-0.5">
-                          <span>{item.quantity} {item.unit} •</span>
-                          {hasDiscount ? (
-                            <>
-                              <span className="line-through text-gray-400">
-                                {toCurrencyTextFromNumber(originalPrice)}
-                              </span>
-                              <span className="px-1 py-0.2 bg-red-50 text-red-600 rounded text-[9px] font-bold">
-                                -{discountPercent}% sỉ
-                              </span>
-                              <span className="text-green-700 font-bold">
-                                {toCurrencyTextFromNumber(item.unitPrice)}
-                              </span>
-                            </>
-                          ) : (
-                            <span>{toCurrencyTextFromNumber(item.unitPrice)}</span>
-                          )}
+                    <div key={group.supplierLabel} className="mb-6 rounded-xl border border-gray-100 bg-gray-50/20 p-4">
+                      {/* Shop Header */}
+                      <div className="mb-3 flex items-center justify-between border-b border-gray-100 pb-2">
+                        <div className="flex items-center gap-2 font-bold text-gray-850">
+                          <Store className="size-4 text-green-650" />
+                          <span>{group.supplierLabel}</span>
                         </div>
+                        <span className="text-xs font-semibold text-gray-405 bg-gray-100 px-2 rounded-full">
+                          {group.items.length} sản phẩm
+                        </span>
                       </div>
-                      <div className="text-sm font-semibold text-gray-900">
-                        {toCurrencyTextFromNumber(item.quantity * item.unitPrice)}
+
+                      {/* Items List */}
+                      <div className="space-y-3">
+                        {group.items.map((item) => {
+                          const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
+                          let customLocalProducts: any[] = [];
+                          if (customLocalRaw) {
+                            try {
+                              customLocalProducts = JSON.parse(customLocalRaw);
+                            } catch {
+                              customLocalProducts = [];
+                            }
+                          }
+                          const sku = (item.sku ?? '').trim().toLowerCase();
+                          const matchingProduct = customLocalProducts.find(p => (p.sku ?? '').trim().toLowerCase() === sku);
+                          const originalPrice = matchingProduct ? Number(matchingProduct.price) : item.unitPrice;
+                          const tiers = matchingProduct?.wholesale_tiers || [];
+                          const activeTier = tiers
+                            .filter((t: any) => item.quantity >= t.qty)
+                            .sort((a: any, b: any) => b.qty - a.qty)[0];
+                          const discountPercent = activeTier ? activeTier.discount : 0;
+                          const hasDiscount = discountPercent > 0;
+
+                          return (
+                            <div key={item.id} className="flex items-center gap-3 rounded-lg bg-white p-3 border border-gray-100/50">
+                              <img src={item.image} alt={item.name} className="size-12 rounded-lg object-cover" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-gray-900 truncate">{item.name}</p>
+                                <div className="text-xs text-gray-500 flex flex-wrap items-center gap-1.5 mt-0.5">
+                                  <span>{item.quantity} {item.unit} •</span>
+                                  {hasDiscount ? (
+                                    <>
+                                      <span className="line-through text-gray-400">
+                                        {toCurrencyTextFromNumber(originalPrice)}
+                                      </span>
+                                      <span className="text-green-700 font-bold">
+                                        {toCurrencyTextFromNumber(item.unitPrice)}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span>{toCurrencyTextFromNumber(item.unitPrice)}</span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-sm font-semibold text-gray-900 whitespace-nowrap">
+                                {toCurrencyTextFromNumber(item.quantity * item.unitPrice)}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
+
                     </div>
                   );
                 })}
               </div>
-
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-gray-600">
-
-                {supplierOptions.length > 1 && (
-                  <select
-                    value={supplier}
-                    onChange={(event) => setSupplier(event.target.value)}
-                    className="rounded-full border border-gray-200 px-3 py-1 text-sm"
-                  >
-                    {supplierOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
             </section>
+
 
             <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-800">
@@ -1310,27 +1719,13 @@ export function CheckoutPage() {
                 Thông tin nhận hàng
               </div>
               <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Chi nhánh</label>
-                  <select
-                    value={shippingInfo.branch}
-                    onChange={(event) => updateShippingField('branch', event.target.value)}
-                    className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-green-500"
-                  >
-                    {branches.map((branch) => (
-                      <option key={branch} value={branch}>
-                        {branch}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
+                <div className="md:col-span-2">
                   <label className="text-sm font-medium text-gray-700">Địa chỉ giao hàng</label>
                   <input
                     value={shippingInfo.address}
                     onChange={(event) => updateShippingField('address', event.target.value)}
                     placeholder="Số nhà, đường, phường/xã"
-                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${errors.address ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
+                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${errors.shipping_address ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
                       }`}
                   />
                   {errors.shipping_address && <p className="mt-1 text-xs text-red-500">{errors.shipping_address}</p>}
@@ -1426,25 +1821,72 @@ export function CheckoutPage() {
                       </div>
                     </div>
 
-                    <div className="border-t border-dashed border-green-200/50 pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div>
-                        <div className="text-xs text-gray-500 font-medium">Tuyến vận chuyển hàng:</div>
-                        <div className="text-sm font-bold text-gray-900">
-                          {estimation.warehouseName} → Khách hàng ({estimation.distanceKm} km)
-                        </div>
-                      </div>
+                    <div className="border-t border-dashed border-green-200/50 pt-3 space-y-3">
+                      <div className="text-xs text-gray-500 font-bold uppercase tracking-wider">Thông tin lộ trình vận chuyển theo từng Shop:</div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {Object.entries(estimations).map(([supplierLabel, est]) => (
+                          <div key={supplierLabel} className="bg-white border border-green-100 p-3.5 rounded-xl shadow-xs space-y-2">
+                            <div className="font-extrabold text-[13px] text-green-800 border-b border-gray-50 pb-1.5 flex items-center gap-1.5">
+                              <Store className="size-3.5 text-green-600 shrink-0" />
+                              {supplierLabel}
+                            </div>
+                             <div className="space-y-2 text-xs text-gray-750">
+                              <div className="flex justify-between border-b border-gray-50 pb-1">
+                                <span className="text-gray-500">Trọng lượng đơn:</span>
+                                <span className="font-bold text-slate-800">{est.weightKg.toFixed(1)} kg</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-500">Vận chuyển từ:</span>
+                                <span className="font-bold text-gray-900">{est.warehouseName} ({est.distanceKm} km)</span>
+                              </div>
+                              
+                              {/* Shipping carrier selector */}
+                              <div className="space-y-1.5 mt-2">
+                                <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Chọn đơn vị vận chuyển:</div>
+                                <div className="grid gap-1.5">
+                                  {est.carrierRates?.map((rate) => {
+                                    const selectedCarrier = selectedCarriers[supplierLabel] || 'ghtk';
+                                    const isCurrent = selectedCarrier === rate.code;
+                                    return (
+                                      <button
+                                        key={rate.code}
+                                        type="button"
+                                        onClick={() => setSelectedCarriers(prev => ({ ...prev, [supplierLabel]: rate.code }))}
+                                        className={`flex items-center justify-between p-2 rounded-xl border text-left transition-all ${
+                                          isCurrent
+                                            ? 'border-green-600 bg-green-50/50 shadow-xs'
+                                            : 'border-gray-150 hover:bg-gray-50/30'
+                                        }`}
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <input
+                                            type="radio"
+                                            name={`carrier-${supplierLabel}`}
+                                            checked={isCurrent}
+                                            onChange={() => setSelectedCarriers(prev => ({ ...prev, [supplierLabel]: rate.code }))}
+                                            className="accent-green-600 size-3"
+                                          />
+                                          <div>
+                                            <p className="text-xs font-bold text-gray-950">{rate.name}</p>
+                                            <p className="text-[10px] text-gray-500 font-semibold">Nhận dự kiến: {rate.eta}</p>
+                                          </div>
+                                        </div>
+                                        <span className="text-xs font-extrabold text-green-700">{toCurrencyTextFromNumber(rate.fee)}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
 
-                      <div className="text-left sm:text-right">
-                        <div className="text-xs text-gray-500 font-medium">Thời gian giao dự kiến (ETA):</div>
-                        <div className="text-base font-extrabold text-green-700 flex items-center sm:justify-end gap-1.5">
-                          <Truck className="size-5" />
-                          {formatDuration(estimation.finalDurationMinutes)}
-                          {estimation.weatherFactor > 1.0 && (
-                            <span className="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-full ml-1 whitespace-nowrap">
-                              x{estimation.weatherFactor} thời tiết
-                            </span>
-                          )}
-                        </div>
+                              {est.surcharge > 0 && (
+                                <div className="flex justify-between text-orange-650 font-semibold border-t border-dashed border-gray-100 pt-1.5">
+                                  <span>Phụ phí xe lạnh thời tiết:</span>
+                                  <span>{toCurrencyTextFromNumber(est.surcharge)}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
 
@@ -1480,7 +1922,7 @@ export function CheckoutPage() {
                     <input
                       value={shippingInfo.receiver}
                       onChange={(event) => updateShippingField('receiver', event.target.value)}
-                      className={`w-full rounded-xl border py-2 pl-9 pr-3 text-sm outline-none transition-colors ${errors.receiver ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
+                      className={`w-full rounded-xl border py-2 pl-9 pr-3 text-sm outline-none transition-colors ${errors.shipping_receiver ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
                         }`}
                     />
                   </div>
@@ -1494,7 +1936,7 @@ export function CheckoutPage() {
                       value={shippingInfo.phone}
                       onChange={(event) => updateShippingField('phone', event.target.value)}
                       placeholder="VD: 090x xxx xxx"
-                      className={`w-full rounded-xl border py-2 pl-9 pr-3 text-sm outline-none transition-colors ${errors.phone ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
+                      className={`w-full rounded-xl border py-2 pl-9 pr-3 text-sm outline-none transition-colors ${errors.shipping_phone ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
                         }`}
                     />
                   </div>
@@ -1583,6 +2025,123 @@ export function CheckoutPage() {
                   {errors.invoice_email && <p className="mt-1 text-xs text-red-500">{errors.invoice_email}</p>}
                 </div>
               </div>
+            </section>
+
+            {/* Section 4: Đăng ký mua định kỳ / Đặt hàng tự động */}
+            <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <h3 className="flex items-center gap-2 text-lg font-bold text-gray-800">
+                  <Calendar className="size-5 text-green-600" />
+                  Đăng ký mua định kỳ (Subscription)
+                </h3>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isRecurring}
+                    onChange={(e) => setIsRecurring(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                </label>
+              </div>
+
+              {isRecurring ? (
+                <div className="space-y-4 pt-2 text-sm transition-all duration-300">
+                  <p className="text-xs text-green-700 bg-green-50 p-3.5 rounded-2xl border border-green-100 font-semibold leading-relaxed">
+                    💡 Hệ thống sẽ tự động lên đơn hàng mới cho các sản phẩm này (ở trạng thái Chờ thanh toán) vào các ngày hẹn dưới đây. Bạn chỉ cần vào Dashboard thanh toán bằng QR là xong.
+                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Tần suất lên đơn</label>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setRecFrequency('weekly')}
+                          className={`flex-1 py-2 px-4 rounded-xl border text-xs font-bold transition-all ${
+                            recFrequency === 'weekly'
+                              ? 'bg-green-600 border-transparent text-white shadow-sm'
+                              : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                          }`}
+                        >
+                          Hàng tuần
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRecFrequency('monthly')}
+                          className={`flex-1 py-2 px-4 rounded-xl border text-xs font-bold transition-all ${
+                            recFrequency === 'monthly'
+                              ? 'bg-green-600 border-transparent text-white shadow-sm'
+                              : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                          }`}
+                        >
+                          Hàng tháng
+                        </button>
+                      </div>
+                    </div>
+
+                    {recFrequency === 'weekly' ? (
+                      <div>
+                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Chọn thứ trong tuần</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {[
+                            { value: 1, label: 'T2' },
+                            { value: 2, label: 'T3' },
+                            { value: 3, label: 'T4' },
+                            { value: 4, label: 'T5' },
+                            { value: 5, label: 'T6' },
+                            { value: 6, label: 'T7' },
+                            { value: 0, label: 'CN' }
+                          ].map((day) => {
+                            const isSelected = recWeekdays.includes(day.value);
+                            return (
+                              <button
+                                type="button"
+                                key={day.value}
+                                onClick={() => {
+                                  if (isSelected) {
+                                    if (recWeekdays.length > 1) {
+                                      setRecWeekdays(recWeekdays.filter((d) => d !== day.value));
+                                    }
+                                  } else {
+                                    setRecWeekdays([...recWeekdays, day.value]);
+                                  }
+                                }}
+                                className={`w-9 h-9 rounded-xl border flex items-center justify-center text-xs font-bold transition-all ${
+                                  isSelected
+                                    ? 'bg-green-100 border-green-300 text-green-700'
+                                    : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+                                }`}
+                              >
+                                {day.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Chọn ngày trong tháng</label>
+                        <select
+                          value={recMonthDay}
+                          onChange={(e) => setRecMonthDay(parseInt(e.target.value, 10))}
+                          className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-green-500 bg-white"
+                        >
+                          {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                            <option key={d} value={d}>
+                              Ngày {d} hàng tháng
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 pt-1">
+                  Bật tùy chọn này để lưu các sản phẩm hiện có thành lịch đặt hàng tự động định kỳ cho tương lai.
+                </p>
+              )}
             </section>
           </div>
 
@@ -1674,9 +2233,8 @@ export function CheckoutPage() {
                   {/* Countdown */}
                   <div className="mb-4 flex items-center justify-between rounded-xl bg-amber-50 border border-amber-200 px-4 py-2">
                     <span className="text-sm text-amber-700 font-medium">⏱ Giữ hàng còn lại</span>
-                    <span className={`text-lg font-bold tabular-nums ${
-                      countdown < 60 ? 'text-red-600' : 'text-amber-700'
-                    }`}>
+                    <span className={`text-lg font-bold tabular-nums ${countdown < 60 ? 'text-red-600' : 'text-amber-700'
+                      }`}>
                       {String(Math.floor(countdown / 60)).padStart(2, '0')}:{String(countdown % 60).padStart(2, '0')}
                     </span>
                   </div>

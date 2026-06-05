@@ -68,40 +68,159 @@ class Create implements HttpPostActionInterface, CsrfAwareActionInterface
 
             $connection = $this->resourceConnection->getConnection();
             $table = $connection->getTableName(self::TABLE);
-            $orderCode = $this->generateOrderCode();
             $expiresAt = date('Y-m-d H:i:s', time() + self::HOLD_MINUTES * 60);
 
-            $connection->insert($table, [
-                'order_code'     => $orderCode,
-                'status'         => 'pending',
-                'total_amount'   => $totalAmount,
-                'items_json'     => $data['itemsJson'] ?? '[]',
-                'customer_email' => $data['customerEmail'] ?? '',
-                'customer_name'  => $data['customerName'] ?? '',
-                'shipping_json'  => $data['shippingJson'] ?? '{}',
-                'expires_at'     => $expiresAt,
-                'created_at'     => date('Y-m-d H:i:s'),
-            ]);
+            $itemsJson = $data['itemsJson'] ?? '[]';
+            $shippingJson = $data['shippingJson'] ?? '{}';
+            $items = json_decode($itemsJson, true) ?: [];
+            $shippingData = json_decode($shippingJson, true) ?: [];
 
-            $connection->insert(
-                $connection->getTableName('tmdt_order_status_history'),
-                [
-                    'order_code' => $orderCode,
-                    'status'     => 'pending',
-                    'comment'    => 'Đơn hàng được tạo thành công. Chờ thanh toán.',
-                    'created_at' => date('Y-m-d H:i:s'),
-                ]
-            );
+            $groups = [];
+            foreach ($items as $item) {
+                $sName = $item['supplierName'] ?? 'Tổng kho sỉ Thực phẩm B2B';
+                $sRegion = $item['supplierRegion'] ?? 'Hà Nội';
+                $supplierKey = $sName . ' · ' . $sRegion;
+                $groups[$supplierKey][] = $item;
+            }
 
-            $this->logger->info('[Order] Created order', ['orderCode' => $orderCode, 'amount' => $totalAmount]);
+            $childOrdersData = [];
 
-            return $result->setData([
-                'success'     => true,
-                'orderCode'   => $orderCode,
-                'totalAmount' => $totalAmount,
-                'expiresAt'   => $expiresAt,
-                'holdMinutes' => self::HOLD_MINUTES,
-            ]);
+            if (count($groups) > 1) {
+                $parentCode = $this->generateOrderCode();
+                $index = 0;
+                $calculatedParentTotal = 0.0;
+
+                foreach ($groups as $supplierKey => $groupItems) {
+                    $index++;
+                    $childCode = $parentCode . '-' . $index;
+                    $supplierShipping = $shippingData['suppliers'][$supplierKey] ?? [];
+
+                    $subtotal = 0.0;
+                    foreach ($groupItems as $item) {
+                        $subtotal += (float)($item['quantity'] * $item['unitPrice']);
+                    }
+                    $shippingFee = (float)($supplierShipping['shippingFee'] ?? 0);
+                    $surcharge = (float)($supplierShipping['surcharge'] ?? 0);
+                    $childTotalAmount = $subtotal + $shippingFee + $surcharge;
+                    $calculatedParentTotal += $childTotalAmount;
+
+                    $connection->insert($table, [
+                        'order_code'     => $childCode,
+                        'parent_code'    => $parentCode,
+                        'status'         => 'pending',
+                        'total_amount'   => $childTotalAmount,
+                        'items_json'     => json_encode($groupItems, JSON_UNESCAPED_UNICODE),
+                        'customer_email' => $data['customerEmail'] ?? '',
+                        'customer_name'  => $data['customerName'] ?? '',
+                        'shipping_json'  => json_encode(array_merge($shippingData, ['supplier_info' => $supplierShipping]), JSON_UNESCAPED_UNICODE),
+                        'expires_at'     => $expiresAt,
+                        'created_at'     => date('Y-m-d H:i:s'),
+                    ]);
+
+                    $connection->insert(
+                        $connection->getTableName('tmdt_order_status_history'),
+                        [
+                            'order_code' => $childCode,
+                            'status'     => 'pending',
+                            'comment'    => 'Đơn hàng con thuộc nhà cung cấp ' . $supplierKey . ' được tạo thành công. Chờ thanh toán.',
+                            'created_at' => date('Y-m-d H:i:s'),
+                        ]
+                    );
+
+                    $childOrdersData[] = [
+                        'orderCode' => $childCode,
+                        'supplier' => $supplierKey,
+                        'subtotal' => $subtotal,
+                        'totalAmount' => $childTotalAmount,
+                        'items' => $groupItems
+                    ];
+                }
+
+                // Create parent order
+                $connection->insert($table, [
+                    'order_code'     => $parentCode,
+                    'parent_code'    => 'parent',
+                    'status'         => 'pending',
+                    'total_amount'   => $calculatedParentTotal,
+                    'items_json'     => $itemsJson,
+                    'customer_email' => $data['customerEmail'] ?? '',
+                    'customer_name'  => $data['customerName'] ?? '',
+                    'shipping_json'  => $shippingJson,
+                    'expires_at'     => $expiresAt,
+                    'created_at'     => date('Y-m-d H:i:s'),
+                ]);
+
+                $connection->insert(
+                    $connection->getTableName('tmdt_order_status_history'),
+                    [
+                        'order_code' => $parentCode,
+                        'status'     => 'pending',
+                        'comment'    => 'Đơn hàng tổng được tạo thành công. Chờ thanh toán qua SePay.',
+                        'created_at' => date('Y-m-d H:i:s'),
+                    ]
+                );
+
+                $this->logger->info('[Order] Created split parent order', ['parentCode' => $parentCode, 'amount' => $calculatedParentTotal]);
+
+                return $result->setData([
+                    'success'     => true,
+                    'orderCode'   => $parentCode,
+                    'totalAmount' => $calculatedParentTotal,
+                    'expiresAt'   => $expiresAt,
+                    'holdMinutes' => self::HOLD_MINUTES,
+                    'childOrders' => $childOrdersData
+                ]);
+            } else {
+                // Single supplier order
+                $orderCode = $this->generateOrderCode();
+                $connection->insert($table, [
+                    'order_code'     => $orderCode,
+                    'parent_code'    => null,
+                    'status'         => 'pending',
+                    'total_amount'   => $totalAmount,
+                    'items_json'     => $itemsJson,
+                    'customer_email' => $data['customerEmail'] ?? '',
+                    'customer_name'  => $data['customerName'] ?? '',
+                    'shipping_json'  => $shippingJson,
+                    'expires_at'     => $expiresAt,
+                    'created_at'     => date('Y-m-d H:i:s'),
+                ]);
+
+                $connection->insert(
+                    $connection->getTableName('tmdt_order_status_history'),
+                    [
+                        'order_code' => $orderCode,
+                        'status'     => 'pending',
+                        'comment'    => 'Đơn hàng được tạo thành công. Chờ thanh toán.',
+                        'created_at' => date('Y-m-d H:i:s'),
+                    ]
+                );
+
+                $supplierKey = key($groups) ?: 'Tổng kho sỉ Thực phẩm B2B · Hà Nội';
+                $subtotal = 0.0;
+                foreach ($items as $item) {
+                    $subtotal += (float)($item['quantity'] * $item['unitPrice']);
+                }
+
+                $childOrdersData[] = [
+                    'orderCode' => $orderCode,
+                    'supplier' => $supplierKey,
+                    'subtotal' => $subtotal,
+                    'totalAmount' => $totalAmount,
+                    'items' => $items
+                ];
+
+                $this->logger->info('[Order] Created single supplier order', ['orderCode' => $orderCode, 'amount' => $totalAmount]);
+
+                return $result->setData([
+                    'success'     => true,
+                    'orderCode'   => $orderCode,
+                    'totalAmount' => $totalAmount,
+                    'expiresAt'   => $expiresAt,
+                    'holdMinutes' => self::HOLD_MINUTES,
+                    'childOrders' => $childOrdersData
+                ]);
+            }
         } catch (\Throwable $e) {
             $this->logger->error('[Order] Create error: ' . $e->getMessage());
             return $result->setData(['success' => false, 'message' => $e->getMessage()]);

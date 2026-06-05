@@ -6,7 +6,9 @@ namespace Tmdt\Search\Model;
 
 use Magento\Catalog\Model\Product\Attribute\Source\Status;
 use Magento\Catalog\Model\Product\Visibility;
+use Magento\Catalog\Api\CategoryRepositoryInterface;
 use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory as ProductCollectionFactory;
+use Magento\Framework\Exception\NoSuchEntityException;
 use Magento\Framework\UrlInterface;
 use Magento\Framework\Webapi\Rest\Request as RestRequest;
 use Magento\Store\Model\StoreManagerInterface;
@@ -19,6 +21,7 @@ class ProductSearchManagement implements ProductSearchInterface
 
     public function __construct(
         private readonly ProductCollectionFactory $productCollectionFactory,
+        private readonly CategoryRepositoryInterface $categoryRepository,
         private readonly StoreManagerInterface $storeManager,
         private readonly RestRequest $request,
         private readonly SearchDictionary $searchDictionary
@@ -98,7 +101,7 @@ class ProductSearchManagement implements ProductSearchInterface
         $terms = [$query, $this->searchDictionary->normalize($query)];
         foreach (preg_split('/\s+/', $this->searchDictionary->normalize($query)) ?: [] as $part) {
             $part = trim((string) $part);
-            if (mb_strlen($part) >= 2) {
+            if (mb_strlen($part) >= 3) {
                 $terms[] = $part;
             }
         }
@@ -148,6 +151,26 @@ class ProductSearchManagement implements ProductSearchInterface
             'name' => (string) $product->getName(),
             'priceValue' => (float) $product->getPrice(),
             'image' => $image,
+            'categoryLabel' => $this->getPrimaryCategoryName($product),
         ];
+    }
+
+    private function getPrimaryCategoryName(object $product): string
+    {
+        $categoryIds = method_exists($product, 'getCategoryIds') ? (array) $product->getCategoryIds() : [];
+        foreach ($categoryIds as $categoryId) {
+            try {
+                $category = $this->categoryRepository->get((int) $categoryId);
+            } catch (NoSuchEntityException) {
+                continue;
+            }
+
+            $name = trim((string) $category->getName());
+            if ($name !== '' && !in_array($name, ['Root Catalog', 'Default Category', 'Products'], true)) {
+                return $name;
+            }
+        }
+
+        return '';
     }
 }

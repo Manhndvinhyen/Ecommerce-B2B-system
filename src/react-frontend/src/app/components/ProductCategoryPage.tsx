@@ -13,7 +13,7 @@ import {
 } from '../data/categories';
 import { getMockSupplierForProduct, supplierRegions } from '../data/mockSuppliers';
 import { searchSynonymGroups } from '../data/searchSynonyms';
-import { toCurrencyTextFromLooseValue, toUnitPriceFromLooseValue, toCurrencyTextFromNumber, useCart } from '../cart/CartProvider';
+import { toCurrencyTextFromLooseValue, toUnitPriceFromLooseValue, toCurrencyTextFromNumber, useCart, parsePrice } from '../cart/CartProvider';
 import { applySeo, buildBreadcrumbJsonLd, buildItemListJsonLd, getSiteName } from '../utils/seo';
 
 type ProductItem = {
@@ -633,13 +633,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
 
           const mappedGraphQlProducts = items.map((item) => {
             const inferred = inferCategoryFromSku(item.sku);
-<<<<<<< HEAD
-            const productCategory = inferred?.category ?? category.name;
-=======
             const productCategory = inferred?.category ?? item.categoryLabel ?? category.name;
-            const priceValue = Number(item.priceValue ?? 0);
-            const supplier = getMockSupplierForProduct(item.sku, productCategory);
->>>>>>> 174eb0374c22d9659e436be303a1428258a351aa
             const localMatch = customLocalProducts.find(
               (p) => String(p.sku).trim().toLowerCase() === item.sku.trim().toLowerCase()
             );
@@ -670,13 +664,8 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
               price: formatPrice(priceValue),
               priceValue,
               unit: inferUnitByCategory(productCategory),
-<<<<<<< HEAD
-              image: localImage || item.image || fallbackImage,
-              categoryLabel: inferred?.subcategory ?? item.categoryLabel ?? productCategory,
-=======
               image: localImage || resolvedItemImage || fallbackImage,
-              categoryLabel: inferred?.subcategory ?? productCategory,
->>>>>>> 277ad336d717dc9874693402ba8daa975c6dbc35
+              categoryLabel: inferred?.subcategory ?? item.categoryLabel ?? productCategory,
               supplierName: supplier.name,
               supplierRegion: supplier.region
             };

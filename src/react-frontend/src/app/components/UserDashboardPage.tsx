@@ -71,7 +71,7 @@ export function UserDashboardPage() {
   }, []);
 
   const menuItems = useMemo(() => {
-    const visibleIds = new Set(['profile-seller', 'nhan-vien', 'lich-su-mua-hang', 'bao-gia', 'dat-hang-dinh-ky']);
+    const visibleIds = new Set(['profile-seller', 'nhan-vien', 'lich-su-mua-hang', 'don-hang', 'bao-gia', 'dat-hang-dinh-ky']);
     return adminMenuItems.filter((item) => visibleIds.has(item.id) && (canManageBranches || item.id !== 'nhan-vien'));
   }, [canManageBranches]);
 
@@ -92,9 +92,9 @@ export function UserDashboardPage() {
     <div className="min-h-screen bg-white">
       <Header />
 
-      <main className="bg-white px-6 py-0">
-        <div className="mx-auto flex max-w-[1200px] items-start">
-          <div className="w-[255px] flex-none border-r border-gray-200 pr-5">
+      <main className="bg-white py-6 px-6">
+        <div className="mx-auto flex max-w-[1200px] items-start gap-6">
+          <div className="w-[255px] flex-none border-r border-gray-200 pr-5 sticky top-6 max-h-[calc(100vh-48px)] overflow-y-auto overflow-x-hidden" style={{ scrollbarWidth: 'thin' }}>
             <CustomerSidebar
               activeTab={activeTab}
               setActiveTab={setActiveTab}
@@ -102,7 +102,7 @@ export function UserDashboardPage() {
             />
           </div>
 
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             {activeTab === profileLabel && <ProfileContent />}
             {activeTab === branchLabel && (
               <div className="p-8">

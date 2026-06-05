@@ -80,12 +80,17 @@ export function SellerDashboardPage() {
   }, []);
 
   const menuItems = useMemo(() => {
-    return adminMenuItems.filter((item) => {
-      if (item.id === 'quan-ly-gio-hang' || item.id === 'lich-su-mua-hang') {
-        return false;
-      }
-      return canManageBranches || item.id !== 'nhan-vien';
-    });
+    const visibleIds = new Set([
+      'dashboard',
+      'profile-seller',
+      'nhan-vien',
+      'quan-ly-san-pham',
+      'quan-ly-gio-hang',
+      'quan-ly-kho',
+      'don-hang',
+      'bao-gia'
+    ]);
+    return adminMenuItems.filter((item) => visibleIds.has(item.id) && (canManageBranches || item.id !== 'nhan-vien'));
   }, [canManageBranches]);
 
   const dashboardLabel = adminMenuItems.find((item) => item.id === 'dashboard')?.label ?? 'Dashboard';
@@ -110,7 +115,7 @@ export function SellerDashboardPage() {
 
       <main className="bg-[#F5FAF6] py-6 px-6">
         <div className="max-w-[1200px] mx-auto flex items-start gap-6">
-          <div className="w-[255px] flex-none border-r border-gray-100 pr-5">
+          <div className="w-[255px] flex-none border-r border-gray-100 pr-5 sticky top-6 max-h-[calc(100vh-48px)] overflow-y-auto overflow-x-hidden" style={{ scrollbarWidth: 'thin' }}>
             <SellerSidebar
               activeTab={activeTab}
               setActiveTab={setActiveTab}

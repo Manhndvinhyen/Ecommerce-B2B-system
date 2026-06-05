@@ -13,7 +13,7 @@ import {
 } from '../data/categories';
 import { getMockSupplierForProduct, supplierRegions } from '../data/mockSuppliers';
 import { searchSynonymGroups } from '../data/searchSynonyms';
-import { toCurrencyTextFromLooseValue, toUnitPriceFromLooseValue, toCurrencyTextFromNumber, useCart } from '../cart/CartProvider';
+import { toCurrencyTextFromLooseValue, toUnitPriceFromLooseValue, toCurrencyTextFromNumber, useCart, parsePrice } from '../cart/CartProvider';
 import { applySeo, buildBreadcrumbJsonLd, buildItemListJsonLd, getSiteName } from '../utils/seo';
 
 type ProductItem = {
@@ -633,11 +633,14 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
           const mappedGraphQlProducts = items.map((item) => {
             const inferred = inferCategoryFromSku(item.sku);
             const productCategory = inferred?.category ?? category.name;
-            const priceValue = Number(item.priceValue ?? 0);
-            const supplier = getMockSupplierForProduct(item.sku, productCategory);
             const localMatch = customLocalProducts.find(
               (p) => String(p.sku).trim().toLowerCase() === item.sku.trim().toLowerCase()
             );
+            const specialPrice = localMatch ? parsePrice(localMatch.special_price ?? localMatch.specialPrice) : 0;
+            const normalPrice = localMatch ? parsePrice(localMatch.price ?? localMatch.priceValue) : 0;
+            const localPriceValue = (specialPrice && specialPrice > 0) ? specialPrice : normalPrice;
+            const priceValue = localMatch ? localPriceValue : Number(item.priceValue ?? 0);
+            const supplier = getMockSupplierForProduct(item.sku, productCategory);
             const fallbackImage =
               fallbackImageByCategory[productCategory] ??
               fallbackImageByCategory[category.name] ??
@@ -668,7 +671,9 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
           });
 
           const mappedCustomProducts: ProductItem[] = customLocalProducts.map((p) => {
-            const priceValue = p.special_price ?? p.price;
+            const specialPrice = parsePrice(p.special_price ?? p.specialPrice);
+            const normalPrice = parsePrice(p.price ?? p.priceValue);
+            const priceValue = (specialPrice && specialPrice > 0) ? specialPrice : normalPrice;
             const supplier = getMockSupplierForProduct(p.sku, p.categoryLabel);
             const storeSupplier = resolveSupplierDisplay(p.store_name, supplier);
             return {
@@ -868,11 +873,14 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
 
               const inferred = inferCategoryFromSku(item.sku);
               const productCategory = inferred?.category ?? category.name;
-              const priceValue = Number(item.price_range?.minimum_price?.final_price?.value ?? 0);
-              const supplier = getMockSupplierForProduct(item.sku, productCategory);
               const localMatch = filteredCustomProducts.find(
                 (p) => String(p.sku).trim().toLowerCase() === item.sku.trim().toLowerCase()
               );
+              const specialPrice = localMatch ? parsePrice(localMatch.special_price ?? localMatch.specialPrice) : 0;
+              const normalPrice = localMatch ? parsePrice(localMatch.price ?? localMatch.priceValue) : 0;
+              const localPriceValue = (specialPrice && specialPrice > 0) ? specialPrice : normalPrice;
+              const priceValue = localMatch ? localPriceValue : Number(item.price_range?.minimum_price?.final_price?.value ?? 0);
+              const supplier = getMockSupplierForProduct(item.sku, productCategory);
               const localImage = localMatch?.image && !String(localMatch.image).toLowerCase().includes('placeholder')
                 ? localMatch.image
                 : '';
@@ -905,7 +913,9 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
         );
 
         const mappedCustomProducts: ProductItem[] = filteredCustomProducts.map((p) => {
-          const priceValue = p.special_price ?? p.price;
+          const specialPrice = parsePrice(p.special_price ?? p.specialPrice);
+          const normalPrice = parsePrice(p.price ?? p.priceValue);
+          const priceValue = (specialPrice && specialPrice > 0) ? specialPrice : normalPrice;
           const supplier = getMockSupplierForProduct(p.sku, p.categoryLabel);
           const storeSupplier = resolveSupplierDisplay(p.store_name, supplier);
           const inferred = inferCategoryFromSku(p.sku);

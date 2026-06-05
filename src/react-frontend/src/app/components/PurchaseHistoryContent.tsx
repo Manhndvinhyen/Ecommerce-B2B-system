@@ -46,7 +46,7 @@ type PurchaseHistoryOrder = {
   transaction_id?: string;
   expires_at?: string;
   paid_at?: string;
-  shipping_info?: Record<string, unknown>;
+  shipping_info?: Record<string, any>;
   created_at: string;
   items: PurchaseHistoryItem[];
 };

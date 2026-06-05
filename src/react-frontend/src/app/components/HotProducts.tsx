@@ -247,7 +247,7 @@ export function HotProducts() {
         }
 
         const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
-        let customLocalProducts: Array<{ sku?: string; image?: string; categoryLabel?: string; name?: string; price?: number; unit?: string; store_name?: string }> = [];
+        let customLocalProducts: Array<{ sku?: string; image?: string; categoryLabel?: string; name?: string; price?: number; priceValue?: number; unit?: string; store_name?: string }> = [];
         if (customLocalRaw) {
           try {
             customLocalProducts = JSON.parse(customLocalRaw);
@@ -287,7 +287,7 @@ export function HotProducts() {
             sku: item.sku,
             name: localMatch?.name || item.name,
             category,
-            price: Number(localMatch?.price ?? item.price_range?.minimum_price?.final_price?.value ?? 0),
+            price: Number(localMatch?.price ?? localMatch?.priceValue ?? item.price_range?.minimum_price?.final_price?.value ?? 0),
             unit: localMatch?.unit || (category === 'Tiện ích bếp' ? 'bộ' : 'kg'),
             image: resolvedImage,
             hot: true

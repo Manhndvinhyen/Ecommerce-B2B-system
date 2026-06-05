@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { Calendar, Clock, FileText, MapPin, PackageCheck, Phone, ShoppingBag, User, Wind, Thermometer, AlertTriangle, Truck, Store } from 'lucide-react';
-import { formatCartSupplierLabel, toCurrencyTextFromNumber, useCart } from '../cart/CartProvider';
+import { formatCartSupplierLabel, toCurrencyTextFromNumber, useCart, parsePrice } from '../cart/CartProvider';
 import { inferCategoryFromSku } from '../data/categories';
 
 declare global {
@@ -434,7 +434,12 @@ const mapMagentoCartItems = (items: MagentoCartItem[] = []): CheckoutItem[] => {
     const sku = (product.sku ?? '').trim().toLowerCase();
     const matchingProduct = customLocalProducts.find(p => (p.sku ?? '').trim().toLowerCase() === sku);
 
-    const originalPrice = matchingProduct ? Number(matchingProduct.price) : Number(product.price_range?.minimum_price?.final_price?.value ?? 0);
+    const specialPrice = matchingProduct ? parsePrice(matchingProduct.special_price ?? matchingProduct.specialPrice) : 0;
+    const normalPrice = matchingProduct ? parsePrice(matchingProduct.price ?? matchingProduct.priceValue) : 0;
+    const rawPrice = (specialPrice && specialPrice > 0) ? specialPrice : normalPrice;
+    const originalPrice = matchingProduct
+      ? rawPrice
+      : Number(item.prices?.price?.value ?? product.price_range?.minimum_price?.final_price?.value ?? 0);
     const tiers = matchingProduct?.wholesale_tiers || [];
     const activeTier = tiers
       .filter((t: any) => qty >= t.qty)
@@ -513,6 +518,11 @@ const fetchCustomerCartPayload = async (): Promise<CheckoutPayload | null> => {
             items {
               id
               quantity
+              prices {
+                price {
+                  value
+                }
+              }
               product {
                 sku
                 name
@@ -1623,7 +1633,11 @@ export function CheckoutPage() {
                           }
                           const sku = (item.sku ?? '').trim().toLowerCase();
                           const matchingProduct = customLocalProducts.find(p => (p.sku ?? '').trim().toLowerCase() === sku);
-                          const originalPrice = matchingProduct ? Number(matchingProduct.price) : item.unitPrice;
+                          const specialPrice = matchingProduct ? parsePrice(matchingProduct.special_price ?? matchingProduct.specialPrice) : 0;
+                          const normalPrice = matchingProduct ? parsePrice(matchingProduct.price ?? matchingProduct.priceValue) : 0;
+                          const originalPrice = matchingProduct
+                            ? ((specialPrice && specialPrice > 0) ? specialPrice : normalPrice)
+                            : item.unitPrice;
                           const tiers = matchingProduct?.wholesale_tiers || [];
                           const activeTier = tiers
                             .filter((t: any) => item.quantity >= t.qty)

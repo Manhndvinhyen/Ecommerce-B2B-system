@@ -39,6 +39,11 @@ export type CartLineItem = {
 type MagentoCartItem = {
   id: number | string;
   quantity?: number;
+  prices?: {
+    price?: {
+      value?: number | null;
+    } | null;
+  } | null;
   product?: {
     sku?: string | null;
     name?: string | null;
@@ -153,6 +158,35 @@ function parseNumberFromText(value: string): number {
   return digits ? Number.parseInt(digits, 10) : 0;
 }
 
+export function parsePrice(value: string | number | undefined | null): number {
+  if (value === undefined || value === null) {
+    return 0;
+  }
+  if (typeof value === 'number') {
+    return value;
+  }
+  const str = String(value).trim();
+  if (!str) return 0;
+
+  const dotCount = (str.match(/\./g) || []).length;
+  if (dotCount > 1) {
+    const cleaned = str.replace(/\./g, '').replace(/[^\d-]/g, '');
+    return Number(cleaned) || 0;
+  }
+  if (dotCount === 1) {
+    const parts = str.split('.');
+    const decimalPart = parts[1].replace(/[^\d]/g, '');
+    if (decimalPart.length === 3) {
+      const cleaned = str.replace(/\./g, '').replace(/[^\d-]/g, '');
+      return Number(cleaned) || 0;
+    }
+  }
+
+  const cleaned = str.replace(/[^\d.-]/g, '');
+  const parsed = parseFloat(cleaned);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
 const parseSupplierLabel = (label?: string) => {
   const parts = String(label || '')
     .split('·')
@@ -251,7 +285,9 @@ const applyWholesaleDiscountToLocalItem = (item: CartLineItem, newQuantity: numb
     return { ...item, quantity: newQuantity };
   }
   
-  const originalPrice = Number(matchingProduct.price);
+  const specialPrice = parsePrice(matchingProduct.special_price ?? matchingProduct.specialPrice);
+  const normalPrice = parsePrice(matchingProduct.price ?? matchingProduct.priceValue);
+  const originalPrice = (specialPrice && specialPrice > 0) ? specialPrice : normalPrice;
   const tiers = matchingProduct.wholesale_tiers || [];
   const activeTier = tiers
     .filter((t: any) => newQuantity >= t.qty)
@@ -484,9 +520,12 @@ export function CartProvider({ children }: PropsWithChildren) {
         (p) => (p.sku ?? '').trim().toLowerCase() === productSku
       );
 
+      const specialPrice = matchingProduct ? parsePrice(matchingProduct.special_price ?? matchingProduct.specialPrice) : 0;
+      const normalPrice = matchingProduct ? parsePrice(matchingProduct.price ?? matchingProduct.priceValue) : 0;
+      const rawPrice = (specialPrice && specialPrice > 0) ? specialPrice : normalPrice;
       const originalPrice = matchingProduct
-        ? Number(matchingProduct.price)
-        : Number(product.price_range?.minimum_price?.final_price?.value ?? 0);
+        ? rawPrice
+        : Number(item.prices?.price?.value ?? product.price_range?.minimum_price?.final_price?.value ?? 0);
       const tiers = matchingProduct?.wholesale_tiers || [];
       const activeTier = tiers
         .filter((t: any) => qty >= t.qty)
@@ -626,6 +665,11 @@ export function CartProvider({ children }: PropsWithChildren) {
               items {
                 id
                 quantity
+                prices {
+                  price {
+                    value
+                  }
+                }
                 product {
                   sku
                   name
@@ -699,6 +743,11 @@ export function CartProvider({ children }: PropsWithChildren) {
               items {
                 id
                 quantity
+                prices {
+                  price {
+                    value
+                  }
+                }
                 product {
                   sku
                   name
@@ -771,6 +820,11 @@ export function CartProvider({ children }: PropsWithChildren) {
               items {
                 id
                 quantity
+                prices {
+                  price {
+                    value
+                  }
+                }
                 product {
                   sku
                   name
@@ -805,6 +859,11 @@ export function CartProvider({ children }: PropsWithChildren) {
               items {
                 id
                 quantity
+                prices {
+                  price {
+                    value
+                  }
+                }
                 product {
                   sku
                   name

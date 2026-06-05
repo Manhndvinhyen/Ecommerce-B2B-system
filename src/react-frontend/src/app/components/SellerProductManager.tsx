@@ -484,6 +484,7 @@ export function SellerProductManager() {
       sku: sku.trim(),
       name: name.trim(),
       price: priceNum,
+      special_price: specialPrice.trim() ? parseFloat(specialPrice) : undefined,
       qty: isNaN(qtyNum) ? 0 : qtyNum,
       categoryLabel,
       category_ids,

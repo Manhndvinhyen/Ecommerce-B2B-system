@@ -108,7 +108,7 @@ export function WishlistPage() {
             return {
               ...item,
               name: localMatch.name || item.name,
-              price: localMatch.price || item.price,
+              price: localMatch.price ?? localMatch.priceValue ?? item.price,
               unit: localMatch.unit || item.unit,
               image: localMatch.image || item.image,
               category: localMatch.categoryLabel || item.category

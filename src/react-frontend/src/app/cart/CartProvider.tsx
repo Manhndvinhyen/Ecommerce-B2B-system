@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { PropsWithChildren } from 'react';
 import { CheckCircle2, Minus, Plus, X } from 'lucide-react';
 import { clearStoredAuthSession } from '../utils/authSession';
+import { inferCategoryFromSku } from '../data/categories';
 import { getMockSupplierForProduct } from '../data/mockSuppliers';
 
 export type AddToCartProduct = {
@@ -457,7 +458,8 @@ export function CartProvider({ children }: PropsWithChildren) {
       const unitPrice = originalPrice * (1 - discountPercent / 100);
       const category =
         product.categories?.find((cat) => cat?.name)?.name ??
-        (matchingProduct?.categoryLabel || '');
+        matchingProduct?.categoryLabel ??
+        (inferCategoryFromSku(product.sku ?? '')?.category || 'Rau củ quả');
       const unit = matchingProduct?.unit || 'kg';
       const supplier = getSupplierForCartProduct({
         sku: product.sku ?? matchingProduct?.sku ?? '',
@@ -521,14 +523,16 @@ export function CartProvider({ children }: PropsWithChildren) {
       const match = customLocalProducts.find(
         (p) => (p.sku ?? '').trim().toLowerCase() === localSku
       );
+      const category = match?.categoryLabel || item.category || (inferCategoryFromSku(item.sku ?? '')?.category || 'Rau củ quả');
       return {
         ...item,
         image: match?.image || item.image,
+        category,
         unitPrice: match ? Number(match.price) : item.unitPrice,
         unit: match?.unit || item.unit,
         ...getSupplierForCartProduct({
           sku: item.sku,
-          category: item.category,
+          category,
           supplierName: item.supplierName,
           supplierRegion: item.supplierRegion,
           supplierLabel: match?.store_name
@@ -811,7 +815,7 @@ export function CartProvider({ children }: PropsWithChildren) {
           cartItemId: '',
           sku: product.sku,
           name: product.name,
-          category: product.category,
+          category: product.category || (inferCategoryFromSku(product.sku ?? '')?.category || 'Rau củ quả'),
           unit: product.unit,
           unitPrice: product.unitPrice,
           image: product.image,

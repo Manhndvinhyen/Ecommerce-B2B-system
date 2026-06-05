@@ -30,4 +30,12 @@ interface OrderManagementInterface
      * @return mixed[]
      */
     public function getOrderStatus(string $orderCode): array;
+
+    /**
+     * Get list of warehouses (inventory sources) with coordinates from database.
+     *
+     * @return mixed[]
+     */
+    public function getWarehouses(): array;
 }
+

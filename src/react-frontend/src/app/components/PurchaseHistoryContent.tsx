@@ -11,6 +11,7 @@ import {
   RefreshCw,
   LoaderCircle,
   ShoppingBag,
+  Store,
 } from 'lucide-react';
 import { toCurrencyTextFromNumber } from '../cart/CartProvider';
 import { OrderTrackingMap } from './OrderTrackingMap';
@@ -30,6 +31,7 @@ type PurchaseHistoryItem = {
 type PurchaseHistoryOrder = {
   history_id: number;
   order_reference: string;
+  parent_code?: string;
   status?: string;
   status_label?: string;
   customer_name?: string;
@@ -113,6 +115,36 @@ export function PurchaseHistoryContent({
       paidOrders,
       pendingOrders,
     };
+  }, [orders]);
+
+  const groupedBlocks = useMemo(() => {
+    const groups: Record<string, PurchaseHistoryOrder[]> = {};
+
+    orders.forEach((order) => {
+      if (order.parent_code === 'parent') {
+        return;
+      }
+      const key = (order.parent_code && order.parent_code !== 'parent')
+        ? order.parent_code
+        : order.order_reference;
+
+      if (!groups[key]) {
+        groups[key] = [];
+      }
+      groups[key].push(order);
+    });
+
+    return Object.entries(groups).map(([parentCode, childOrders]) => {
+      childOrders.sort((a, b) => a.order_reference.localeCompare(b.order_reference));
+      const totalAmount = childOrders.reduce((sum, o) => sum + o.total_amount, 0);
+      const createdAt = childOrders[0]?.created_at || '';
+      return {
+        parentCode,
+        createdAt,
+        totalAmount,
+        orders: childOrders
+      };
+    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [orders]);
 
   const fetchOrders = async (showSpinner = false, nextStatusFilter = statusFilter, nextSearchTerm = searchTerm) => {
@@ -307,162 +339,193 @@ export function PurchaseHistoryContent({
         <div className="rounded-2xl border border-amber-100 bg-amber-50/50 px-4 py-3 text-xs text-amber-800">
           {errorMessage}
         </div>
-      ) : orders.length === 0 ? (
+      ) : groupedBlocks.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center">
           <PackageSearch className="mx-auto size-12 text-slate-300" />
           <p className="mt-4 text-sm font-bold text-slate-700">{emptyTitle}</p>
           <p className="mt-1 text-xs text-slate-500">{emptyDescription}</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {orders.map((order) => {
-            const statusMeta = getStatusMeta(order.status);
-            const isExpanded = !!expandedOrders[order.order_reference];
-
-            return (
-              <section
-                key={order.order_reference}
-                className="rounded-2xl border border-gray-100 bg-white p-5 hover:shadow-md transition-all duration-300"
-              >
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-3 py-1.5 text-xs font-black tracking-wide text-white">
-                        <ReceiptText className="size-3.5" />
-                        {order.order_reference}
-                      </div>
-                      <span
-                        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${statusMeta.className}`}
-                      >
-                        <span className={`size-1.5 rounded-full ${statusMeta.dot}`} />
-                        {order.status_label || statusMeta.label}
-                      </span>
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap gap-3 text-[11px] text-slate-400 font-semibold">
-                      <span className="inline-flex items-center gap-1">
-                        <CalendarClock className="size-3.5 text-slate-400" />
-                        Đặt lúc: {formatDateTime(order.created_at)}
-                      </span>
-                      {order.paid_at && (
-                        <span className="inline-flex items-center gap-1">
-                          <Clock3 className="size-3.5 text-slate-400" />
-                          Đã thanh toán lúc: {formatDateTime(order.paid_at)}
-                        </span>
-                      )}
-                      {order.delivery_date && (
-                        <span className="inline-flex items-center gap-1">
-                          <Truck className="size-3.5 text-slate-400" />
-                          Giao hàng: {order.delivery_date} {order.delivery_time ? ` · ${order.delivery_time}` : ''}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                      <div className="rounded-xl bg-slate-50/70 p-3 border border-slate-100/50">
-                        <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Nhà bán sỉ (Supplier)</p>
-                        <p className="mt-1 truncate text-xs font-black text-slate-800">{order.supplier || 'Freso Supplier'}</p>
-                      </div>
-                      <div className="rounded-xl bg-slate-50/70 p-3 border border-slate-100/50">
-                        <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Địa chỉ giao hàng</p>
-                        <p className="mt-1 truncate text-xs font-black text-slate-800" title={order.shipping_address}>
-                          {order.shipping_address || 'Nhận tại cửa hàng'}
-                        </p>
-                      </div>
-                      <div className="rounded-xl bg-slate-50/70 p-3 border border-slate-100/50">
-                        <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Ghi chú</p>
-                        <p className="mt-1 truncate text-xs font-black text-slate-600" title={order.note}>
-                          {order.note || 'Không có ghi chú'}
-                        </p>
-                      </div>
-                    </div>
+        <div className="space-y-6">
+          {groupedBlocks.map((block) => (
+            <div
+              key={block.parentCode}
+              className="rounded-3xl border border-gray-150 bg-slate-50/20 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300"
+            >
+              {/* Parent Checkout Group Header */}
+              <div className="bg-gradient-to-r from-slate-900 to-slate-850 text-white px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-800">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <ReceiptText className="size-4 text-emerald-400" />
+                    <span className="text-[10px] font-black tracking-wider text-slate-300 uppercase">Đơn hàng tổng</span>
+                    <span className="text-xs font-black text-white bg-slate-800 px-2.5 py-0.5 rounded-lg border border-slate-700">
+                      #{block.parentCode}
+                    </span>
                   </div>
-
-                  <div className="rounded-xl border border-emerald-100 bg-emerald-50/30 p-4 lg:w-[250px] text-right flex flex-col justify-between">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700">Tổng thanh toán</p>
-                      <p className="mt-1 text-xl font-black text-emerald-800">{toCurrencyTextFromNumber(order.total_amount)}</p>
-                    </div>
-                    <a
-                      href={buildTrackingHref(order)}
-                      className="mt-3 inline-flex items-center justify-center gap-1.5 rounded-full border border-emerald-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700 transition-colors hover:bg-emerald-50"
-                    >
-                      <Truck className="size-3.5" />
-                      Mở bản đồ tracking
-                    </a>
-                    {order.transaction_id && (
-                      <div className="mt-3 inline-flex items-center justify-end gap-1.5 rounded-full border border-emerald-200 bg-white px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 self-end">
-                        Mã GD: {order.transaction_id}
-                      </div>
-                    )}
-                  </div>
+                  <p className="text-[10px] text-slate-400 font-semibold mt-1.5 flex items-center gap-1">
+                    <CalendarClock className="size-3 text-slate-400" />
+                    Đặt hàng lúc: {formatDateTime(block.createdAt)}
+                  </p>
                 </div>
+                <div className="sm:text-right shrink-0">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Tổng thanh toán lần checkout</p>
+                  <p className="text-lg font-black text-emerald-400 mt-0.5">{toCurrencyTextFromNumber(block.totalAmount)}</p>
+                </div>
+              </div>
 
-                {/* Collapsible Order items details */}
-                <div className="mt-4 border-t border-slate-100 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => toggleOrderExpand(order.order_reference)}
-                    className="flex w-full items-center justify-between text-xs font-black uppercase tracking-wider text-emerald-600 hover:text-emerald-700 transition"
-                  >
-                    <span>{isExpanded ? 'Ẩn theo dõi đơn hàng' : `Theo dõi đơn hàng và sản phẩm (${order.items.length})`}</span>
-                    <ChevronDown className={`size-4 transform transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
-                  </button>
+              {/* Child Orders List */}
+              <div className="p-4 space-y-4 bg-white divide-y divide-gray-100">
+                {block.orders.map((order, index) => {
+                  const statusMeta = getStatusMeta(order.status);
+                  const isExpanded = !!expandedOrders[order.order_reference];
 
-                  {isExpanded && (
-                    <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
-                      <OrderTrackingMap
-                        order={{
-                          orderReference: order.order_reference,
-                          status: order.status,
-                          statusLabel: order.status_label,
-                          supplier: order.supplier,
-                          customerRegion: order.customer_region,
-                          shippingAddress: order.shipping_address,
-                          deliveryDate: order.delivery_date,
-                          deliveryTime: order.delivery_time,
-                        }}
-                      />
+                  return (
+                    <div key={order.order_reference} className={`pt-4 ${index === 0 ? 'pt-0' : 'pt-4'}`}>
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center justify-between sm:justify-start gap-3">
+                            <div className="flex items-center gap-2">
+                              <Store className="size-4.5 text-green-600 shrink-0" />
+                              <span className="font-extrabold text-slate-800 text-sm tracking-tight hover:text-green-700 transition-colors">
+                                {order.supplier || 'Freso Supplier'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
+                                Mã: {order.order_reference}
+                              </span>
+                              <span
+                                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider ${statusMeta.className}`}
+                              >
+                                <span className={`size-1.2 rounded-full ${statusMeta.dot}`} />
+                                {order.status_label || statusMeta.label}
+                              </span>
+                            </div>
+                          </div>
 
-                      <div className="rounded-2xl border border-slate-100 bg-white p-4">
-                        <div className="mb-3 flex items-center justify-between">
-                          <div>
-                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Sản phẩm trong đơn</p>
-                            <h3 className="text-sm font-black text-slate-900">{order.items.length} mặt hàng</h3>
+                          {(() => {
+                            const supplierInfo = order.shipping_info?.supplier_info;
+                            const carrierName = supplierInfo?.carrier || order.shipping_info?.carrier || 'Giao Hàng Tiết Kiệm (GHTK)';
+                            const totalWeight = supplierInfo?.weight || order.shipping_info?.weight;
+
+                            return (
+                              <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                <div className="rounded-xl bg-slate-50/70 p-2.5 border border-slate-100/30">
+                                  <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Địa chỉ giao hàng</p>
+                                  <p className="mt-1 truncate text-xs font-semibold text-slate-700" title={order.shipping_address}>
+                                    {order.shipping_address || 'Nhận tại cửa hàng'}
+                                  </p>
+                                </div>
+                                {order.delivery_date && (
+                                  <div className="rounded-xl bg-slate-50/70 p-2.5 border border-slate-100/30">
+                                    <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Thời gian giao hàng</p>
+                                    <p className="mt-1 truncate text-xs font-semibold text-slate-700">
+                                      {order.delivery_date} {order.delivery_time ? ` · ${order.delivery_time}` : ''}
+                                    </p>
+                                  </div>
+                                )}
+                                <div className="rounded-xl bg-slate-50/70 p-2.5 border border-slate-100/30">
+                                  <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Ghi chú đơn</p>
+                                  <p className="mt-1 truncate text-xs font-semibold text-slate-600" title={order.note}>
+                                    {order.note || 'Không có ghi chú'}
+                                  </p>
+                                </div>
+                                <div className="rounded-xl bg-slate-50/70 p-2.5 border border-slate-100/30">
+                                  <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Đơn vị vận chuyển</p>
+                                  <p className="mt-1 truncate text-xs font-semibold text-slate-700">
+                                    {carrierName} {totalWeight ? `(${Number(totalWeight).toFixed(1)} kg)` : ''}
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+
+                        <div className="rounded-xl border border-emerald-100 bg-emerald-50/10 p-3 lg:w-[220px] text-right flex flex-col justify-between shrink-0">
+                          <div className="flex justify-between items-center lg:block">
+                            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-emerald-700">Tiền hàng & ship</p>
+                            <p className="text-base font-black text-emerald-800 lg:mt-0.5">{toCurrencyTextFromNumber(order.total_amount)}</p>
+                          </div>
+                          <div className="flex gap-2 mt-3 justify-end">
+                            <a
+                              href={buildTrackingHref(order)}
+                              className="inline-flex items-center justify-center gap-1 rounded-full border border-emerald-200 bg-white px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-emerald-700 transition-colors hover:bg-emerald-50"
+                            >
+                              <Truck className="size-3" />
+                              Tracking
+                            </a>
+                            {order.transaction_id && (
+                              <div className="inline-flex items-center justify-center rounded-full border border-emerald-100 bg-white px-2 py-0.5 text-[9px] font-semibold text-emerald-700">
+                                GD: {order.transaction_id}
+                              </div>
+                            )}
                           </div>
                         </div>
-                        <div className="space-y-2.5">
-                          {order.items.map((item) => (
-                            <div key={item.item_id} className="flex items-center gap-3 rounded-xl bg-slate-50/60 p-3 hover:bg-slate-100/40 transition-colors">
-                              {item.image ? (
-                                <img src={item.image} alt={item.name} className="size-11 rounded-lg object-cover border border-slate-200" />
-                              ) : (
-                                <div className="flex size-11 items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-300">
-                                  <PackageSearch className="size-5" />
-                                </div>
-                              )}
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-xs font-bold text-slate-900">{item.name}</p>
-                                <p className="mt-0.5 text-[10px] text-slate-500 font-semibold">
-                                  {item.sku} · {item.category || 'Chưa phân loại'}
-                                </p>
-                              </div>
-                              <div className="text-right text-xs">
-                                <p className="font-bold text-slate-900">
-                                  {item.quantity} {item.unit || 'SP'}
-                                </p>
-                                <p className="text-slate-500 font-semibold">{toCurrencyTextFromNumber(item.row_total)}</p>
+                      </div>
+
+                      {/* Collapsible Order items details */}
+                      <div className="mt-3 pt-3 border-t border-dashed border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => toggleOrderExpand(order.order_reference)}
+                          className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-emerald-600 hover:text-emerald-700 transition"
+                        >
+                          <span>{isExpanded ? 'Ẩn bản đồ & sản phẩm' : `Theo dõi đơn & sản phẩm (${order.items.length})`}</span>
+                          <ChevronDown className={`size-3.5 transform transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {isExpanded && (
+                          <div className="mt-3 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                            <OrderTrackingMap
+                              order={{
+                                orderReference: order.order_reference,
+                                status: order.status,
+                                statusLabel: order.status_label,
+                                supplier: order.supplier,
+                                customerRegion: order.customer_region,
+                                shippingAddress: order.shipping_address,
+                                deliveryDate: order.delivery_date,
+                                deliveryTime: order.delivery_time,
+                              }}
+                            />
+
+                            <div className="rounded-xl border border-slate-100 bg-slate-50/20 p-3">
+                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 mb-2">Chi tiết sản phẩm</p>
+                              <div className="space-y-2">
+                                {order.items.map((item) => (
+                                  <div key={item.item_id} className="flex items-center gap-3 rounded-xl bg-white p-2.5 border border-slate-100 hover:bg-slate-50/50 transition-colors">
+                                    {item.image ? (
+                                      <img src={item.image} alt={item.name} className="size-10 rounded-lg object-cover border border-slate-200 shrink-0" />
+                                    ) : (
+                                      <div className="flex size-10 items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-300 shrink-0">
+                                        <PackageSearch className="size-4" />
+                                      </div>
+                                    )}
+                                    <div className="min-w-0 flex-1">
+                                      <p className="truncate text-xs font-bold text-slate-900">{item.name}</p>
+                                      <p className="mt-0.5 text-[9px] text-slate-500 font-semibold">
+                                        {item.sku} · {item.category || 'Chưa phân loại'}
+                                      </p>
+                                    </div>
+                                    <div className="text-right text-xs">
+                                      <p className="font-bold text-slate-900">
+                                        {item.quantity} {item.unit || 'SP'}
+                                      </p>
+                                      <p className="text-slate-500 font-semibold">{toCurrencyTextFromNumber(item.row_total)}</p>
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
                             </div>
-                          ))}
-                        </div>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  )}
-                </div>
-              </section>
-            );
-          })}
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

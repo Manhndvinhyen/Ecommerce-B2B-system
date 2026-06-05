@@ -136,13 +136,30 @@ const formatEta = (remainingKm: number) => {
   return rest ? `${hours} giờ ${rest} phút` : `${hours} giờ`;
 };
 
-const pickWarehouse = (supplier: string, customerRegion: string) => {
-  const haystack = normalize(`${supplier} ${customerRegion}`);
-  return (
-    warehouses.find((warehouse) => warehouse.regionHints.some((hint) => haystack.includes(hint))) ??
-    warehouses[1]
-  );
+const pickWarehouse = (supplier: string, customerRegion: string, dbList: any[] = []) => {
+  const parts = supplier.split('·').map(p => p.trim());
+  const supplierRegion = parts[1] || parts[0] || '';
+  const normalizedRegion = normalize(supplierRegion);
+
+  let nameKeyword = 'Bình Dương';
+  if (normalizedRegion.includes('hà nội') || normalizedRegion.includes('ha noi') || normalizedRegion.includes('bắc giang') || normalizedRegion.includes('bac giang') || normalizedRegion.includes('bắc') || normalizedRegion.includes('bac')) {
+    nameKeyword = 'Bắc Giang';
+  } else if (normalizedRegion.includes('đà lạt') || normalizedRegion.includes('da lat')) {
+    nameKeyword = 'Bắc Giang';
+  }
+
+  const found = dbList.find((w: any) => w.name && w.name.includes(nameKeyword));
+  if (found) {
+    return { name: found.name, lat: found.lat, lng: found.lng || found.lon };
+  }
+
+  // Static fallback if API is still loading or fails
+  if (nameKeyword === 'Bắc Giang') {
+    return { name: 'Kho Bắc Giang', lat: 21.273, lng: 106.1946 };
+  }
+  return { name: 'Kho Bình Dương', lat: 10.9805, lng: 106.6517 };
 };
+
 
 const buildDestination = (shippingAddress: string, customerRegion: string, warehouse: LatLng) => {
   const haystack = normalize(`${shippingAddress} ${customerRegion}`);
@@ -278,12 +295,24 @@ export function TrackingTimeline({ currentIndex }: { currentIndex: number }) {
 export function OrderTrackingMap({ order }: OrderTrackingMapProps) {
   const [leafletLoaded, setLeafletLoaded] = useState(false);
   const [progress, setProgress] = useState(0.34);
+  const [dbWarehouses, setDbWarehouses] = useState<any[]>([]);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const layersRef = useRef<Record<string, any>>({});
 
+  useEffect(() => {
+    fetch('/rest/V1/tmdt-orders/warehouses')
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setDbWarehouses(data);
+        }
+      })
+      .catch((err) => console.error('Failed to load DB warehouses in tracking map:', err));
+  }, []);
+
   const trackingModel = useMemo(() => {
-    const warehouse = pickWarehouse(order.supplier || '', order.customerRegion || '');
+    const warehouse = pickWarehouse(order.supplier || '', order.customerRegion || '', dbWarehouses);
     const destination = buildDestination(order.shippingAddress || '', order.customerRegion || '', warehouse);
     const routePoints = buildRoute(warehouse, destination, `${order.orderReference}${order.shippingAddress}${order.supplier}`);
     const totalDistanceKm = routeDistanceKm(routePoints);
@@ -294,7 +323,8 @@ export function OrderTrackingMap({ order }: OrderTrackingMapProps) {
       routePoints,
       totalDistanceKm,
     };
-  }, [order.customerRegion, order.orderReference, order.shippingAddress, order.supplier]);
+  }, [order.customerRegion, order.orderReference, order.shippingAddress, order.supplier, dbWarehouses]);
+
 
   const travelledKm = trackingModel.totalDistanceKm * progress;
   const remainingKm = Math.max(0, trackingModel.totalDistanceKm - travelledKm);

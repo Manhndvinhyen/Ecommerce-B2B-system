@@ -45,7 +45,9 @@ class Status implements HttpGetActionInterface
         // Auto-expire
         if ($row['status'] === 'pending' && $row['expires_at'] && strtotime($row['expires_at']) < time()) {
             $connection->update($table, ['status' => 'expired'], ['order_code = ?' => $orderCode]);
+            $connection->update($table, ['status' => 'expired'], ['parent_code = ?' => $orderCode]);
             $row['status'] = 'expired';
+
             $connection->insert(
                 $connection->getTableName('tmdt_order_status_history'),
                 [
@@ -55,6 +57,23 @@ class Status implements HttpGetActionInterface
                     'created_at' => date('Y-m-d H:i:s'),
                 ]
             );
+
+            // Also expire child orders status history
+            $childOrders = $connection->fetchAll(
+                "SELECT order_code FROM {$table} WHERE parent_code = ?",
+                [$orderCode]
+            );
+            foreach ($childOrders as $childOrder) {
+                $connection->insert(
+                    $connection->getTableName('tmdt_order_status_history'),
+                    [
+                        'order_code' => $childOrder['order_code'],
+                        'status'     => 'expired',
+                        'comment'    => 'Đơn hàng con hết hạn thanh toán do đơn hàng tổng hết hạn.',
+                        'created_at' => date('Y-m-d H:i:s'),
+                    ]
+                );
+            }
         }
 
         return $result->setData([

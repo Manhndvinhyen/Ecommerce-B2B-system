@@ -76,7 +76,7 @@ class ChatbotManagement implements ChatbotInterface
 
         foreach (preg_split('/\s+/', $normalized) ?: [] as $part) {
             $part = trim((string) $part);
-            if (mb_strlen($part) >= 2) {
+            if (mb_strlen($part) >= 3) {
                 $terms[] = $part;
             }
         }

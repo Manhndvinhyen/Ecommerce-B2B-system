@@ -73,11 +73,14 @@ class SearchDictionary
             $normalizedGroup = array_map(fn (string $term): string => $this->normalize($term), $group);
             $matched = false;
             foreach ($normalizedInput as $input) {
-                if ($input === '') {
+                if ($input === '' || mb_strlen($input, 'UTF-8') < 3) {
                     continue;
                 }
                 foreach ($normalizedGroup as $groupTerm) {
-                    if ($groupTerm !== '' && (str_contains($input, $groupTerm) || str_contains($groupTerm, $input))) {
+                    if ($groupTerm !== '' && (
+                        str_contains($input, $groupTerm)
+                        || (mb_strlen($input, 'UTF-8') >= 4 && str_contains($groupTerm, $input))
+                    )) {
                         $matched = true;
                         break 2;
                     }

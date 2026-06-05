@@ -19,6 +19,7 @@
     <table name="tmdt_orders" resource="default" engine="innodb" comment="Tmdt B2B Orders">
         <column xsi:type="int" name="id" padding="10" unsigned="true" nullable="false" identity="true" comment="Order ID"/>
         <column xsi:type="varchar" name="order_code" length="32" nullable="false" comment="Order Code e.g. DH-100293"/>
+        <column xsi:type="varchar" name="parent_code" length="32" nullable="true" comment="Parent Order Code for Splitting"/>
         <column xsi:type="varchar" name="status" length="32" nullable="false" default="pending" comment="pending|paid|cancelled|expired"/>
         <column xsi:type="decimal" name="total_amount" scale="2" precision="14" nullable="false" comment="Total Amount VND"/>
         <column xsi:type="text" name="items_json" nullable="true" comment="Cart items JSON"/>

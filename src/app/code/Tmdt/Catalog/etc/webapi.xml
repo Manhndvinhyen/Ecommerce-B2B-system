@@ -53,6 +53,12 @@
             <resource ref="anonymous"/>
         </resources>
     </route>
+    <route url="/V1/tmdt-orders/warehouses" method="GET">
+        <service class="Tmdt\Catalog\Api\OrderManagementInterface" method="getWarehouses"/>
+        <resources>
+            <resource ref="anonymous"/>
+        </resources>
+    </route>
     <!-- Seller Stock Warning Notifications -->
     <route url="/V1/tmdt-catalog/notifications" method="GET">
         <service class="Tmdt\Catalog\Api\ProductManagementInterface" method="getSellerNotifications"/>

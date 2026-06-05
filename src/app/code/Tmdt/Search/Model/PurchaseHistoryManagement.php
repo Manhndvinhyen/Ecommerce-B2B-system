@@ -65,7 +65,7 @@ class PurchaseHistoryManagement implements PurchaseHistoryInterface
         if ($orderReferences) {
             $orderRows = $connection->fetchAll(
                 $connection->select()
-                    ->from($orderTable, ['order_code', 'status', 'transaction_id', 'expires_at', 'paid_at', 'customer_name', 'shipping_json'])
+                    ->from($orderTable, ['order_code', 'status', 'transaction_id', 'expires_at', 'paid_at', 'customer_name', 'shipping_json', 'parent_code'])
                     ->where('order_code IN (?)', $orderReferences)
             );
 
@@ -77,6 +77,7 @@ class PurchaseHistoryManagement implements PurchaseHistoryInterface
                     'paid_at' => (string) ($orderRow['paid_at'] ?? ''),
                     'customer_name' => trim((string) ($orderRow['customer_name'] ?? '')),
                     'shipping_info' => $this->decodeJsonObject((string) ($orderRow['shipping_json'] ?? '')),
+                    'parent_code' => trim((string) ($orderRow['parent_code'] ?? '')),
                 ];
             }
         }
@@ -93,10 +94,12 @@ class PurchaseHistoryManagement implements PurchaseHistoryInterface
                     'paid_at' => '',
                     'customer_name' => '',
                     'shipping_info' => [],
+                    'parent_code' => '',
                 ];
                 return [
                     'history_id' => $historyId,
                     'order_reference' => $orderReference,
+                    'parent_code' => $orderMeta['parent_code'],
                     'status' => $orderMeta['status'],
                     'status_label' => $this->getOrderStatusLabel((string) $orderMeta['status']),
                     'customer_region' => (string) ($order['customer_region'] ?? ''),

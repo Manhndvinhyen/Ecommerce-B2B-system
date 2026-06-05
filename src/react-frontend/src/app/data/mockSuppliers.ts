@@ -1,6 +1,14 @@
 export const supplierRegions = ['Hà Nội', 'TP. Hồ Chí Minh', 'Đà Lạt', 'Miền Tây'];
 
 export function getMockSupplierForProduct(sku: string, category: string) {
+  const normalizedSku = String(sku || '').toLowerCase();
+  if (normalizedSku.includes('ba-chi-heo') || normalizedSku.includes('ba_chi_heo') || normalizedSku.includes('tpts-ba-chi-heo')) {
+    return { name: 'Tổng công ty Chăn nuôi CP Việt Nam', region: 'Hà Nội' };
+  }
+  if (normalizedSku.includes('tomato') || normalizedSku.includes('ca-chua') || normalizedSku.includes('ca_chua') || normalizedSku.includes('cc-02')) {
+    return { name: 'Nông trại Hữu cơ Đà Lạt', region: 'Miền Tây' };
+  }
+
   const regions = supplierRegions;
   const index = sku ? sku.length % regions.length : 0;
   let region = regions[index];

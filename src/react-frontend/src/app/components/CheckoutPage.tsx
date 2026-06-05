@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
-import { Calendar, Clock, FileText, MapPin, PackageCheck, Phone, ShoppingBag, User, Wind, Thermometer, AlertTriangle, Truck } from 'lucide-react';
+import { Calendar, Clock, FileText, MapPin, PackageCheck, Phone, ShoppingBag, User, Wind, Thermometer, AlertTriangle, Truck, Store } from 'lucide-react';
 import { formatCartSupplierLabel, toCurrencyTextFromNumber, useCart } from '../cart/CartProvider';
+import { inferCategoryFromSku } from '../data/categories';
 
 declare global {
   interface Window {
@@ -46,6 +47,107 @@ function findNearestWarehouse(lat: number, lon: number) {
   return { warehouse: nearest, distance: minDistance };
 }
 
+// Determine warehouse dynamically based on supplier region and database warehouses list
+const getWarehouseForSupplier = (supplierLabel: string, dbList: any[] = []) => {
+  const parts = supplierLabel.split('·').map(p => p.trim());
+  const supplierRegion = parts[1] || parts[0] || '';
+  const normalizedRegion = supplierRegion.toLowerCase();
+
+  let nameKeyword = 'Bình Dương';
+  if (normalizedRegion.includes('hà nội') || normalizedRegion.includes('ha noi') || normalizedRegion.includes('bắc giang') || normalizedRegion.includes('bac giang') || normalizedRegion.includes('bắc') || normalizedRegion.includes('bac')) {
+    nameKeyword = 'Bắc Giang';
+  } else if (normalizedRegion.includes('đà lạt') || normalizedRegion.includes('da lat')) {
+    nameKeyword = 'Bắc Giang';
+  }
+
+  const found = dbList.find(w => w.name && w.name.includes(nameKeyword));
+  if (found) {
+    return { name: found.name, lat: found.lat, lon: found.lng || found.lon, lng: found.lng || found.lon };
+  }
+
+  // Fallback to static coordinates if API not loaded/fails
+  if (nameKeyword === 'Bắc Giang') {
+    return { name: 'Kho Bắc Giang', lat: 21.2730, lon: 106.1946, lng: 106.1946 };
+  }
+  return { name: 'Kho Bình Dương', lat: 10.9805, lon: 106.6517, lng: 106.6517 };
+};
+
+// Calculate agricultural item weight based on unit type and quantity
+function calculateItemWeight(unit: string, quantity: number): number {
+  const normalizedUnit = String(unit || '').toLowerCase().trim();
+  if (normalizedUnit === 'kg') return quantity;
+  if (normalizedUnit === 'bao') return quantity * 30; // 30kg per bag
+  if (normalizedUnit === 'yến' || normalizedUnit === 'yen') return quantity * 10;
+  if (normalizedUnit === 'tạ' || normalizedUnit === 'ta') return quantity * 100;
+  if (normalizedUnit === 'thùng' || normalizedUnit === 'thung') return quantity * 10;
+  if (normalizedUnit === 'khay' || normalizedUnit === 'hộp' || normalizedUnit === 'hop') return quantity * 0.5;
+  return quantity * 1.0; // default 1kg
+}
+
+interface CarrierRate {
+  code: string;
+  name: string;
+  fee: number;
+  eta: string;
+}
+
+// Calculate dynamic rates for GHN and GHTK based on distance and weight
+function calculateCarrierRates(distance: number, totalWeight: number): CarrierRate[] {
+  // Giao Hàng Nhanh (GHN)
+  let ghnBase = 22000;
+  let ghnOverweight = 3000;
+  let ghnDistFactor = 0;
+  let ghnEta = '1 ngày';
+
+  if (distance <= 20) {
+    ghnBase = 22000;
+    ghnOverweight = 3000;
+    ghnEta = 'Trong ngày';
+  } else if (distance <= 100) {
+    ghnBase = 35000;
+    ghnOverweight = 5000;
+    ghnEta = '1-2 ngày';
+  } else {
+    ghnBase = 50000;
+    ghnOverweight = 10000;
+    ghnDistFactor = (distance - 100) * 500;
+    ghnEta = '2-3 ngày';
+  }
+
+  const ghnExtraWeight = Math.max(0, totalWeight - 2);
+  const ghnFee = Math.round((ghnBase + ghnExtraWeight * ghnOverweight + ghnDistFactor) / 1000) * 1000;
+
+  // Giao Hàng Tiết Kiệm (GHTK)
+  let ghtkBase = 16500;
+  let ghtkOverweight = 2500;
+  let ghtkDistFactor = 0;
+  let ghtkEta = '1-2 ngày';
+
+  if (distance <= 20) {
+    ghtkBase = 16500;
+    ghtkOverweight = 2500;
+    ghtkEta = '1-2 ngày';
+  } else if (distance <= 100) {
+    ghtkBase = 28000;
+    ghtkOverweight = 4000;
+    ghtkEta = '2-3 ngày';
+  } else {
+    ghtkBase = 42000;
+    ghtkOverweight = 8000;
+    ghtkDistFactor = (distance - 100) * 400;
+    ghtkEta = '3-5 ngày';
+  }
+
+  const ghtkExtraWeight = Math.max(0, totalWeight - 2);
+  const ghtkFee = Math.round((ghtkBase + ghtkExtraWeight * ghtkOverweight + ghtkDistFactor) / 1000) * 1000;
+
+  return [
+    { code: 'ghn', name: 'Giao Hàng Nhanh (GHN)', fee: ghnFee, eta: ghnEta },
+    { code: 'ghtk', name: 'Giao Hàng Tiết Kiệm (GHTK)', fee: ghtkFee, eta: ghtkEta }
+  ];
+}
+
+
 // Format duration to human readable format (e.g. 1 giờ 52 phút)
 function formatDuration(minutes: number): string {
   if (minutes < 60) return `${minutes} phút`;
@@ -73,6 +175,8 @@ interface WeatherEstimation {
   temperatureNotice: string;
   windNotice: string;
   weatherNotice: string;
+  weightKg: number;
+  carrierRates: CarrierRate[];
 }
 
 // Map WMO Code to exact weather factor and translations
@@ -209,6 +313,21 @@ const branchCoordinates: Record<string, { lat: number; lng: number; cityName: st
   'Chi nhánh Bình Thạnh': { lat: 10.801, lng: 106.699, cityName: 'Bình Thạnh, TP. Hồ Chí Minh' }
 };
 
+const findClosestBranch = (lat: number, lng: number): string => {
+  let closestBranch = 'Chi nhánh Quận 1';
+  let minDistance = Infinity;
+
+  Object.entries(branchCoordinates).forEach(([branchName, coords]) => {
+    const dist = calculateDistance(lat, lng, coords.lat, coords.lng);
+    if (dist < minDistance) {
+      minDistance = dist;
+      closestBranch = branchName;
+    }
+  });
+
+  return closestBranch;
+};
+
 const getCustomerEmail = () =>
   window.localStorage.getItem('freso_customer_email') || window.sessionStorage.getItem('freso_customer_email') || '';
 const getCustomerName = () =>
@@ -322,7 +441,7 @@ const mapMagentoCartItems = (items: MagentoCartItem[] = []): CheckoutItem[] => {
 
     const discountPercent = activeTier ? activeTier.discount : 0;
     const unitPrice = originalPrice * (1 - discountPercent / 100);
-    const category = product.categories?.find((cat) => cat?.name)?.name ?? (matchingProduct?.categoryLabel || '');
+    const category = product.categories?.find((cat) => cat?.name)?.name ?? matchingProduct?.categoryLabel ?? (inferCategoryFromSku(product.sku ?? '')?.category || 'Rau củ quả');
     const unit = matchingProduct?.unit || 'kg';
     const supplier = parseSupplierLabel(matchingProduct?.store_name);
     const storedSupplier = storedSupplierMap[sku] || {};
@@ -462,8 +581,27 @@ export function CheckoutPage() {
   const [recMonthDay, setRecMonthDay] = useState<number>(1);
 
   // Weather and ETA estimation states
-  const [estimation, setEstimation] = useState<WeatherEstimation | null>(null);
+  const [estimations, setEstimations] = useState<Record<string, WeatherEstimation>>({});
+  const [dbWarehouses, setDbWarehouses] = useState<any[]>([]);
+  const [selectedCarriers, setSelectedCarriers] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    fetch('/rest/V1/tmdt-orders/warehouses')
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setDbWarehouses(data);
+        }
+      })
+      .catch((err) => console.error('Failed to load DB warehouses:', err));
+  }, []);
+
+  const estimation = useMemo(() => {
+    return Object.values(estimations)[0] || null;
+  }, [estimations]);
+
   const [estLoading, setEstLoading] = useState<boolean>(false);
+
 
   // SOTA Leaflet Map states and refs
   const [leafletLoaded, setLeafletLoaded] = useState<boolean>(false);
@@ -472,6 +610,18 @@ export function CheckoutPage() {
   const [coordinates, setCoordinates] = useState<{ lat: number; lng: number; cityName?: string } | null>(null);
   const isMapActionRef = useRef<boolean>(false);
   const [mapSearchQuery, setMapSearchQuery] = useState<string>('');
+
+  useEffect(() => {
+    if (coordinates) {
+      const closest = findClosestBranch(coordinates.lat, coordinates.lng);
+      setShippingInfo((prev) => {
+        if (prev.branch !== closest) {
+          return { ...prev, branch: closest };
+        }
+        return prev;
+      });
+    }
+  }, [coordinates]);
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
@@ -535,10 +685,44 @@ export function CheckoutPage() {
     () => checkoutItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
     [checkoutItems]
   );
-  const shippingFee = 0;
+
+  const checkoutGroups = useMemo(() => {
+    const groups: Record<string, CheckoutItem[]> = {};
+    checkoutItems.forEach((item) => {
+      const supplierLabel = formatCartSupplierLabel(item);
+      if (!groups[supplierLabel]) {
+        groups[supplierLabel] = [];
+      }
+      groups[supplierLabel].push(item);
+    });
+    return Object.entries(groups).map(([supplierLabel, items]) => {
+      const groupSubtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+      return {
+        supplierLabel,
+        items,
+        subtotal: groupSubtotal
+      };
+    });
+  }, [checkoutItems]);
+
+  const shippingFee = useMemo(() => {
+    return Object.entries(estimations).reduce((sum, [label, est]) => {
+      const carrierCode = selectedCarriers[label] || 'ghtk';
+      const rate = est.carrierRates?.find(r => r.code === carrierCode);
+      return sum + (rate ? rate.fee : (est.shippingFee || 0));
+    }, 0);
+  }, [estimations, selectedCarriers]);
+
+  const weatherSurcharge = useMemo(() => {
+    return Object.values(estimations).reduce((sum, est) => sum + (est.surcharge || 0), 0);
+  }, [estimations]);
+
   const shippingDiscount = 0;
-  const weatherSurcharge = estimation ? estimation.surcharge : 0;
-  const totalAmount = subtotal + shippingFee - shippingDiscount + weatherSurcharge;
+
+  const totalAmount = useMemo(() => {
+    return subtotal + shippingFee - shippingDiscount + weatherSurcharge;
+  }, [subtotal, shippingFee, shippingDiscount, weatherSurcharge]);
+
 
   // Immediately get initial location on mount to center the map on the user's actual GPS location
   useEffect(() => {
@@ -661,7 +845,7 @@ export function CheckoutPage() {
     useEffect(() => {
       const cleanAddress = shippingInfo.address.trim();
       if (cleanAddress.length < 5) {
-        setEstimation(null);
+        setEstimations({});
         return;
       }
   
@@ -671,6 +855,7 @@ export function CheckoutPage() {
   
       return () => clearTimeout(timer);
     }, [shippingInfo.address, shippingInfo.branch]);
+
 
   const calculateWeatherAndEta = async (address: string, branch: string) => {
     setEstLoading(true);
@@ -731,9 +916,6 @@ export function CheckoutPage() {
         }
       }
 
-      // Determine the nearest warehouse dynamically by comparing distances to all options
-      const { warehouse, distance } = findNearestWarehouse(lat, lng);
-
       // Fetch Weather Data from Open-Meteo
       const weatherRes = await fetch(
         `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,rain,precipitation&t=${Date.now()}`,
@@ -764,10 +946,6 @@ export function CheckoutPage() {
       // Map WMO Code and wind speed to factor and labels
       const weatherDetails = mapWmoToCondition(weatherCode, windSpeed);
 
-      // Calculate ETA: base minutes is rounded distance * 1.5 + 12
-      const baseDurationMinutes = Math.round(distance * 1.5) + 12;
-      const finalDurationMinutes = Math.round(baseDurationMinutes * weatherDetails.factor);
-
       // Temperature rules
       let surcharge = 0;
       let temperatureNotice = '';
@@ -779,32 +957,57 @@ export function CheckoutPage() {
         temperatureNotice = '⚠️ Nhiệt độ cao. Sản phẩm sẽ được ưu tiên vận chuyển bằng xe lạnh.';
       }
 
-      // Wind rules
+      // Gió mạnh
       let windNotice = '';
       if (windSpeed > 40) {
         windNotice = '⚠️ Gió mạnh. Thời gian giao hàng có thể kéo dài.';
       }
 
-      setEstimation({
-        lat,
-        lng,
-        cityName,
-        temperature,
-        humidity,
-        condition: weatherDetails.condition,
-        conditionVi: weatherDetails.conditionVi,
-        conditionEmoji: weatherDetails.emoji,
-        windSpeed,
-        distanceKm: distance,
-        warehouseName: warehouse.name,
-        baseDurationMinutes,
-        finalDurationMinutes,
-        weatherFactor: weatherDetails.factor,
-        surcharge,
-        temperatureNotice,
-        windNotice,
-        weatherNotice: weatherDetails.notice
+      const nextEstimations: Record<string, WeatherEstimation> = {};
+      const uniqueSupplierLabels = Array.from(new Set(checkoutItems.map(item => formatCartSupplierLabel(item))));
+
+      uniqueSupplierLabels.forEach((supplierLabel) => {
+        const warehouse = getWarehouseForSupplier(supplierLabel, dbWarehouses);
+        const distance = calculateDistance(lat, lng, warehouse.lat, warehouse.lng || warehouse.lon);
+        const baseDurationMinutes = Math.round(distance * 1.5) + 12;
+        const finalDurationMinutes = Math.round(baseDurationMinutes * weatherDetails.factor);
+        
+        // Sum weights of all products in this shop
+        const shopItems = checkoutItems.filter(item => formatCartSupplierLabel(item) === supplierLabel);
+        const shopWeight = shopItems.reduce((sum, item) => sum + calculateItemWeight(item.unit, item.quantity), 0);
+
+        // Get carrier rates
+        const carrierRates = calculateCarrierRates(distance, shopWeight);
+
+        // Keep fallback shippingFee logic for legacy code compatibility
+        const shopShippingFee = Math.max(15000, Math.round(distance * 2000 / 1000) * 1000);
+
+        nextEstimations[supplierLabel] = {
+          lat,
+          lng,
+          cityName,
+          temperature,
+          humidity,
+          condition: weatherDetails.condition,
+          conditionVi: weatherDetails.conditionVi,
+          conditionEmoji: weatherDetails.emoji,
+          windSpeed,
+          distanceKm: distance,
+          warehouseName: warehouse.name,
+          baseDurationMinutes,
+          finalDurationMinutes,
+          weatherFactor: weatherDetails.factor,
+          surcharge,
+          shippingFee: shopShippingFee,
+          temperatureNotice,
+          windNotice,
+          weatherNotice: weatherDetails.notice,
+          weightKg: shopWeight,
+          carrierRates
+        };
       });
+
+      setEstimations(nextEstimations);
 
     } catch (err) {
       console.error('Weather estimation error:', err);
@@ -1078,7 +1281,7 @@ export function CheckoutPage() {
   };
 
   const validateField = (field: keyof ShippingInfo, value: string) => {
-    if (field === 'note') return '';
+    if (field === 'note' || field === 'branch') return '';
     if (!value.trim()) return 'Vui lòng nhập thông tin này.';
     if (field === 'phone' && !isValidPhone(value)) return 'Số điện thoại chưa hợp lệ.';
     return '';
@@ -1182,6 +1385,22 @@ export function CheckoutPage() {
     try {
       setIsSubmitting(true);
 
+      const suppliersShippingMap: Record<string, any> = {};
+      Object.entries(estimations).forEach(([supplierLabel, est]) => {
+        const carrierCode = selectedCarriers[supplierLabel] || 'ghtk';
+        const rate = est.carrierRates?.find(r => r.code === carrierCode) || est.carrierRates?.[0];
+
+        suppliersShippingMap[supplierLabel] = {
+          warehouse: est.warehouseName,
+          distance: est.distanceKm,
+          shippingFee: rate ? rate.fee : est.shippingFee,
+          surcharge: est.surcharge,
+          eta: rate ? rate.eta : formatDuration(est.finalDurationMinutes),
+          carrier: rate ? rate.name : 'Giao Hàng Tiết Kiệm (GHTK)',
+          weight: est.weightKg
+        };
+      });
+
       // Step 1: Create order in backend and get orderCode
       const createRes = await fetch('/rest/V1/tmdt-orders/create', {
         method: 'POST',
@@ -1190,7 +1409,6 @@ export function CheckoutPage() {
           ...(getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {})
         },
         body: JSON.stringify({
-          // Flat params matching Magento interface (no nested array)
           customerEmail: getCustomerEmail() || 'guest',
           customerName: getCustomerName(),
           totalAmount,
@@ -1199,7 +1417,9 @@ export function CheckoutPage() {
             name: item.name,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
-            unit: item.unit
+            unit: item.unit,
+            supplierName: item.supplierName,
+            supplierRegion: item.supplierRegion
           }))),
           shippingJson: JSON.stringify({
             branch: shippingInfo.branch,
@@ -1208,44 +1428,74 @@ export function CheckoutPage() {
             phone: shippingInfo.phone,
             note: shippingInfo.note,
             deliveryDate,
-            deliveryTime
+            deliveryTime,
+            suppliers: suppliersShippingMap
           })
         })
       });
 
       let orderCode: string;
       let expiresAt: string;
+      let childOrdersList: any[] = [];
 
       if (createRes.ok) {
         const orderData = await createRes.json();
         orderCode = orderData?.orderCode ?? `DH${Date.now().toString(36).toUpperCase().slice(-6)}`;
         expiresAt = orderData?.expiresAt ?? new Date(Date.now() + 15 * 60 * 1000).toISOString();
+        childOrdersList = orderData?.childOrders ?? [];
       } else {
         // Fallback: generate local order code if API fails
         orderCode = `DH${Date.now().toString(36).toUpperCase().slice(-6)}`;
         expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+        childOrdersList = [
+          {
+            orderCode,
+            supplier: supplier || 'Tổng kho sỉ Thực phẩm B2B · Hà Nội',
+            subtotal,
+            totalAmount,
+            items: checkoutItems
+          }
+        ];
       }
 
-      // Step 2: Also save purchase history
+      // Step 2: Also save purchase history for each child order
       const token = getAuthToken();
-      if (token) {
-        fetch('/rest/V1/tmdt-search/purchase-history', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            customerEmail: getCustomerEmail(),
-            orderReference: orderCode,
-            customerRegion: getRegionFromBranch(shippingInfo.branch),
-            items: checkoutItems.map((item) => ({
-              sku: item.sku, name: item.name, category: item.category,
-              quantity: item.quantity, unitPrice: item.unitPrice, unit: item.unit, image: item.image
-            })),
-            supplier, subtotal, totalAmount, deliveryDate, deliveryTime,
-            shippingAddress: shippingInfo.branch ? `${shippingInfo.branch} - ${shippingInfo.address}` : shippingInfo.address,
-            note: shippingInfo.note, invoiceInfo
-          })
-        }).catch(() => {/* ignore */ });
+      if (token && childOrdersList && childOrdersList.length > 0) {
+        for (const child of childOrdersList) {
+          const childSupplierLabel = child.supplier;
+          
+          await fetch('/rest/V1/tmdt-search/purchase-history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              customerEmail: getCustomerEmail(),
+              orderReference: child.orderCode,
+              customerRegion: getRegionFromBranch(shippingInfo.branch),
+              items: child.items.map((item: any) => {
+                const match = checkoutItems.find(i => i.sku === item.sku);
+                return {
+                  sku: item.sku,
+                  name: item.name,
+                  category: match?.category || 'Rau củ quả',
+                  quantity: item.quantity,
+                  unitPrice: item.unitPrice,
+                  unit: item.unit || 'kg',
+                  image: match?.image || ''
+                };
+              }),
+              supplier: childSupplierLabel,
+              subtotal: child.subtotal,
+              totalAmount: child.totalAmount,
+              deliveryDate,
+              deliveryTime,
+              shippingAddress: shippingInfo.branch ? `${shippingInfo.branch} - ${shippingInfo.address}` : shippingInfo.address,
+              note: shippingInfo.note,
+              invoiceInfo
+            })
+          }).catch(() => {/* ignore */ });
+        }
       }
+
 
       const preferredRegion = getRegionFromBranch(shippingInfo.branch);
       if (preferredRegion) {
@@ -1329,75 +1579,78 @@ export function CheckoutPage() {
                 Tóm tắt đơn hàng
               </div>
               <div className="space-y-4">
-                {checkoutItems.map((item) => {
-                  const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
-                  let customLocalProducts: any[] = [];
-                  if (customLocalRaw) {
-                    try {
-                      customLocalProducts = JSON.parse(customLocalRaw);
-                    } catch {
-                      customLocalProducts = [];
-                    }
-                  }
-                  const sku = (item.sku ?? '').trim().toLowerCase();
-                  const matchingProduct = customLocalProducts.find(p => (p.sku ?? '').trim().toLowerCase() === sku);
-                  const originalPrice = matchingProduct ? Number(matchingProduct.price) : item.unitPrice;
-                  const tiers = matchingProduct?.wholesale_tiers || [];
-                  const activeTier = tiers
-                    .filter((t: any) => item.quantity >= t.qty)
-                    .sort((a: any, b: any) => b.qty - a.qty)[0];
-                  const discountPercent = activeTier ? activeTier.discount : 0;
-                  const hasDiscount = discountPercent > 0;
-
+                {checkoutGroups.map((group) => {
+                  const shopEst = estimations[group.supplierLabel];
                   return (
-                    <div key={item.id} className="flex items-center gap-4 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
-                      <img src={item.image} alt={item.name} className="size-14 rounded-xl object-cover" />
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-gray-900">{item.name}</p>
-                        <div className="text-xs text-gray-500 flex flex-wrap items-center gap-1.5 mt-0.5">
-                          <span>{item.quantity} {item.unit} •</span>
-                          {hasDiscount ? (
-                            <>
-                              <span className="line-through text-gray-400">
-                                {toCurrencyTextFromNumber(originalPrice)}
-                              </span>
-                              <span className="px-1 py-0.2 bg-red-50 text-red-600 rounded text-[9px] font-bold">
-                                -{discountPercent}% sỉ
-                              </span>
-                              <span className="text-green-700 font-bold">
-                                {toCurrencyTextFromNumber(item.unitPrice)}
-                              </span>
-                            </>
-                          ) : (
-                            <span>{toCurrencyTextFromNumber(item.unitPrice)}</span>
-                          )}
+                    <div key={group.supplierLabel} className="mb-6 rounded-xl border border-gray-100 bg-gray-50/20 p-4">
+                      {/* Shop Header */}
+                      <div className="mb-3 flex items-center justify-between border-b border-gray-100 pb-2">
+                        <div className="flex items-center gap-2 font-bold text-gray-850">
+                          <Store className="size-4 text-green-650" />
+                          <span>{group.supplierLabel}</span>
                         </div>
+                        <span className="text-xs font-semibold text-gray-405 bg-gray-100 px-2 rounded-full">
+                          {group.items.length} sản phẩm
+                        </span>
                       </div>
-                      <div className="text-sm font-semibold text-gray-900">
-                        {toCurrencyTextFromNumber(item.quantity * item.unitPrice)}
+
+                      {/* Items List */}
+                      <div className="space-y-3">
+                        {group.items.map((item) => {
+                          const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
+                          let customLocalProducts: any[] = [];
+                          if (customLocalRaw) {
+                            try {
+                              customLocalProducts = JSON.parse(customLocalRaw);
+                            } catch {
+                              customLocalProducts = [];
+                            }
+                          }
+                          const sku = (item.sku ?? '').trim().toLowerCase();
+                          const matchingProduct = customLocalProducts.find(p => (p.sku ?? '').trim().toLowerCase() === sku);
+                          const originalPrice = matchingProduct ? Number(matchingProduct.price) : item.unitPrice;
+                          const tiers = matchingProduct?.wholesale_tiers || [];
+                          const activeTier = tiers
+                            .filter((t: any) => item.quantity >= t.qty)
+                            .sort((a: any, b: any) => b.qty - a.qty)[0];
+                          const discountPercent = activeTier ? activeTier.discount : 0;
+                          const hasDiscount = discountPercent > 0;
+
+                          return (
+                            <div key={item.id} className="flex items-center gap-3 rounded-lg bg-white p-3 border border-gray-100/50">
+                              <img src={item.image} alt={item.name} className="size-12 rounded-lg object-cover" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-gray-900 truncate">{item.name}</p>
+                                <div className="text-xs text-gray-500 flex flex-wrap items-center gap-1.5 mt-0.5">
+                                  <span>{item.quantity} {item.unit} •</span>
+                                  {hasDiscount ? (
+                                    <>
+                                      <span className="line-through text-gray-400">
+                                        {toCurrencyTextFromNumber(originalPrice)}
+                                      </span>
+                                      <span className="text-green-700 font-bold">
+                                        {toCurrencyTextFromNumber(item.unitPrice)}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span>{toCurrencyTextFromNumber(item.unitPrice)}</span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-sm font-semibold text-gray-900 whitespace-nowrap">
+                                {toCurrencyTextFromNumber(item.quantity * item.unitPrice)}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
+
                     </div>
                   );
                 })}
               </div>
-
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-gray-600">
-
-                {supplierOptions.length > 1 && (
-                  <select
-                    value={supplier}
-                    onChange={(event) => setSupplier(event.target.value)}
-                    className="rounded-full border border-gray-200 px-3 py-1 text-sm"
-                  >
-                    {supplierOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
             </section>
+
 
             <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-800">
@@ -1553,25 +1806,72 @@ export function CheckoutPage() {
                       </div>
                     </div>
 
-                    <div className="border-t border-dashed border-green-200/50 pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div>
-                        <div className="text-xs text-gray-500 font-medium">Tuyến vận chuyển hàng:</div>
-                        <div className="text-sm font-bold text-gray-900">
-                          {estimation.warehouseName} → Khách hàng ({estimation.distanceKm} km)
-                        </div>
-                      </div>
+                    <div className="border-t border-dashed border-green-200/50 pt-3 space-y-3">
+                      <div className="text-xs text-gray-500 font-bold uppercase tracking-wider">Thông tin lộ trình vận chuyển theo từng Shop:</div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {Object.entries(estimations).map(([supplierLabel, est]) => (
+                          <div key={supplierLabel} className="bg-white border border-green-100 p-3.5 rounded-xl shadow-xs space-y-2">
+                            <div className="font-extrabold text-[13px] text-green-800 border-b border-gray-50 pb-1.5 flex items-center gap-1.5">
+                              <Store className="size-3.5 text-green-600 shrink-0" />
+                              {supplierLabel}
+                            </div>
+                             <div className="space-y-2 text-xs text-gray-750">
+                              <div className="flex justify-between border-b border-gray-50 pb-1">
+                                <span className="text-gray-500">Trọng lượng đơn:</span>
+                                <span className="font-bold text-slate-800">{est.weightKg.toFixed(1)} kg</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-500">Vận chuyển từ:</span>
+                                <span className="font-bold text-gray-900">{est.warehouseName} ({est.distanceKm} km)</span>
+                              </div>
+                              
+                              {/* Shipping carrier selector */}
+                              <div className="space-y-1.5 mt-2">
+                                <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Chọn đơn vị vận chuyển:</div>
+                                <div className="grid gap-1.5">
+                                  {est.carrierRates?.map((rate) => {
+                                    const selectedCarrier = selectedCarriers[supplierLabel] || 'ghtk';
+                                    const isCurrent = selectedCarrier === rate.code;
+                                    return (
+                                      <button
+                                        key={rate.code}
+                                        type="button"
+                                        onClick={() => setSelectedCarriers(prev => ({ ...prev, [supplierLabel]: rate.code }))}
+                                        className={`flex items-center justify-between p-2 rounded-xl border text-left transition-all ${
+                                          isCurrent
+                                            ? 'border-green-600 bg-green-50/50 shadow-xs'
+                                            : 'border-gray-150 hover:bg-gray-50/30'
+                                        }`}
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <input
+                                            type="radio"
+                                            name={`carrier-${supplierLabel}`}
+                                            checked={isCurrent}
+                                            onChange={() => setSelectedCarriers(prev => ({ ...prev, [supplierLabel]: rate.code }))}
+                                            className="accent-green-600 size-3"
+                                          />
+                                          <div>
+                                            <p className="text-xs font-bold text-gray-950">{rate.name}</p>
+                                            <p className="text-[10px] text-gray-500 font-semibold">Nhận dự kiến: {rate.eta}</p>
+                                          </div>
+                                        </div>
+                                        <span className="text-xs font-extrabold text-green-700">{toCurrencyTextFromNumber(rate.fee)}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
 
-                      <div className="text-left sm:text-right">
-                        <div className="text-xs text-gray-500 font-medium">Thời gian giao dự kiến (ETA):</div>
-                        <div className="text-base font-extrabold text-green-700 flex items-center sm:justify-end gap-1.5">
-                          <Truck className="size-5" />
-                          {formatDuration(estimation.finalDurationMinutes)}
-                          {estimation.weatherFactor > 1.0 && (
-                            <span className="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-full ml-1 whitespace-nowrap">
-                              x{estimation.weatherFactor} thời tiết
-                            </span>
-                          )}
-                        </div>
+                              {est.surcharge > 0 && (
+                                <div className="flex justify-between text-orange-650 font-semibold border-t border-dashed border-gray-100 pt-1.5">
+                                  <span>Phụ phí xe lạnh thời tiết:</span>
+                                  <span>{toCurrencyTextFromNumber(est.surcharge)}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
 

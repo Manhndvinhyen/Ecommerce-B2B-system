@@ -152,3 +152,144 @@ export const getCategoryPageLink = (category: string, subcategory?: string) => {
 
   return `/react/index.html?${params.toString()}`;
 };
+
+export type InferredCategory = {
+  category: string;
+  subcategory: string;
+};
+
+const pickSubcategoryFromText = (
+  haystack: string,
+  rules: Array<{ keywords: string[]; label: string }>,
+  fallback?: string
+) => {
+  const matched = rules.find((rule) => rule.keywords.some((keyword) => haystack.includes(keyword)));
+  return matched?.label ?? fallback;
+};
+
+export const inferCategoryFromSku = (sku: string): InferredCategory | null => {
+  const normalized = toQuerySlug(sku);
+  const normalizedUpper = String(sku || '').toUpperCase();
+
+  if (/^RCQ_\d{3,}$/.test(normalizedUpper)) {
+    return { category: 'Rau củ quả', subcategory: 'Rau phổ thông' };
+  }
+  if (/^TC_\d{3,}$/.test(normalizedUpper)) {
+    return { category: 'Trái cây', subcategory: 'Trái cây phổ thông' };
+  }
+  if (/^TPTS_\d{3,}$/.test(normalizedUpper)) {
+    return { category: 'Thực phẩm tươi sống', subcategory: 'Giò-chả-nem' };
+  }
+  if (/^THS_\d{3,}$/.test(normalizedUpper)) {
+    return { category: 'Thuỷ hải sản', subcategory: 'Hải sản chế biến' };
+  }
+  if (/^TPDL_\d{3,}$/.test(normalizedUpper)) {
+    return { category: 'Thực phẩm đông lạnh', subcategory: 'Giò-chả-nem' };
+  }
+  if (/^TPK_\d{3,}$/.test(normalizedUpper)) {
+    return { category: 'Thực phẩm khô', subcategory: 'Thực phẩm khô khác' };
+  }
+  if (/^TIB_\d{3,}$/.test(normalizedUpper)) {
+    return { category: 'Tiện ích bếp', subcategory: 'Sản phẩm khác' };
+  }
+
+  if (normalized.startsWith('rau-cu-qua-')) {
+    return {
+      category: 'Rau củ quả',
+      subcategory: pickSubcategoryFromText(
+        normalized,
+        [
+          { keywords: ['chilli', 'red-bell-pepper'], label: 'Rau gia vị' },
+          { keywords: ['carrot', 'potato'], label: 'Củ quả' }
+        ],
+        'Rau phổ thông'
+      )
+    };
+  }
+
+  if (normalized.startsWith('cat-tc-')) {
+    return {
+      category: 'Trái cây',
+      subcategory: normalized.includes('tao') ? 'Trái cây nhập khẩu' : 'Trái cây phổ thông'
+    };
+  }
+
+  if (normalized.startsWith('cat-tpts-')) {
+    return {
+      category: 'Thực phẩm tươi sống',
+      subcategory: pickSubcategoryFromText(normalized, [
+        { keywords: ['heo'], label: 'Thịt heo' },
+        { keywords: ['bo', 'be'], label: 'Thịt bò-bê' },
+        { keywords: ['trau', 'nghe'], label: 'Thịt trâu-nghé' },
+        { keywords: ['de'], label: 'Thịt dê' },
+        { keywords: ['ga'], label: 'Thịt gà' },
+        { keywords: ['vit', 'ngong'], label: 'Thịt vịt-gan-ngỗng' },
+        { keywords: ['chim'], label: 'Thịt chim' },
+        { keywords: ['ech'], label: 'Thịt ếch' },
+        { keywords: ['trung'], label: 'Trứng' }
+      ], 'Giò-chả-nem')
+    };
+  }
+
+  if (normalized.startsWith('cat-ths-')) {
+    return {
+      category: 'Thuỷ hải sản',
+      subcategory: pickSubcategoryFromText(normalized, [
+        { keywords: ['ca'], label: 'Cá' },
+        { keywords: ['tom'], label: 'Tôm' },
+        { keywords: ['cua'], label: 'Cua' },
+        { keywords: ['muc'], label: 'Mực' },
+        { keywords: ['ngao', 'oc'], label: 'Ngao ốc' }
+      ], 'Hải sản chế biến')
+    };
+  }
+
+  if (normalized.startsWith('cat-tpdl-')) {
+    return {
+      category: 'Thực phẩm đông lạnh',
+      subcategory: pickSubcategoryFromText(normalized, [
+        { keywords: ['heo'], label: 'Thịt heo' },
+        { keywords: ['bo', 'be'], label: 'Thịt bò-bê' },
+        { keywords: ['trau', 'nghe'], label: 'Thịt trâu-nghé' },
+        { keywords: ['de'], label: 'Thịt dê' },
+        { keywords: ['ga'], label: 'Thịt gà' },
+        { keywords: ['vit', 'ngong'], label: 'Thịt vịt-gan-ngỗng' },
+        { keywords: ['chim'], label: 'Thịt chim' },
+        { keywords: ['ech'], label: 'Thịt ếch' },
+        { keywords: ['trung'], label: 'Trứng' },
+        { keywords: ['xuc-xich', 'lap-xuong'], label: 'Xúc xích - lạp xưởng' }
+      ], 'Giò-chả-nem')
+    };
+  }
+
+  if (normalized.startsWith('cat-tpk-')) {
+    return {
+      category: 'Thực phẩm khô',
+      subcategory: pickSubcategoryFromText(normalized, [
+        { keywords: ['gia-vi'], label: 'Gia vị' },
+        { keywords: ['gao'], label: 'Gạo' },
+        { keywords: ['bot'], label: 'Bột' },
+        { keywords: ['bun', 'mien', 'pho', 'nui'], label: 'Bún-miến-phở-nui' },
+        { keywords: ['hat'], label: 'Hạt khô' },
+        { keywords: ['do-uong'], label: 'Đồ uống' },
+        { keywords: ['kem', 'bo', 'pho-mai'], label: 'Kem-bơ-phô mai' },
+        { keywords: ['mut', 'siro'], label: 'Mứt siro' },
+        { keywords: ['tra', 'ca-phe'], label: 'Trà - cà phê đóng gói' }
+      ], 'Thực phẩm khô khác')
+    };
+  }
+
+  if (normalized.startsWith('cat-tib-')) {
+    return {
+      category: 'Tiện ích bếp',
+      subcategory: pickSubcategoryFromText(normalized, [
+        { keywords: ['dung-cu-an-uong'], label: 'Dụng cụ ăn uống' },
+        { keywords: ['do-dung-bep', 'noi'], label: 'Đồ dùng bếp' },
+        { keywords: ['chat-tay-rua', 'rua-chen'], label: 'Chất tẩy rửa' },
+        { keywords: ['dung-cu-ve-sinh', 'ban-chai', 'co-noi'], label: 'Dụng cụ vệ sinh' }
+      ], 'Sản phẩm khác')
+    };
+  }
+
+  return null;
+};

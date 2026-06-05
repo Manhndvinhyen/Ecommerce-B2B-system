@@ -276,20 +276,16 @@ export function Header() {
   const normalizedUserRole = userRole.trim().toLowerCase();
   const isSellerAccount = normalizedUserRole === 'seller' || normalizedUserRole === 'manager' || normalizedUserRole === 'branch';
   const visibleMenuItems = useMemo(() => {
-    const customerMenuItemIds = new Set(['profile-seller', 'lich-su-mua-hang', 'don-hang', 'bao-gia']);
+    const customerMenuItemIds = new Set(['profile-seller', 'lich-su-mua-hang', 'don-hang', 'bao-gia', 'dat-hang-dinh-ky']);
 
     return adminMenuItems.filter((item) => {
-      if (item.id === 'dashboard') {
-        return false;
-      }
-
       if (item.id === 'nhan-vien') {
         return canManageBranches;
       }
 
-      return isSellerAccount || customerMenuItemIds.has(item.id);
+      return customerMenuItemIds.has(item.id);
     });
-  }, [canManageBranches, isSellerAccount]);
+  }, [canManageBranches]);
 
   const logoutAndBackHome = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();

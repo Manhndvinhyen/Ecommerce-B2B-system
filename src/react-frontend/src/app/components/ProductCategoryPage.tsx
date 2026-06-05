@@ -249,6 +249,20 @@ const getMagentoMediaImageUrl = (file?: string | null) => {
   return `${window.location.origin}/media/catalog/product${normalizedFile}`;
 };
 
+const fixMagentoUrl = (url?: string | null) => {
+  if (!url || !url.trim()) return '';
+  if (typeof window === 'undefined') return url;
+  try {
+    const parsed = new URL(url);
+    if (parsed.pathname.includes('/media/catalog/product')) {
+      return `${window.location.origin}${parsed.pathname}`;
+    }
+    return url;
+  } catch {
+    return url;
+  }
+};
+
 const pickMagentoProductImage = (product: GraphQlProductItem, fallbackImage: string) => {
   const galleryImage = (product.media_gallery_entries ?? []).find((entry) => {
     const file = entry.file?.trim() ?? '';
@@ -256,8 +270,8 @@ const pickMagentoProductImage = (product: GraphQlProductItem, fallbackImage: str
   });
 
   const galleryUrl = getMagentoMediaImageUrl(galleryImage?.file);
-  const primaryUrl = product.small_image?.url ?? '';
-  const thumbnailUrl = product.thumbnail?.url ?? '';
+  const primaryUrl = fixMagentoUrl(product.small_image?.url);
+  const thumbnailUrl = fixMagentoUrl(product.thumbnail?.url);
 
   return [galleryUrl, primaryUrl, thumbnailUrl].find((value) => {
     if (!value) return false;
@@ -632,6 +646,13 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
               ? localMatch.image
               : '';
 
+            let resolvedItemImage = item.image || '';
+            if (resolvedItemImage && !resolvedItemImage.startsWith('http') && !resolvedItemImage.startsWith('data:')) {
+              resolvedItemImage = getMagentoMediaImageUrl(resolvedItemImage);
+            } else {
+              resolvedItemImage = fixMagentoUrl(resolvedItemImage);
+            }
+
             return {
               id: item.id,
               sku: item.sku,
@@ -639,7 +660,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
               price: formatPrice(priceValue),
               priceValue,
               unit: inferUnitByCategory(productCategory),
-              image: localImage || item.image || fallbackImage,
+              image: localImage || resolvedItemImage || fallbackImage,
               categoryLabel: inferred?.subcategory ?? productCategory,
               supplierName: supplier.name,
               supplierRegion: supplier.region

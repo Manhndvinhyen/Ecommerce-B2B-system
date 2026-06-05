@@ -145,16 +145,30 @@ const getMagentoMediaImageUrl = (file?: string | null) => {
   return `${window.location.origin}/media/catalog/product${normalizedFile}`;
 };
 
-const pickMagentoProductImage = (product: GraphQlProductItem, fallbackImage: string) => {
-  const galleryImage = (product.media_gallery_entries ?? []).find((entry) => {
+const fixMagentoUrl = (url?: string | null) => {
+  if (!url || !url.trim()) return '';
+  if (typeof window === 'undefined') return url;
+  try {
+    const parsed = new URL(url);
+    if (parsed.pathname.includes('/media/catalog/product')) {
+      return `${window.location.origin}${parsed.pathname}`;
+    }
+    return url;
+  } catch {
+    return url;
+  }
+};
+
+const pickMagentoProductImage = (product: any, fallback: string) => {
+  const galleryImage = (product?.media_gallery_entries ?? []).find((entry: any) => {
     const file = entry.file?.trim() ?? '';
     return file && !file.toLowerCase().includes('placeholder');
   });
 
   const candidates = [
     getMagentoMediaImageUrl(galleryImage?.file),
-    product.small_image?.url ?? '',
-    product.thumbnail?.url ?? '',
+    fixMagentoUrl(product?.small_image?.url),
+    fixMagentoUrl(product?.thumbnail?.url)
   ];
 
   return candidates.find((value) => value && !value.toLowerCase().includes('/placeholder/')) || '';

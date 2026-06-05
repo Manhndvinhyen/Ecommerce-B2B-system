@@ -176,6 +176,7 @@ interface WeatherEstimation {
   windNotice: string;
   weatherNotice: string;
   weightKg: number;
+  shippingFee?: number;
   carrierRates: CarrierRate[];
 }
 
@@ -446,19 +447,33 @@ const mapMagentoCartItems = (items: MagentoCartItem[] = []): CheckoutItem[] => {
     const supplier = parseSupplierLabel(matchingProduct?.store_name);
     const storedSupplier = storedSupplierMap[sku] || {};
 
-    const rawImage = product.small_image?.url || product.thumbnail?.url || '';
+    const fixMagentoUrl = (url?: string | null) => {
+      if (!url || !url.trim()) return '';
+      if (typeof window === 'undefined') return url;
+      try {
+        const parsed = new URL(url);
+        if (parsed.pathname.includes('/media/catalog/product')) {
+          return `${window.location.origin}${parsed.pathname}`;
+        }
+        return url;
+      } catch {
+        return url;
+      }
+    };
+
+    const rawImage = fixMagentoUrl(product.small_image?.url) || fixMagentoUrl(product.thumbnail?.url) || '';
     const isPlaceholder = rawImage.toLowerCase().includes('placeholder');
     const fallbackImage = matchingProduct?.image || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop';
 
-    const galleryImage = (product.media_gallery_entries ?? []).find((entry) => {
+    const galleryImage = (product.media_gallery_entries ?? []).find((entry: any) => {
       const file = entry.file?.trim() ?? '';
       return file && !file.toLowerCase().includes('placeholder');
     });
     
     const finalImage =
       (isRealImageUrl(getMagentoMediaImageUrl(galleryImage?.file)) ? getMagentoMediaImageUrl(galleryImage?.file) : '') ||
-      (isRealImageUrl(product.small_image?.url) ? product.small_image?.url : '') ||
-      (isRealImageUrl(product.thumbnail?.url) ? product.thumbnail?.url : '') ||
+      (isRealImageUrl(fixMagentoUrl(product.small_image?.url)) ? fixMagentoUrl(product.small_image?.url) : '') ||
+      (isRealImageUrl(fixMagentoUrl(product.thumbnail?.url)) ? fixMagentoUrl(product.thumbnail?.url) : '') ||
       matchingProduct?.image ||
       (!rawImage || isPlaceholder ? fallbackImage : rawImage);
 

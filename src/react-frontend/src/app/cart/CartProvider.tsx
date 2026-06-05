@@ -45,6 +45,7 @@ type MagentoCartItem = {
     categories?: Array<{ name?: string | null }> | null;
     small_image?: { url?: string | null } | null;
     thumbnail?: { url?: string | null } | null;
+    media_gallery_entries?: Array<{ file?: string | null; disabled?: boolean | null }> | null;
     price_range?: {
       minimum_price?: {
         final_price?: { value?: number | null } | null;
@@ -228,6 +229,43 @@ export const formatCartSupplierLabel = (item: Pick<CartLineItem, 'sku' | 'catego
   const supplierRegion = shouldUseFallbackSupplier ? fallback.region : item.supplierRegion || fallback.region;
 
   return [supplierName, supplierRegion].filter(Boolean).join(' · ');
+};
+
+const getLocalCustomProducts = () => {
+  if (typeof window === 'undefined') return [];
+  const customLocalRaw = window.localStorage.getItem('freso_custom_products');
+  if (!customLocalRaw) return [];
+  try {
+    return JSON.parse(customLocalRaw);
+  } catch {
+    return [];
+  }
+};
+
+const applyWholesaleDiscountToLocalItem = (item: CartLineItem, newQuantity: number): CartLineItem => {
+  const customLocalProducts = getLocalCustomProducts();
+  const productSku = (item.sku ?? '').trim().toLowerCase();
+  const matchingProduct = customLocalProducts.find((p: any) => (p.sku ?? '').trim().toLowerCase() === productSku);
+  
+  if (!matchingProduct) {
+    return { ...item, quantity: newQuantity };
+  }
+  
+  const originalPrice = Number(matchingProduct.price);
+  const tiers = matchingProduct.wholesale_tiers || [];
+  const activeTier = tiers
+    .filter((t: any) => newQuantity >= t.qty)
+    .sort((a: any, b: any) => b.qty - a.qty)[0];
+
+  const discountPercent = activeTier ? activeTier.discount : 0;
+  const unitPrice = originalPrice * (1 - discountPercent / 100);
+  
+  return {
+    ...item,
+    quantity: newQuantity,
+    unitPrice,
+    priceText: formatCurrency(unitPrice)
+  };
 };
 
 export function CartProvider({ children }: PropsWithChildren) {
@@ -469,8 +507,33 @@ export function CartProvider({ children }: PropsWithChildren) {
         supplierLabel: matchingProduct?.store_name
       });
 
-      // Prioritise seller-uploaded image; only use Magento image if it's not a placeholder
-      const rawImage = product.small_image?.url || product.thumbnail?.url || '';
+      const galleryImage = (product.media_gallery_entries ?? []).find((entry) => {
+        const file = entry.file?.trim() ?? '';
+        return file && !file.toLowerCase().includes('placeholder');
+      });
+
+      const getMagentoMediaImageUrl = (file?: string | null) => {
+        if (!file || !file.trim()) return '';
+        const normalizedFile = file.startsWith('/') ? file : `/${file}`;
+        return `${window.location.origin}/media/catalog/product${normalizedFile}`;
+      };
+
+      const fixMagentoUrl = (url?: string | null) => {
+        if (!url || !url.trim()) return '';
+        if (typeof window === 'undefined') return url;
+        try {
+          const parsed = new URL(url);
+          if (parsed.pathname.includes('/media/catalog/product')) {
+            return `${window.location.origin}${parsed.pathname}`;
+          }
+          return url;
+        } catch {
+          return url;
+        }
+      };
+
+      const galleryUrl = getMagentoMediaImageUrl(galleryImage?.file);
+      const rawImage = galleryUrl || fixMagentoUrl(product.small_image?.url) || fixMagentoUrl(product.thumbnail?.url) || '';
       const fallbackImage = fallbackImageByCategory[category] || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop';
       const finalImage =
         matchingProduct?.image ||
@@ -524,11 +587,10 @@ export function CartProvider({ children }: PropsWithChildren) {
         (p) => (p.sku ?? '').trim().toLowerCase() === localSku
       );
       const category = match?.categoryLabel || item.category || (inferCategoryFromSku(item.sku ?? '')?.category || 'Rau củ quả');
-      return {
+      const enrichedItem = {
         ...item,
         image: match?.image || item.image,
         category,
-        unitPrice: match ? Number(match.price) : item.unitPrice,
         unit: match?.unit || item.unit,
         ...getSupplierForCartProduct({
           sku: item.sku,
@@ -538,6 +600,7 @@ export function CartProvider({ children }: PropsWithChildren) {
           supplierLabel: match?.store_name
         }),
       };
+      return applyWholesaleDiscountToLocalItem(enrichedItem, enrichedItem.quantity);
     });
 
     const magentoSkus = new Set(mappedMagento.map((i) => (i.sku ?? '').trim().toLowerCase()));
@@ -569,6 +632,7 @@ export function CartProvider({ children }: PropsWithChildren) {
                   categories { name }
                   small_image { url }
                   thumbnail { url }
+                  media_gallery_entries { file disabled }
                   price_range { minimum_price { final_price { value } } }
                 }
               }
@@ -641,6 +705,7 @@ export function CartProvider({ children }: PropsWithChildren) {
                   categories { name }
                   small_image { url }
                   thumbnail { url }
+                  media_gallery_entries { file disabled }
                   price_range { minimum_price { final_price { value } } }
                 }
               }
@@ -712,6 +777,7 @@ export function CartProvider({ children }: PropsWithChildren) {
                   categories { name }
                   small_image { url }
                   thumbnail { url }
+                  media_gallery_entries { file disabled }
                   price_range { minimum_price { final_price { value } } }
                 }
               }
@@ -745,6 +811,7 @@ export function CartProvider({ children }: PropsWithChildren) {
                   categories { name }
                   small_image { url }
                   thumbnail { url }
+                  media_gallery_entries { file disabled }
                   price_range { minimum_price { final_price { value } } }
                 }
               }
@@ -798,16 +865,17 @@ export function CartProvider({ children }: PropsWithChildren) {
       let next: CartLineItem[];
       if (existing) {
         const supplier = getSupplierForCartProduct(product);
-        next = prev.map((item) =>
-          (item.sku ?? '').trim().toLowerCase() === productSku
-            ? {
-                ...item,
-                quantity: item.quantity + targetQuantity,
-                supplierName: item.supplierName || supplier.supplierName,
-                supplierRegion: item.supplierRegion || supplier.supplierRegion,
-              }
-            : item
-        );
+        next = prev.map((item) => {
+          if ((item.sku ?? '').trim().toLowerCase() === productSku) {
+            const updatedItem = applyWholesaleDiscountToLocalItem(item, item.quantity + targetQuantity);
+            return {
+              ...updatedItem,
+              supplierName: item.supplierName || supplier.supplierName,
+              supplierRegion: item.supplierRegion || supplier.supplierRegion,
+            };
+          }
+          return item;
+        });
       } else {
         const supplier = getSupplierForCartProduct(product);
         const newItem: CartLineItem = {
@@ -826,7 +894,10 @@ export function CartProvider({ children }: PropsWithChildren) {
           supplierName: supplier.supplierName,
           supplierRegion: supplier.supplierRegion,
         };
-        next = [newItem, ...prev];
+        // Recalculate right away just in case product.unitPrice passed in did not account for tiers
+        // Though ProductDetailPage already calculates it, it's safer to standardize.
+        const finalizedItem = applyWholesaleDiscountToLocalItem(newItem, targetQuantity);
+        next = [finalizedItem, ...prev];
       }
 
       // Persist local (seller) cart items so they survive page refresh
@@ -942,10 +1013,10 @@ export function CartProvider({ children }: PropsWithChildren) {
     const targetQuantity = clampQuantity(quantity);
 
     if (!targetItem.cartItemId) {
-      // Local-only item: update quantity in state and localStorage
+      // Local-only item: update quantity and recalculate wholesale price
       setCartItems((prev) => {
         const next = prev.map((item) =>
-          item.id === itemId ? { ...item, quantity: targetQuantity } : item
+          item.id === itemId ? applyWholesaleDiscountToLocalItem(item, targetQuantity) : item
         );
         const localItems = next.filter((i) => !i.cartItemId);
         try {

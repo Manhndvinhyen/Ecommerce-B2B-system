@@ -22,11 +22,11 @@ interface RecurringInterface
         string $customerEmail,
         string $customerName,
         string $frequency,
-        ?string $weekdays,
-        ?int $monthDay,
-        string $deliveryTime,
-        string $itemsJson,
-        string $shippingJson
+        ?string $weekdays = null,
+        ?int $monthDay = null,
+        string $deliveryTime = '',
+        string $itemsJson = '[]',
+        string $shippingJson = '{}'
     ): array;
 
     /**

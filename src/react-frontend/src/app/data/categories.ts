@@ -161,8 +161,8 @@ export type InferredCategory = {
 const pickSubcategoryFromText = (
   haystack: string,
   rules: Array<{ keywords: string[]; label: string }>,
-  fallback?: string
-) => {
+  fallback: string
+): string => {
   const matched = rules.find((rule) => rule.keywords.some((keyword) => haystack.includes(keyword)));
   return matched?.label ?? fallback;
 };

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Heart, ShoppingCart } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { WishlistAddModal, WishlistModalProduct } from './WishlistAddModal';
-import { useCart, toCurrencyTextFromNumber, toUnitPriceFromLooseValue } from '../cart/CartProvider';
+import { useCart, toCurrencyTextFromNumber, toUnitPriceFromLooseValue, parsePrice } from '../cart/CartProvider';
 import { toQuerySlug } from '../data/categories';
 import { applySeo, buildBreadcrumbJsonLd, buildProductJsonLd, getSiteName } from '../utils/seo';
 import { getMockSupplierForProduct } from '../data/mockSuppliers';
@@ -359,7 +359,7 @@ export function ProductDetailPage() {
           unit: localCustomFields.unit || fallbackProduct.unit,
           origin: localCustomFields.origin || item.country_of_manufacture || fallbackProduct.origin,
           note: localCustomFields.note || shortDescriptionText || fallbackProduct.note,
-          price: localCustomFields.price ? Number(String(localCustomFields.price).replace(/[^\d.-]/g, '')) : price,
+          price: (localCustomFields.price || localCustomFields.priceValue) ? parsePrice(localCustomFields.price || localCustomFields.priceValue) : price,
           category: pickCategoryName(item.categories),
           image: resolvedImage,
           description: {
@@ -402,7 +402,7 @@ export function ProductDetailPage() {
                 unit: localProd.unit || 'kg',
                 origin: localProd.origin || 'Việt Nam',
                 note: localProd.note || 'Sản phẩm sỉ B2B',
-                price: localProd.price ? Number(String(localProd.price).replace(/[^\d.-]/g, '')) : 0,
+                price: (localProd.price || localProd.priceValue) ? parsePrice(localProd.price || localProd.priceValue) : 0,
                 category: localProd.categoryLabel || 'Sản phẩm sỉ',
                 image: localImage,
                 description: {

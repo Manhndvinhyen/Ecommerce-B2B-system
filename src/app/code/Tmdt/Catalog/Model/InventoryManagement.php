@@ -16,7 +16,8 @@ class InventoryManagement implements InventoryManagementInterface
         private readonly StockRegistryInterface $stockRegistry,
         private readonly CustomerSession $customerSession,
         private readonly ResourceConnection $resourceConnection,
-        private readonly ProductRepositoryInterface $productRepository
+        private readonly ProductRepositoryInterface $productRepository,
+        private readonly \Magento\Framework\App\RequestInterface $request
     ) {
     }
 
@@ -112,10 +113,37 @@ class InventoryManagement implements InventoryManagementInterface
      */
     private function getSellerIdFromSession(): string
     {
-        if (!$this->customerSession->isLoggedIn()) {
-            throw new LocalizedException(__('Phiên làm việc hết hạn. Vui lòng đăng nhập lại.'));
+        if ($this->customerSession->isLoggedIn()) {
+            return (string)$this->customerSession->getCustomerId();
         }
-        return (string) $this->customerSession->getCustomerId();
+
+        $token = '';
+        $authHeader = $this->request->getHeader('Authorization');
+        if ($authHeader) {
+            if (preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
+                $token = trim($matches[1]);
+            }
+        }
+
+        if ($token === '') {
+            $token = trim((string)$this->request->getParam('token'));
+        }
+
+        if ($token !== '') {
+            $connection = $this->resourceConnection->getConnection();
+            $tableName = $connection->getTableName('oauth_token');
+            $customerId = $connection->fetchOne(
+                $connection->select()
+                    ->from($tableName, ['customer_id'])
+                    ->where('token = ?', $token)
+                    ->limit(1)
+            );
+            if ($customerId) {
+                return (string)$customerId;
+            }
+        }
+
+        throw new LocalizedException(__('Phiên làm việc hết hạn. Vui lòng đăng nhập lại.'));
     }
 
     /**

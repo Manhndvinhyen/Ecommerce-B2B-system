@@ -34,7 +34,7 @@ class Status implements HttpGetActionInterface
         $table = $connection->getTableName(self::TABLE);
 
         $row = $connection->fetchRow(
-            "SELECT order_code, status, total_amount, expires_at, paid_at FROM {$table} WHERE order_code = ?",
+            "SELECT id, order_code, status, total_amount, expires_at, paid_at FROM {$table} WHERE order_code = ?",
             [$orderCode]
         );
 
@@ -42,15 +42,18 @@ class Status implements HttpGetActionInterface
             return $result->setData(['success' => false, 'message' => 'Không tìm thấy đơn hàng.']);
         }
 
+        $orderId = (int)$row['id'];
+
         // Auto-expire
         if ($row['status'] === 'pending' && $row['expires_at'] && strtotime($row['expires_at']) < time()) {
-            $connection->update($table, ['status' => 'expired'], ['order_code = ?' => $orderCode]);
-            $connection->update($table, ['status' => 'expired'], ['parent_code = ?' => $orderCode]);
+            $connection->update($table, ['status' => 'expired'], ['id = ?' => $orderId]);
+            $connection->update($table, ['status' => 'expired'], ['parent_id = ?' => $orderId]);
             $row['status'] = 'expired';
 
             $connection->insert(
                 $connection->getTableName('tmdt_order_status_history'),
                 [
+                    'order_id'   => $orderId,
                     'order_code' => $orderCode,
                     'status'     => 'expired',
                     'comment'    => 'Đơn hàng hết hạn thanh toán (Quá thời gian giữ hàng 15 phút).',
@@ -60,13 +63,14 @@ class Status implements HttpGetActionInterface
 
             // Also expire child orders status history
             $childOrders = $connection->fetchAll(
-                "SELECT order_code FROM {$table} WHERE parent_code = ?",
-                [$orderCode]
+                "SELECT id, order_code FROM {$table} WHERE parent_id = ?",
+                [$orderId]
             );
             foreach ($childOrders as $childOrder) {
                 $connection->insert(
                     $connection->getTableName('tmdt_order_status_history'),
                     [
+                        'order_id'   => (int)$childOrder['id'],
                         'order_code' => $childOrder['order_code'],
                         'status'     => 'expired',
                         'comment'    => 'Đơn hàng con hết hạn thanh toán do đơn hàng tổng hết hạn.',

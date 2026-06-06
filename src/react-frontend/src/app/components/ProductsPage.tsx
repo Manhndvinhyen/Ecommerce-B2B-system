@@ -123,8 +123,18 @@ export function ProductsPage() {
         });
         if (response.ok) {
           const json = await response.json();
-          if (json?.success && Array.isArray(json.items) && json.items.length > 0) {
-            setPromotions(json.items);
+          let items: PromotionItem[] = [];
+          if (Array.isArray(json)) {
+            if (json[0] === true && Array.isArray(json[1])) {
+              items = json[1];
+            } else {
+              items = json;
+            }
+          } else if (json && Array.isArray(json.items)) {
+            items = json.items;
+          }
+          if (items.length > 0) {
+            setPromotions(items);
           }
         }
       } catch (err) {

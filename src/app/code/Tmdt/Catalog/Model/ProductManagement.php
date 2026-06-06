@@ -11,6 +11,7 @@ use Magento\CatalogInventory\Api\StockRegistryInterface;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\Webapi\Rest\Request as RestRequest;
+use Magento\Authorization\Model\UserContextInterface;
 
 class ProductManagement implements ProductManagementInterface
 {
@@ -23,7 +24,8 @@ class ProductManagement implements ProductManagementInterface
         private readonly RestRequest $request,
         private readonly \Magento\Store\Model\StoreManagerInterface $storeManager,
         private readonly \Magento\Framework\Indexer\IndexerRegistry $indexerRegistry,
-        private readonly \Magento\Framework\App\Cache\TypeListInterface $cacheTypeList
+        private readonly \Magento\Framework\App\Cache\TypeListInterface $cacheTypeList,
+        private readonly UserContextInterface $userContext
     ) {
     }
 
@@ -529,10 +531,47 @@ class ProductManagement implements ProductManagementInterface
      */
     private function getSellerIdFromSession(): string
     {
-        if (!$this->customerSession->isLoggedIn()) {
-            throw new LocalizedException(__('Phiên làm việc hết hạn. Vui lòng đăng nhập lại.'));
+        // 1. Try PHP session first (browser-based access)
+        if ($this->customerSession->isLoggedIn()) {
+            return (string)$this->customerSession->getCustomerId();
         }
-        return (string) $this->customerSession->getCustomerId();
+
+        // 2. Use Magento's REST UserContext (resolves Bearer token automatically)
+        if ($this->userContext->getUserType() === UserContextInterface::USER_TYPE_CUSTOMER) {
+            $uid = (int)$this->userContext->getUserId();
+            if ($uid > 0) {
+                return (string)$uid;
+            }
+        }
+
+        // 3. Legacy fallback: manual Bearer → oauth_token lookup
+        $token = '';
+        $authHeader = $this->request->getHeader('Authorization');
+        if ($authHeader) {
+            if (preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
+                $token = trim($matches[1]);
+            }
+        }
+
+        if ($token === '') {
+            $token = trim((string)$this->request->getParam('token'));
+        }
+
+        if ($token !== '') {
+            $connection = $this->resourceConnection->getConnection();
+            $tableName = $connection->getTableName('oauth_token');
+            $customerId = $connection->fetchOne(
+                $connection->select()
+                    ->from($tableName, ['customer_id'])
+                    ->where('token = ?', $token)
+                    ->limit(1)
+            );
+            if ($customerId) {
+                return (string)$customerId;
+            }
+        }
+
+        throw new LocalizedException(__('Phiên làm việc hết hạn. Vui lòng đăng nhập lại.'));
     }
 
     /**
@@ -732,253 +771,139 @@ class ProductManagement implements ProductManagementInterface
      */
     public function getSellerRevenueStats(): array
     {
-        $sellerId = $this->getSellerIdFromSession();
+        $sellerId = (int)$this->getSellerIdFromSession();
         $connection = $this->resourceConnection->getConnection();
         
-        $storeId = 0;
-        $cpevTable = $connection->getTableName('catalog_product_entity_varchar');
-        $cpeTable = $connection->getTableName('catalog_product_entity');
-        $cpedTable = $connection->getTableName('catalog_product_entity_decimal');
-        $stockTable = $connection->getTableName('cataloginventory_stock_item');
         $oTable = $connection->getTableName('tmdt_orders');
+        $oiTable = $connection->getTableName('tmdt_order_items');
 
-        $nameAttrId = (int)$connection->fetchOne(
-            "SELECT attribute_id FROM eav_attribute WHERE attribute_code = 'name' AND entity_type_id = 4 LIMIT 1"
-        );
-        $unitAttrId = (int)$connection->fetchOne(
-            "SELECT attribute_id FROM eav_attribute WHERE attribute_code = 'tmdt_unit' AND entity_type_id = 4 LIMIT 1"
-        );
-        $imageAttrId = (int)$connection->fetchOne(
-            "SELECT attribute_id FROM eav_attribute WHERE attribute_code = 'image' AND entity_type_id = 4 LIMIT 1"
-        );
-        $sellerAttrId = (int)$connection->fetchOne(
-            "SELECT attribute_id FROM eav_attribute WHERE attribute_code = 'tmdt_seller_id' AND entity_type_id = 4 LIMIT 1"
-        );
-
-        if ($sellerAttrId <= 0) {
-            return [
-                'success' => true,
-                'totalRevenue' => 0.0,
-                'totalOrders' => 0,
-                'chartData' => [],
-                'categoryData' => [],
-                'topProducts' => [],
-                'operationalLog' => []
-            ];
-        }
-
-        $nameSub = "COALESCE(
-            (SELECT value FROM {$cpevTable} WHERE entity_id = cpe.entity_id AND attribute_id = {$nameAttrId} AND store_id = {$storeId} LIMIT 1),
-            (SELECT value FROM {$cpevTable} WHERE entity_id = cpe.entity_id AND attribute_id = {$nameAttrId} AND store_id = 0 LIMIT 1)
-        )";
-        $unitSub = "COALESCE(
-            (SELECT value FROM {$cpevTable} WHERE entity_id = cpe.entity_id AND attribute_id = {$unitAttrId} AND store_id = {$storeId} LIMIT 1),
-            (SELECT value FROM {$cpevTable} WHERE entity_id = cpe.entity_id AND attribute_id = {$unitAttrId} AND store_id = 0 LIMIT 1),
-            'kg'
-        )";
-        $imageSub = "COALESCE(
-            (SELECT value FROM {$cpevTable} WHERE entity_id = cpe.entity_id AND attribute_id = {$imageAttrId} AND store_id = {$storeId} LIMIT 1),
-            (SELECT value FROM {$cpevTable} WHERE entity_id = cpe.entity_id AND attribute_id = {$imageAttrId} AND store_id = 0 LIMIT 1)
-        )";
-
-        // Get seller's products with all details
-        $productsQuery = "
+        // 1. Total revenue and total orders
+        $totalStats = $connection->fetchRow("
             SELECT 
-                cpe.entity_id AS id, 
-                cpe.sku,
-                {$nameSub} AS name,
-                {$unitSub} AS unit,
-                {$imageSub} AS image,
-                si.qty,
-                si.is_in_stock
-            FROM {$cpeTable} cpe
-            INNER JOIN {$cpevTable} cpev_seller ON cpe.entity_id = cpev_seller.entity_id
-                AND cpev_seller.attribute_id = {$sellerAttrId}
-            LEFT JOIN {$stockTable} si ON cpe.entity_id = si.product_id
-            WHERE cpev_seller.value = :seller_id
-        ";
-        $productRows = $connection->fetchAll($productsQuery, ['seller_id' => $sellerId]);
+                COALESCE(SUM(CASE WHEN o.status = 'paid' THEN oi.row_total ELSE 0 END), 0) AS total_revenue,
+                COUNT(DISTINCT o.id) AS total_orders
+            FROM {$oTable} o
+            INNER JOIN {$oiTable} oi ON o.id = oi.order_id
+            WHERE oi.seller_id = :seller_id
+              AND o.status IN ('paid', 'processing')
+              AND COALESCE(o.parent_code, '') != 'parent'
+        ", ['seller_id' => $sellerId]);
 
-        $sellerSkus = [];
-        $productIds = [];
-        $productsBySku = [];
-        foreach ($productRows as $row) {
-            $sku = strtolower(trim($row['sku']));
-            $sellerSkus[$sku] = true;
-            $productIds[] = (int)$row['id'];
-            $productsBySku[$sku] = [
-                'id' => (int)$row['id'],
-                'sku' => $row['sku'],
-                'name' => $row['name'],
-                'unit' => $row['unit'],
-                'image' => $row['image'],
-                'qty' => (float)$row['qty'],
-                'sales_volume' => 0.0,
-                'revenue' => 0.0,
-                'category' => 'Khác'
-            ];
-        }
+        $totalRevenue = (float)$totalStats['total_revenue'];
+        $totalOrders = (int)$totalStats['total_orders'];
 
-        // Get categories for seller's products
-        if (!empty($productIds)) {
-            $categoryQuery = "
-                SELECT ccp.product_id, ccev.value AS category_name
-                FROM " . $connection->getTableName('catalog_category_product') . " ccp
-                INNER JOIN " . $connection->getTableName('catalog_category_entity_varchar') . " ccev ON ccp.category_id = ccev.entity_id
-                INNER JOIN " . $connection->getTableName('eav_attribute') . " ea ON ccev.attribute_id = ea.attribute_id
-                WHERE ccp.product_id IN (" . implode(',', $productIds) . ")
-                  AND ea.attribute_code = 'name' AND ea.entity_type_id = 3
-            ";
-            $catRows = $connection->fetchAll($categoryQuery);
-            $productIdToSku = [];
-            foreach ($productRows as $row) {
-                $productIdToSku[(int)$row['id']] = strtolower(trim($row['sku']));
-            }
-            foreach ($catRows as $row) {
-                $pId = (int)$row['product_id'];
-                if (isset($productIdToSku[$pId])) {
-                    $sku = $productIdToSku[$pId];
-                    $productsBySku[$sku]['category'] = trim((string)$row['category_name']);
-                }
-            }
-        }
-
-        // Get all paid/processing/pending orders for log, paid/processing for revenue
-        $query = "SELECT order_code, status, total_amount, items_json, customer_name, paid_at, created_at FROM {$oTable} ORDER BY created_at DESC";
-        $records = $connection->fetchAll($query);
-
-        $totalRevenue = 0.0;
-        $orderCodes = [];
-        $categoryTotals = [];
-        $operationalLog = [];
-        
-        // Monthly chart aggregates (last 6 months)
+        // 2. Chart data (last 6 months)
         $months = [];
         for ($i = 5; $i >= 0; $i--) {
-            $monthName = 'Tháng ' . date('n', strtotime("-{$i} month"));
-            $months[$monthName] = [
+            $monthNum = date('n', strtotime("-{$i} month"));
+            $monthYear = date('Y-m', strtotime("-{$i} month"));
+            $monthName = 'Tháng ' . $monthNum;
+            $months[$monthYear] = [
                 'name' => $monthName,
                 'DoanhThu' => 0.0,
                 'DonHang' => 0
             ];
         }
-        
-        $monthlyOrders = [];
-        
-        foreach ($records as $row) {
-            $items = json_decode((string)($row['items_json'] ?? '[]'), true);
-            if (!is_array($items)) {
-                continue;
-            }
-            
-            $hasSellerItem = false;
-            $orderRevenue = 0.0;
-            
-            foreach ($items as $item) {
-                $sku = strtolower(trim((string)($item['sku'] ?? '')));
-                if (isset($sellerSkus[$sku])) {
-                    $qty = (float)($item['quantity'] ?? 0);
-                    $price = (float)($item['unitPrice'] ?? 0);
-                    $rowTotal = $qty * $price;
-                    $hasSellerItem = true;
-                    
-                    $orderStatus = strtolower($row['status']);
-                    if ($orderStatus === 'paid' || $orderStatus === 'processing') {
-                        $orderRevenue += $rowTotal;
-                        $productsBySku[$sku]['sales_volume'] += $qty;
-                        $productsBySku[$sku]['revenue'] += $rowTotal;
 
-                        // Category distribution
-                        $cat = $productsBySku[$sku]['category'];
-                        if (!isset($categoryTotals[$cat])) {
-                            $categoryTotals[$cat] = 0.0;
-                        }
-                        $categoryTotals[$cat] += $rowTotal;
-                    }
-                }
-            }
-            
-            if ($hasSellerItem) {
-                $orderStatus = strtolower($row['status']);
-                if ($orderStatus === 'paid' || $orderStatus === 'processing') {
-                    $totalRevenue += $orderRevenue;
-                    $orderCodes[$row['order_code']] = true;
-                    
-                    // Monthly grouping
-                    $createdAt = strtotime($row['created_at']);
-                    $monthName = 'Tháng ' . date('n', $createdAt);
-                    if (isset($months[$monthName])) {
-                        $months[$monthName]['DoanhThu'] += $orderRevenue;
-                        
-                        $ref = $row['order_code'];
-                        if (!isset($monthlyOrders[$monthName][$ref])) {
-                            $monthlyOrders[$monthName][$ref] = true;
-                            $months[$monthName]['DonHang'] += 1;
-                        }
-                    }
-                }
+        $monthlyStats = $connection->fetchAll("
+            SELECT 
+                DATE_FORMAT(o.created_at, '%Y-%m') AS month_key,
+                SUM(CASE WHEN o.status = 'paid' THEN oi.row_total ELSE 0 END) AS monthly_revenue,
+                COUNT(DISTINCT o.id) AS monthly_orders
+            FROM {$oTable} o
+            INNER JOIN {$oiTable} oi ON o.id = oi.order_id
+            WHERE oi.seller_id = :seller_id
+              AND o.status IN ('paid', 'processing')
+              AND COALESCE(o.parent_code, '') != 'parent'
+            GROUP BY month_key
+        ", ['seller_id' => $sellerId]);
 
-                // Add to operational log
-                $custName = $row['customer_name'] ?: 'Khách hàng B2B';
-                $orderRef = $row['order_code'];
-                
-                // Event 1: Order created
-                $operationalLog[] = [
-                    'type' => 'order_created',
-                    'title' => 'Đơn hàng mới nhận',
-                    'message' => "Khách hàng <strong>{$custName}</strong> vừa tạo đơn sỉ <strong>#{$orderRef}</strong>.",
-                    'time' => $row['created_at']
-                ];
-                
-                // Event 2: Order paid (if status is paid/processing)
-                if (($orderStatus === 'paid' || $orderStatus === 'processing')) {
-                    $paidTime = !empty($row['paid_at']) ? $row['paid_at'] : $row['created_at'];
-                    $operationalLog[] = [
-                        'type' => 'order_paid',
-                        'title' => 'Đồng bộ thanh toán thành công',
-                        'message' => "Hệ thống tự động đối soát và xác nhận thanh toán đơn sỉ <strong>#{$orderRef}</strong>.",
-                        'time' => $paidTime
-                    ];
-                }
+        foreach ($monthlyStats as $ms) {
+            $key = $ms['month_key'];
+            if (isset($months[$key])) {
+                $months[$key]['DoanhThu'] = (float)$ms['monthly_revenue'];
+                $months[$key]['DonHang'] = (int)$ms['monthly_orders'];
             }
         }
 
-        $categoryData = [];
-        foreach ($categoryTotals as $name => $val) {
-            $categoryData[] = [
-                'name' => $name,
-                'value' => $val
-            ];
-        }
-        usort($categoryData, function($a, $b) {
-            return $b['value'] <=> $a['value'];
-        });
-        
         $chartData = array_values($months);
 
-        // Sort and slice top products
-        $topProducts = array_values($productsBySku);
-        usort($topProducts, function($a, $b) {
-            if ($a['revenue'] == $b['revenue']) {
-                return $b['sales_volume'] <=> $a['sales_volume'];
-            }
-            return $b['revenue'] <=> $a['revenue'];
-        });
-        $topProducts = array_slice($topProducts, 0, 4);
+        // 3. Category distribution
+        $categoryDataQuery = "
+            SELECT 
+                COALESCE(ccev.value, 'Khác') AS name,
+                SUM(CASE WHEN o.status = 'paid' THEN oi.row_total ELSE 0 END) AS value
+            FROM {$oTable} o
+            INNER JOIN {$oiTable} oi ON o.id = oi.order_id
+            LEFT JOIN " . $connection->getTableName('catalog_category_product') . " ccp ON oi.product_id = ccp.product_id
+            LEFT JOIN " . $connection->getTableName('catalog_category_entity_varchar') . " ccev ON ccp.category_id = ccev.entity_id
+                AND ccev.attribute_id = (SELECT attribute_id FROM " . $connection->getTableName('eav_attribute') . " WHERE attribute_code = 'name' AND entity_type_id = 3 LIMIT 1)
+            WHERE oi.seller_id = :seller_id
+              AND o.status IN ('paid', 'processing')
+              AND COALESCE(o.parent_code, '') != 'parent'
+            GROUP BY name
+            ORDER BY value DESC
+        ";
+        $categoryData = $connection->fetchAll($categoryDataQuery, ['seller_id' => $sellerId]);
+        foreach ($categoryData as &$cd) {
+            $cd['value'] = (float)$cd['value'];
+        }
 
-        // Sort and slice operational log
-        usort($operationalLog, function($a, $b) {
-            return strcmp($b['time'], $a['time']);
-        });
-        $operationalLog = array_slice($operationalLog, 0, 8);
-        
+        // 4. Top products
+        $topProductsQuery = "
+            SELECT 
+                oi.product_id AS id,
+                oi.sku,
+                oi.name,
+                oi.unit,
+                oi.image,
+                SUM(oi.quantity) AS sales_volume,
+                SUM(CASE WHEN o.status = 'paid' THEN oi.row_total ELSE 0 END) AS revenue
+            FROM {$oTable} o
+            INNER JOIN {$oiTable} oi ON o.id = oi.order_id
+            WHERE oi.seller_id = :seller_id
+              AND o.status IN ('paid', 'processing')
+              AND COALESCE(o.parent_code, '') != 'parent'
+            GROUP BY oi.product_id, oi.sku, oi.name, oi.unit, oi.image
+            ORDER BY revenue DESC
+            LIMIT 4
+        ";
+        $topProducts = $connection->fetchAll($topProductsQuery, ['seller_id' => $sellerId]);
+        foreach ($topProducts as &$tp) {
+            $tp['id'] = (int)$tp['id'];
+            $tp['sales_volume'] = (float)$tp['sales_volume'];
+            $tp['revenue'] = (float)$tp['revenue'];
+            $tp['image'] = $tp['image'] ? '/media/catalog/product/' . ltrim((string)$tp['image'], '/') : '';
+        }
+
+        // 5. Operational log from notifications
+        $notifTable = $connection->getTableName('tmdt_seller_notifications');
+        $notifications = $connection->fetchAll("
+            SELECT sku, message, created_at FROM {$notifTable}
+            WHERE seller_customer_id = :seller_id
+            ORDER BY created_at DESC
+            LIMIT 8
+        ", ['seller_id' => $sellerId]);
+
+        $operationalLog = [];
+        foreach ($notifications as $n) {
+            $type = str_contains($n['sku'], 'DH') ? 'order_created' : 'out_of_stock';
+            $title = $type === 'order_created' ? 'Đơn sỉ mới nhận' : 'Cảnh báo hết hàng';
+            $operationalLog[] = [
+                'type'    => $type,
+                'title'   => $title,
+                'message' => $n['message'],
+                'time'    => $n['created_at']
+            ];
+        }
+
         return [
-            'success' => true,
-            'totalRevenue' => $totalRevenue,
-            'totalOrders' => count($orderCodes),
-            'chartData' => $chartData,
-            'categoryData' => $categoryData,
-            'topProducts' => $topProducts,
+            'success'        => true,
+            'totalRevenue'   => $totalRevenue,
+            'totalOrders'    => $totalOrders,
+            'chartData'      => $chartData,
+            'categoryData'   => $categoryData,
+            'topProducts'    => $topProducts,
             'operationalLog' => $operationalLog
         ];
     }
@@ -988,165 +913,56 @@ class ProductManagement implements ProductManagementInterface
      */
     public function getSellerOrders(): array
     {
-        $sellerId = $this->getSellerIdFromSession();
+        $sellerId = (int)$this->getSellerIdFromSession();
         $connection = $this->resourceConnection->getConnection();
         $limit = max(1, min(50, (int) ($this->request->getParam('limit') ?: 20)));
         $statusFilter = strtolower(trim((string) ($this->request->getParam('status') ?: 'all')));
-        $query = strtolower(trim((string) ($this->request->getParam('q') ?: '')));
+        $searchQuery = strtolower(trim((string) ($this->request->getParam('q') ?: '')));
 
-        $sellerAttrId = (int) $connection->fetchOne(
-            "SELECT attribute_id FROM eav_attribute WHERE attribute_code = 'tmdt_seller_id' AND entity_type_id = 4 LIMIT 1"
-        );
-
-        if ($sellerAttrId <= 0) {
-            return [
-                'success' => true,
-                'summary' => [
-                    'total_orders' => 0,
-                    'total_revenue' => 0.0,
-                    'paid_orders' => 0,
-                    'pending_orders' => 0,
-                    'processing_orders' => 0,
-                    'cancelled_orders' => 0,
-                    'expired_orders' => 0,
-                ],
-                'items' => [],
-            ];
-        }
-
-        $cpeTable = $connection->getTableName('catalog_product_entity');
-        $cpevTable = $connection->getTableName('catalog_product_entity_varchar');
         $oTable = $connection->getTableName('tmdt_orders');
+        $oiTable = $connection->getTableName('tmdt_order_items');
 
-        // Get seller's products
-        $sellerProductsQuery = "
-            SELECT cpe.sku, cpe.entity_id 
-            FROM {$cpeTable} cpe
-            INNER JOIN {$cpevTable} cpev ON cpe.entity_id = cpev.entity_id
-            WHERE cpev.value = :seller_id
-              AND cpev.attribute_id = :attr_id
-        ";
-        $productRows = $connection->fetchAll($sellerProductsQuery, ['seller_id' => $sellerId, 'attr_id' => $sellerAttrId]);
-        $sellerSkus = [];
-        $productIds = [];
-        foreach ($productRows as $row) {
-            $sku = strtolower(trim($row['sku']));
-            $sellerSkus[$sku] = true;
-            $productIds[] = (int)$row['entity_id'];
+        // Build base select
+        $select = $connection->select()
+            ->from(['o' => $oTable], [
+                'order_reference' => 'order_code',
+                'status',
+                'customer_name',
+                'customer_email',
+                'shipping_json',
+                'transaction_id',
+                'expires_at',
+                'paid_at',
+                'created_at',
+                'total_amount',
+                'payment_method'
+            ])
+            ->join(['oi' => $oiTable], 'o.id = oi.order_id', [
+                'seller_subtotal' => 'SUM(oi.row_total)',
+                'quantity_total'  => 'SUM(oi.quantity)',
+                'item_count'      => 'COUNT(oi.id)'
+            ])
+            ->where('oi.seller_id = ?', $sellerId)
+            ->where('COALESCE(o.parent_code, \'\') != ?', 'parent')
+            ->group('o.id')
+            ->order('o.created_at DESC');
+
+        // Apply status filter
+        if ($statusFilter !== 'all' && $statusFilter !== '') {
+            $select->where('o.status = ?', $statusFilter);
         }
 
-        // Get category names
-        $productCategories = [];
-        if (!empty($productIds)) {
-            $categoryQuery = "
-                SELECT ccp.product_id, ccev.value AS category_name
-                FROM " . $connection->getTableName('catalog_category_product') . " ccp
-                INNER JOIN " . $connection->getTableName('catalog_category_entity_varchar') . " ccev ON ccp.category_id = ccev.entity_id
-                INNER JOIN " . $connection->getTableName('eav_attribute') . " ea ON ccev.attribute_id = ea.attribute_id
-                WHERE ccp.product_id IN (" . implode(',', $productIds) . ")
-                  AND ea.attribute_code = 'name' AND ea.entity_type_id = 3
-            ";
-            $catRows = $connection->fetchAll($categoryQuery);
-            $productIdToSku = [];
-            foreach ($productRows as $row) {
-                $productIdToSku[(int)$row['entity_id']] = strtolower(trim($row['sku']));
-            }
-            foreach ($catRows as $row) {
-                $pId = (int)$row['product_id'];
-                if (isset($productIdToSku[$pId])) {
-                    $productCategories[$productIdToSku[$pId]] = trim((string)$row['category_name']);
-                }
-            }
+        // Apply search query
+        if ($searchQuery !== '') {
+            $select->where(
+                'o.order_code LIKE ? OR o.customer_name LIKE ? OR o.customer_email LIKE ? OR oi.sku LIKE ? OR oi.name LIKE ?',
+                ['%' . $searchQuery . '%', '%' . $searchQuery . '%', '%' . $searchQuery . '%', '%' . $searchQuery . '%', '%' . $searchQuery . '%']
+            );
         }
 
-        // Fetch all orders
-        $orderQuery = "SELECT order_code, status, total_amount, items_json, customer_email, customer_name, shipping_json, transaction_id, expires_at, paid_at, created_at FROM {$oTable} ORDER BY created_at DESC";
-        $orderRows = $connection->fetchAll($orderQuery);
+        $rows = $connection->fetchAll($select);
 
         $filteredOrders = [];
-        foreach ($orderRows as $row) {
-            $items = json_decode((string)($row['items_json'] ?? '[]'), true);
-            if (!is_array($items)) {
-                continue;
-            }
-
-            $sellerItems = [];
-            $sellerSubtotal = 0.0;
-            $hasSellerItem = false;
-            $quantityTotal = 0.0;
-
-            foreach ($items as $item) {
-                $sku = strtolower(trim((string)($item['sku'] ?? '')));
-                if (isset($sellerSkus[$sku])) {
-                    $hasSellerItem = true;
-                    $qty = (float)($item['quantity'] ?? 0);
-                    $price = (float)($item['unitPrice'] ?? 0);
-                    $rowTotal = $qty * $price;
-                    $sellerSubtotal += $rowTotal;
-                    $quantityTotal += $qty;
-
-                    $sellerItems[] = [
-                        'item_id' => count($sellerItems) + 1,
-                        'sku' => $item['sku'] ?? '',
-                        'name' => $item['name'] ?? '',
-                        'category' => $productCategories[$sku] ?? 'Khác',
-                        'unit' => $item['unit'] ?? 'kg',
-                        'quantity' => $qty,
-                        'unit_price' => $price,
-                        'row_total' => $rowTotal,
-                        'image' => $item['image'] ?? '',
-                    ];
-                }
-            }
-
-            if ($hasSellerItem) {
-                $shippingInfo = $this->decodeJsonObject((string)($row['shipping_json'] ?? ''));
-                $orderStatus = strtolower((string)$row['status']);
-
-                $statusMatches =
-                    $statusFilter === '' ||
-                    $statusFilter === 'all' ||
-                    $orderStatus === $statusFilter ||
-                    ($statusFilter === 'cancelled' && $orderStatus === 'canceled') ||
-                    ($statusFilter === 'canceled' && $orderStatus === 'cancelled');
-
-                if (!$statusMatches) {
-                    continue;
-                }
-
-                $orderData = [
-                    'order_reference' => $row['order_code'],
-                    'status' => $row['status'],
-                    'status_label' => $this->getOrderStatusLabel((string) $row['status']),
-                    'customer_name' => $row['customer_name'] ?? '',
-                    'customer_email' => $row['customer_email'] ?? '',
-                    'customer_region' => $shippingInfo['branch'] ?? '',
-                    'supplier' => '',
-                    'subtotal' => (float)$row['total_amount'],
-                    'seller_subtotal' => $sellerSubtotal,
-                    'total_amount' => (float)$row['total_amount'],
-                    'delivery_date' => $shippingInfo['deliveryDate'] ?? '',
-                    'delivery_time' => $shippingInfo['deliveryTime'] ?? '',
-                    'shipping_address' => isset($shippingInfo['branch']) ? ($shippingInfo['branch'] . ' - ' . ($shippingInfo['address'] ?? '')) : '',
-                    'shipping_info' => $shippingInfo,
-                    'note' => $shippingInfo['note'] ?? '',
-                    'created_at' => $row['created_at'],
-                    'transaction_id' => $row['transaction_id'] ?? '',
-                    'expires_at' => $row['expires_at'] ?? '',
-                    'paid_at' => $row['paid_at'] ?? '',
-                    'item_count' => count($sellerItems),
-                    'quantity_total' => $quantityTotal,
-                    'items' => $sellerItems,
-                ];
-
-                if ($query !== '' && !$this->matchesSellerOrderQuery($orderData, $query)) {
-                    continue;
-                }
-
-                $filteredOrders[] = $orderData;
-            }
-        }
-
         $summary = [
             'total_orders' => 0,
             'total_revenue' => 0.0,
@@ -1157,17 +973,71 @@ class ProductManagement implements ProductManagementInterface
             'expired_orders' => 0,
         ];
 
-        foreach ($filteredOrders as $order) {
+        foreach ($rows as $row) {
+            $orderRef = $row['order_reference'];
+            $shippingInfo = $this->decodeJsonObject((string)($row['shipping_json'] ?? ''));
+
+            // Fetch order items for this seller
+            $itemsSelect = $connection->select()
+                ->from($oiTable, ['item_id' => 'id', 'sku', 'name', 'unit', 'quantity', 'unit_price', 'row_total', 'image'])
+                ->where('order_id = (SELECT id FROM ' . $oTable . ' WHERE order_code = ? LIMIT 1)', $orderRef)
+                ->where('seller_id = ?', $sellerId);
+            $itemsRows = $connection->fetchAll($itemsSelect);
+
+            foreach ($itemsRows as &$item) {
+                $item['item_id'] = (int)$item['item_id'];
+                $item['quantity'] = (float)$item['quantity'];
+                $item['unit_price'] = (float)$item['unit_price'];
+                $item['row_total'] = (float)$item['row_total'];
+                $item['category'] = 'Mặt hàng sỉ'; // fallback
+                $item['image'] = $item['image'] ? '/media/catalog/product/' . ltrim((string)$item['image'], '/') : '';
+            }
+
+            $sellerSubtotal = (float)$row['seller_subtotal'];
+            $orderStatus = strtolower((string)$row['status']);
+
+            $orderData = [
+                'order_reference' => $orderRef,
+                'status'          => $row['status'],
+                'status_label'    => $this->getOrderStatusLabel((string)$row['status']),
+                'customer_name'   => $row['customer_name'] ?? '',
+                'customer_email'  => $row['customer_email'] ?? '',
+                'customer_region' => $shippingInfo['branch'] ?? '',
+                'supplier'        => '',
+                'subtotal'        => (float)$row['total_amount'],
+                'seller_subtotal' => $sellerSubtotal,
+                'total_amount'    => (float)$row['total_amount'],
+                'delivery_date'   => $shippingInfo['deliveryDate'] ?? '',
+                'delivery_time'   => $shippingInfo['deliveryTime'] ?? '',
+                'shipping_address'=> isset($shippingInfo['branch']) ? ($shippingInfo['branch'] . ' - ' . ($shippingInfo['address'] ?? '')) : '',
+                'shipping_info'   => $shippingInfo,
+                'note'            => $shippingInfo['note'] ?? '',
+                'created_at'      => $row['created_at'],
+                'transaction_id'  => $row['transaction_id'] ?? '',
+                'expires_at'      => $row['expires_at'] ?? '',
+                'paid_at'         => $row['paid_at'] ?? '',
+                'payment_method'  => $row['payment_method'] ?? 'bank_transfer',
+                'item_count'      => (int)$row['item_count'],
+                'quantity_total'  => (float)$row['quantity_total'],
+                'items'           => $itemsRows,
+            ];
+
+            $filteredOrders[] = $orderData;
+
+            // Summary calculations
             $summary['total_orders'] += 1;
-            $summary['total_revenue'] += (float) ($order['seller_subtotal'] ?? 0);
-            $status = strtolower((string) ($order['status'] ?? 'pending'));
-            if ($status === 'paid') {
+            // Count revenue only for paid status to keep statistics clean and accurate!
+            if ($orderStatus === 'paid') {
+                $summary['total_revenue'] += $sellerSubtotal;
+            }
+
+            if ($orderStatus === 'paid') {
                 $summary['paid_orders'] += 1;
-            } elseif ($status === 'processing') {
+            } elseif ($orderStatus === 'processing') {
                 $summary['processing_orders'] += 1;
-            } elseif (in_array($status, ['cancelled', 'canceled'], true)) {
+            } elseif (in_array($orderStatus, ['cancelled', 'canceled'], true)) {
                 $summary['cancelled_orders'] += 1;
-            } elseif ($status === 'expired') {
+            } elseif ($orderStatus === 'expired') {
                 $summary['expired_orders'] += 1;
             } else {
                 $summary['pending_orders'] += 1;
@@ -1177,13 +1047,13 @@ class ProductManagement implements ProductManagementInterface
         return [
             'success' => true,
             'summary' => [
-                'total_orders' => $summary['total_orders'],
-                'total_revenue' => round((float) $summary['total_revenue'], 2),
-                'paid_orders' => $summary['paid_orders'],
-                'pending_orders' => $summary['pending_orders'],
+                'total_orders'      => $summary['total_orders'],
+                'total_revenue'     => round((float)$summary['total_revenue'], 2),
+                'paid_orders'       => $summary['paid_orders'],
+                'pending_orders'    => $summary['pending_orders'],
                 'processing_orders' => $summary['processing_orders'],
-                'cancelled_orders' => $summary['cancelled_orders'],
-                'expired_orders' => $summary['expired_orders'],
+                'cancelled_orders'  => $summary['cancelled_orders'],
+                'expired_orders'    => $summary['expired_orders'],
             ],
             'items' => array_slice($filteredOrders, 0, $limit),
         ];
@@ -1252,6 +1122,188 @@ class ProductManagement implements ProductManagementInterface
         }
 
         return false;
+    }
+
+    /**
+     * @inheritDoc
+     * Get purchase history for the currently authenticated customer.
+     * Uses Magento's UserContextInterface (resolves Bearer token automatically in REST context).
+     */
+    public function getPurchaseHistory(): array
+    {
+        $connection = $this->resourceConnection->getConnection();
+
+        // ── Resolve customer identity ─────────────────────────────────────────
+        $customerId    = 0;
+        $customerEmail = '';
+
+        // 1. PHP session (browser-based)
+        if ($this->customerSession->isLoggedIn()) {
+            $customerId    = (int)$this->customerSession->getCustomerId();
+            $customerEmail = (string)$this->customerSession->getCustomer()->getEmail();
+        }
+
+        // 2. Magento REST UserContext – the framework resolves Bearer token automatically
+        if ($customerId === 0 && $this->userContext->getUserType() === UserContextInterface::USER_TYPE_CUSTOMER) {
+            $customerId = (int)$this->userContext->getUserId();
+        }
+
+        // 3. Legacy fallback: manual Bearer → oauth_token lookup (handles long-lived tokens)
+        if ($customerId === 0) {
+            $token = '';
+            $authHeader = $this->request->getHeader('Authorization');
+            if ($authHeader && preg_match('/Bearer\s+(.*)$/i', $authHeader, $m)) {
+                $token = trim($m[1]);
+            }
+            if ($token === '') {
+                $token = trim((string)$this->request->getParam('token'));
+            }
+            if ($token !== '') {
+                $oauthTable = $connection->getTableName('oauth_token');
+                $row = $connection->fetchRow(
+                    $connection->select()
+                        ->from($oauthTable, ['customer_id'])
+                        ->where('token = ?', $token)
+                        ->limit(1)
+                );
+                if ($row && (int)$row['customer_id'] > 0) {
+                    $customerId = (int)$row['customer_id'];
+                }
+            }
+        }
+
+        // Resolve email from customer_entity
+        if ($customerId > 0 && $customerEmail === '') {
+            $ceTable = $connection->getTableName('customer_entity');
+            $customerEmail = (string)$connection->fetchOne(
+                $connection->select()
+                    ->from($ceTable, ['email'])
+                    ->where('entity_id = ?', $customerId)
+                    ->limit(1)
+            );
+        }
+
+        if ($customerEmail === '') {
+            throw new LocalizedException(__('Phiên làm việc hết hạn. Vui lòng đăng nhập lại.'));
+        }
+
+        // ── Query parameters ─────────────────────────────────────────────────
+        $limit        = max(1, min(100, (int)($this->request->getParam('limit') ?: 30)));
+        $statusFilter = strtolower(trim((string)($this->request->getParam('status') ?: 'all')));
+        $searchQuery  = strtolower(trim((string)($this->request->getParam('q') ?: '')));
+
+        $oTable  = $connection->getTableName('tmdt_orders');
+        $oiTable = $connection->getTableName('tmdt_order_items');
+
+        // ── Build base SELECT ─────────────────────────────────────────────────
+        $select = $connection->select()
+            ->from(['o' => $oTable], [
+                'history_id'       => 'o.id',
+                'order_reference'  => 'o.order_code',
+                'parent_code'      => 'o.parent_code',
+                'status'           => 'o.status',
+                'customer_name'    => 'o.customer_name',
+                'customer_email'   => 'o.customer_email',
+                'shipping_json'    => 'o.shipping_json',
+                'transaction_id'   => 'o.transaction_id',
+                'expires_at'       => 'o.expires_at',
+                'paid_at'          => 'o.paid_at',
+                'total_amount'     => 'o.total_amount',
+                'payment_method'   => 'o.payment_method',
+                'created_at'       => 'o.created_at',
+            ])
+            ->where('o.customer_email = ?', $customerEmail)
+            ->order('o.created_at DESC')
+            ->limit($limit);
+
+        if ($statusFilter !== 'all' && $statusFilter !== '') {
+            $select->where('o.status = ?', $statusFilter);
+        }
+
+        if ($searchQuery !== '') {
+            $select->where(
+                'o.order_code LIKE ? OR o.customer_name LIKE ?',
+                ['%' . $searchQuery . '%', '%' . $searchQuery . '%']
+            );
+        }
+
+        $rows = $connection->fetchAll($select);
+        $orders = [];
+
+        foreach ($rows as $row) {
+            $orderRef    = $row['order_reference'];
+            $shippingInfo = $this->decodeJsonObject((string)($row['shipping_json'] ?? ''));
+
+            // Fetch all items for this order (across all sellers)
+            $itemsSelect = $connection->select()
+                ->from(
+                    $oiTable,
+                    ['item_id' => 'id', 'seller_id', 'sku', 'name', 'unit', 'quantity', 'unit_price', 'row_total', 'image']
+                )
+                ->where('order_id = ?', (int)$row['history_id']);
+            $itemRows = $connection->fetchAll($itemsSelect);
+
+            // Resolve seller name for display (store name from tmdt_customer_registration)
+            $sellerNames = [];
+            $regTable = $connection->getTableName('tmdt_customer_registration');
+            foreach ($itemRows as &$item) {
+                $item['item_id']    = (int)$item['item_id'];
+                $item['quantity']   = (float)$item['quantity'];
+                $item['unit_price'] = (float)$item['unit_price'];
+                $item['row_total']  = (float)$item['row_total'];
+                $item['category']   = 'Mặt hàng sỉ';
+                $item['image']      = $item['image']
+                    ? '/media/catalog/product/' . ltrim((string)$item['image'], '/')
+                    : '';
+
+                $sid = (int)$item['seller_id'];
+                if ($sid > 0 && !isset($sellerNames[$sid])) {
+                    $sellerName = $connection->fetchOne(
+                        $connection->select()
+                            ->from($regTable, ['unit_nickname'])
+                            ->where('customer_id = ?', $sid)
+                            ->limit(1)
+                    );
+                    $sellerNames[$sid] = $sellerName ?: ('Seller #' . $sid);
+                }
+                $item['seller_name'] = $sid > 0 ? ($sellerNames[$sid] ?? '') : '';
+            }
+            unset($item);
+
+            // Determine primary supplier label
+            $supplierLabel = '';
+            if (!empty($sellerNames)) {
+                $supplierLabel = implode(', ', array_unique(array_values($sellerNames)));
+            }
+
+            $orders[] = [
+                'history_id'       => (int)$row['history_id'],
+                'order_reference'  => $orderRef,
+                'parent_code'      => $row['parent_code'] ?? null,
+                'status'           => $row['status'] ?? 'pending',
+                'status_label'     => $this->getOrderStatusLabel((string)($row['status'] ?? '')),
+                'customer_name'    => $row['customer_name'] ?? '',
+                'customer_region'  => $shippingInfo['branch'] ?? '',
+                'supplier'         => $supplierLabel,
+                'subtotal'         => (float)$row['total_amount'],
+                'total_amount'     => (float)$row['total_amount'],
+                'delivery_date'    => $shippingInfo['deliveryDate'] ?? '',
+                'delivery_time'    => $shippingInfo['deliveryTime'] ?? '',
+                'shipping_address' => isset($shippingInfo['branch'])
+                    ? ($shippingInfo['branch'] . ' - ' . ($shippingInfo['address'] ?? ''))
+                    : ($shippingInfo['address'] ?? ''),
+                'shipping_info'    => $shippingInfo,
+                'note'             => $shippingInfo['note'] ?? '',
+                'transaction_id'   => $row['transaction_id'] ?? '',
+                'expires_at'       => $row['expires_at'] ?? '',
+                'paid_at'          => $row['paid_at'] ?? '',
+                'payment_method'   => $row['payment_method'] ?? '',
+                'created_at'       => $row['created_at'],
+                'items'            => $itemRows,
+            ];
+        }
+
+        return $orders;
     }
 
     /**

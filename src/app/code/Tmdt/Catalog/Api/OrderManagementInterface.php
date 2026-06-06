@@ -13,6 +13,7 @@ interface OrderManagementInterface
      * @param float  $totalAmount
      * @param string $itemsJson    JSON-encoded array of cart items
      * @param string $shippingJson JSON-encoded shipping info
+     * @param string $paymentMethod
      * @return mixed[]
      */
     public function createOrder(
@@ -20,7 +21,8 @@ interface OrderManagementInterface
         string $customerName,
         float $totalAmount,
         string $itemsJson,
-        string $shippingJson
+        string $shippingJson,
+        string $paymentMethod = 'bank_transfer'
     ): array;
 
     /**
@@ -37,5 +39,14 @@ interface OrderManagementInterface
      * @return mixed[]
      */
     public function getWarehouses(): array;
+
+    /**
+     * Confirm that a direct payment (COD) order has been paid.
+     *
+     * @param string $orderCode
+     * @return bool
+     * @throws \Magento\Framework\Exception\LocalizedException
+     */
+    public function confirmDirectPayment(string $orderCode): bool;
 }
 

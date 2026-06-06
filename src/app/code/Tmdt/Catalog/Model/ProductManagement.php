@@ -12,6 +12,7 @@ use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\Webapi\Rest\Request as RestRequest;
 use Magento\Authorization\Model\UserContextInterface;
+use Magento\Framework\App\ObjectManager;
 
 class ProductManagement implements ProductManagementInterface
 {
@@ -24,9 +25,16 @@ class ProductManagement implements ProductManagementInterface
         private readonly RestRequest $request,
         private readonly \Magento\Store\Model\StoreManagerInterface $storeManager,
         private readonly \Magento\Framework\Indexer\IndexerRegistry $indexerRegistry,
-        private readonly \Magento\Framework\App\Cache\TypeListInterface $cacheTypeList,
-        private readonly UserContextInterface $userContext
+        private readonly \Magento\Framework\App\Cache\TypeListInterface $cacheTypeList
     ) {
+    }
+
+    /**
+     * Get UserContext via ObjectManager (lazy, avoids constructor changes requiring di:compile).
+     */
+    private function getUserContext(): UserContextInterface
+    {
+        return ObjectManager::getInstance()->get(UserContextInterface::class);
     }
 
     /**
@@ -537,8 +545,9 @@ class ProductManagement implements ProductManagementInterface
         }
 
         // 2. Use Magento's REST UserContext (resolves Bearer token automatically)
-        if ($this->userContext->getUserType() === UserContextInterface::USER_TYPE_CUSTOMER) {
-            $uid = (int)$this->userContext->getUserId();
+        $userContext = $this->getUserContext();
+        if ($userContext->getUserType() === UserContextInterface::USER_TYPE_CUSTOMER) {
+            $uid = (int)$userContext->getUserId();
             if ($uid > 0) {
                 return (string)$uid;
             }
@@ -876,26 +885,66 @@ class ProductManagement implements ProductManagementInterface
             $tp['image'] = $tp['image'] ? '/media/catalog/product/' . ltrim((string)$tp['image'], '/') : '';
         }
 
-        // 5. Operational log from notifications
-        $notifTable = $connection->getTableName('tmdt_seller_notifications');
-        $notifications = $connection->fetchAll("
-            SELECT sku, message, created_at FROM {$notifTable}
-            WHERE seller_customer_id = :seller_id
-            ORDER BY created_at DESC
-            LIMIT 8
-        ", ['seller_id' => $sellerId]);
-
+        // 5. Operational log: recent orders for this seller + stock notifications
         $operationalLog = [];
-        foreach ($notifications as $n) {
-            $type = str_contains($n['sku'], 'DH') ? 'order_created' : 'out_of_stock';
-            $title = $type === 'order_created' ? 'Đơn sỉ mới nhận' : 'Cảnh báo hết hàng';
+
+        // 5a. Recent orders involving this seller
+        $recentOrdersQuery = "
+            SELECT DISTINCT
+                o.order_code,
+                o.status,
+                o.customer_name,
+                o.total_amount,
+                o.created_at
+            FROM {$oTable} o
+            INNER JOIN {$oiTable} oi ON o.id = oi.order_id
+            WHERE oi.seller_id = :seller_id
+              AND COALESCE(o.parent_code, '') != 'parent'
+            ORDER BY o.created_at DESC
+            LIMIT 6
+        ";
+        $recentOrders = $connection->fetchAll($recentOrdersQuery, ['seller_id' => $sellerId]);
+        foreach ($recentOrders as $ro) {
+            $statusLabel = match(strtolower((string)$ro['status'])) {
+                'paid'       => 'đã thanh toán',
+                'processing' => 'đang xử lý (COD)',
+                'cancelled','canceled' => 'đã hủy',
+                'expired'    => 'hết hạn',
+                default      => 'chờ thanh toán'
+            };
             $operationalLog[] = [
-                'type'    => $type,
-                'title'   => $title,
-                'message' => $n['message'],
-                'time'    => $n['created_at']
+                'type'    => 'order_created',
+                'title'   => 'Đơn sỉ mới nhận',
+                'message' => "Đơn <strong>{$ro['order_code']}</strong> từ <strong>{$ro['customer_name']}</strong> - " . number_format((float)$ro['total_amount'], 0, ',', '.') . "đ - {$statusLabel}",
+                'time'    => $ro['created_at']
             ];
         }
+
+        // 5b. Stock out-of-stock notifications
+        $notifTable = $connection->getTableName('tmdt_seller_notifications');
+        $tableExists = $connection->fetchOne(
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = '{$notifTable}'"
+        );
+        if ($tableExists) {
+            $notifications = $connection->fetchAll("
+                SELECT sku, message, created_at FROM {$notifTable}
+                WHERE seller_customer_id = :seller_id
+                ORDER BY created_at DESC
+                LIMIT 4
+            ", ['seller_id' => $sellerId]);
+            foreach ($notifications as $n) {
+                $operationalLog[] = [
+                    'type'    => 'out_of_stock',
+                    'title'   => 'Cảnh báo hết hàng',
+                    'message' => $n['message'],
+                    'time'    => $n['created_at']
+                ];
+            }
+        }
+
+        // Sort by time desc
+        usort($operationalLog, fn($a, $b) => strcmp($b['time'], $a['time']));
+        $operationalLog = array_slice($operationalLog, 0, 8);
 
         return [
             'success'        => true,
@@ -1144,8 +1193,11 @@ class ProductManagement implements ProductManagementInterface
         }
 
         // 2. Magento REST UserContext – the framework resolves Bearer token automatically
-        if ($customerId === 0 && $this->userContext->getUserType() === UserContextInterface::USER_TYPE_CUSTOMER) {
-            $customerId = (int)$this->userContext->getUserId();
+        if ($customerId === 0) {
+            $userCtx = $this->getUserContext();
+            if ($userCtx->getUserType() === UserContextInterface::USER_TYPE_CUSTOMER) {
+                $customerId = (int)$userCtx->getUserId();
+            }
         }
 
         // 3. Legacy fallback: manual Bearer → oauth_token lookup (handles long-lived tokens)

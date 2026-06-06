@@ -72,4 +72,12 @@ interface ProductManagementInterface
      * @throws \Magento\Framework\Exception\LocalizedException
      */
     public function getSellerOrders(): array;
+
+    /**
+     * Get purchase history for the authenticated customer.
+     *
+     * @return mixed[]
+     * @throws \Magento\Framework\Exception\LocalizedException
+     */
+    public function getPurchaseHistory(): array;
 }

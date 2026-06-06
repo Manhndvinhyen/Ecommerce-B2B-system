@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
-import { Calendar, Clock, FileText, MapPin, PackageCheck, Phone, ShoppingBag, User, Wind, Thermometer, AlertTriangle, Truck, Store, Ticket, Percent } from 'lucide-react';
+import { Calendar, Clock, FileText, MapPin, PackageCheck, Phone, ShoppingBag, User, Wind, Thermometer, AlertTriangle, Truck, Store, Ticket, Percent, CreditCard } from 'lucide-react';
 import { formatCartSupplierLabel, toCurrencyTextFromNumber, useCart, parsePrice } from '../cart/CartProvider';
 import { inferCategoryFromSku } from '../data/categories';
 
@@ -667,11 +667,19 @@ export function CheckoutPage() {
         const res = await fetch('/rest/V1/tmdt-catalog/promotions');
         if (res.ok) {
           const json = await res.json();
-          if (json?.success && Array.isArray(json.items)) {
-            const vouchers = json.items.filter((p: any) => p.type === 'voucher');
-            if (vouchers.length > 0) {
-              setAvailableVouchers(vouchers);
+          let items: any[] = [];
+          if (Array.isArray(json)) {
+            if (json[0] === true && Array.isArray(json[1])) {
+              items = json[1];
+            } else {
+              items = json;
             }
+          } else if (json && Array.isArray(json.items)) {
+            items = json.items;
+          }
+          const vouchers = items.filter((p: any) => p.type === 'voucher');
+          if (vouchers.length > 0) {
+            setAvailableVouchers(vouchers);
           }
         }
       } catch (err) {
@@ -751,6 +759,7 @@ export function CheckoutPage() {
   // VietQR Payment Modal state
   const [qrOrder, setQrOrder] = useState<{ orderCode: string; totalAmount: number; expiresAt: string } | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | 'expired' | 'cancelled'>('pending');
+  const [paymentMethod, setPaymentMethod] = useState<'bank_transfer' | 'direct_payment'>('bank_transfer');
   const [countdown, setCountdown] = useState(15 * 60); // 15 minutes in seconds
   const pollingRef = useRef<number | null>(null);
   const countdownRef = useRef<number | null>(null);
@@ -1622,7 +1631,8 @@ export function CheckoutPage() {
             deliveryDate,
             deliveryTime,
             suppliers: suppliersShippingMap
-          })
+          }),
+          paymentMethod
         })
       });
 
@@ -1744,11 +1754,15 @@ export function CheckoutPage() {
         }
       }
 
-      // Step 3: Show VietQR modal
-      setQrOrder({ orderCode, totalAmount, expiresAt });
-      setPaymentStatus('pending');
-      setCountdown(Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000)));
-      startPolling(orderCode, expiresAt);
+      // Step 3: Show VietQR modal or redirect directly if COD
+      if (paymentMethod === 'direct_payment') {
+        window.location.href = `${reactHomePath}?view=thank-you&orderId=${orderCode}`;
+      } else {
+        setQrOrder({ orderCode, totalAmount, expiresAt });
+        setPaymentStatus('pending');
+        setCountdown(Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000)));
+        startPolling(orderCode, expiresAt);
+      }
 
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Không thể tạo đơn hàng.';
@@ -2215,6 +2229,69 @@ export function CheckoutPage() {
                       }`}
                   />
                   {errors.invoice_email && <p className="mt-1 text-xs text-red-500">{errors.invoice_email}</p>}
+                </div>
+              </div>
+            </section>
+
+            {/* Payment Method Selection */}
+            <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
+              <div className="flex items-center gap-2 text-lg font-semibold text-gray-800">
+                <CreditCard className="size-5 text-green-600" />
+                Phương thức thanh toán
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {/* VietQR Option */}
+                <div
+                  onClick={() => setPaymentMethod('bank_transfer')}
+                  className={`relative cursor-pointer rounded-2xl border-2 p-4 transition-all hover:shadow-md flex items-start gap-3.5 ${
+                    paymentMethod === 'bank_transfer'
+                      ? 'border-green-600 bg-green-50/20'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-green-50 border border-green-100 text-green-600 shrink-0">
+                    <Percent className="size-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-gray-900">Chuyển khoản VietQR</p>
+                    <p className="text-[11px] text-gray-500 font-medium mt-1 leading-relaxed">
+                      Quét mã VietQR chuyển khoản nhanh 24/7. Hỗ trợ tất cả ngân hàng Việt Nam.
+                    </p>
+                  </div>
+                  <div className="shrink-0 flex items-center justify-center mt-1">
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                      paymentMethod === 'bank_transfer' ? 'border-green-600 bg-green-600' : 'border-gray-300'
+                    }`}>
+                      {paymentMethod === 'bank_transfer' && <div className="w-2 h-2 rounded-full bg-white" />}
+                    </div>
+                  </div>
+                </div>
+
+                {/* COD Option */}
+                <div
+                  onClick={() => setPaymentMethod('direct_payment')}
+                  className={`relative cursor-pointer rounded-2xl border-2 p-4 transition-all hover:shadow-md flex items-start gap-3.5 ${
+                    paymentMethod === 'direct_payment'
+                      ? 'border-green-600 bg-green-50/20'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-orange-50 border border-orange-100 text-orange-600 shrink-0">
+                    <User className="size-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-gray-900">Thanh toán trực tiếp khi nhận hàng</p>
+                    <p className="text-[11px] text-gray-500 font-medium mt-1 leading-relaxed">
+                      Thanh toán bằng tiền mặt hoặc chuyển khoản trực tiếp cho nhân viên khi nhận đủ hàng sỉ.
+                    </p>
+                  </div>
+                  <div className="shrink-0 flex items-center justify-center mt-1">
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                      paymentMethod === 'direct_payment' ? 'border-green-600 bg-green-600' : 'border-gray-300'
+                    }`}>
+                      {paymentMethod === 'direct_payment' && <div className="w-2 h-2 rounded-full bg-white" />}
+                    </div>
+                  </div>
                 </div>
               </div>
             </section>

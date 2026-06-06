@@ -186,7 +186,17 @@ export function PurchaseHistoryContent({
       }
 
       const json = await response.json();
-      setOrders(Array.isArray(json?.items) ? json.items : []);
+      if (Array.isArray(json)) {
+        if (json[0] === true && Array.isArray(json[1])) {
+          setOrders(json[1]);
+        } else {
+          setOrders(json);
+        }
+      } else if (json && Array.isArray(json.items)) {
+        setOrders(json.items);
+      } else {
+        setOrders([]);
+      }
       setErrorMessage('');
     } catch {
       setErrorMessage('Không tải được lịch sử mua hàng. Vui lòng thử lại sau.');

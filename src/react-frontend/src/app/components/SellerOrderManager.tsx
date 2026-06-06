@@ -9,6 +9,7 @@ import {
   ShoppingBag,
   Truck,
   ChevronDown,
+  CheckSquare,
 } from 'lucide-react';
 import { toCurrencyTextFromNumber } from '../cart/CartProvider';
 
@@ -44,6 +45,7 @@ type SellerOrder = {
   transaction_id: string;
   expires_at: string;
   paid_at: string;
+  payment_method?: string;
   item_count: number;
   quantity_total: number;
   items: SellerOrderItem[];
@@ -150,6 +152,36 @@ export function SellerOrderManager() {
       ...prev,
       [orderRef]: !prev[orderRef],
     }));
+  };
+
+  const handleConfirmPayment = async (orderCode: string) => {
+    const token = getAuthToken();
+    if (!token) return;
+
+    if (!window.confirm(`Bạn có chắc chắn muốn xác nhận đã thu tiền cho đơn hàng ${orderCode}?`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`${window.location.origin}/rest/V1/tmdt-orders/confirm-payment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ orderCode }),
+      });
+
+      if (res.ok) {
+        alert('Xác nhận thanh toán đơn hàng thành công!');
+        void fetchOrders(true);
+      } else {
+        const data = await res.json();
+        alert(data.message || 'Có lỗi xảy ra khi xác nhận thanh toán.');
+      }
+    } catch {
+      alert('Không thể kết nối đến máy chủ.');
+    }
   };
 
   const statusTabs = [
@@ -370,6 +402,16 @@ export function SellerOrderManager() {
                         <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-white px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">
                           Đã trả: {formatDateTime(order.paid_at)}
                         </span>
+                      )}
+                      {order.status === 'processing' && order.payment_method === 'direct_payment' && (
+                        <button
+                          type="button"
+                          onClick={() => void handleConfirmPayment(order.order_reference)}
+                          className="mt-3 px-4 py-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white rounded-full text-xs font-black shadow-md shadow-emerald-500/10 hover:shadow-emerald-500/25 transition-all cursor-pointer flex items-center gap-1.5"
+                        >
+                          <CheckSquare className="size-3.5" />
+                          Xác nhận đã thu tiền
+                        </button>
                       )}
                     </div>
                   </div>

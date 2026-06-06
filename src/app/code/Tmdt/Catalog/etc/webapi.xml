@@ -117,5 +117,19 @@
             <resource ref="anonymous"/>
         </resources>
     </route>
+    <!-- COD payment confirmation REST route for authenticated B2B sellers -->
+    <route url="/V1/tmdt-orders/confirm-payment" method="POST">
+        <service class="Tmdt\Catalog\Api\OrderManagementInterface" method="confirmDirectPayment"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+    <!-- Customer purchase history - authenticated customer token required -->
+    <route url="/V1/tmdt-search/purchase-history" method="GET">
+        <service class="Tmdt\Catalog\Api\ProductManagementInterface" method="getPurchaseHistory"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
     <!-- NOTE: Webhook is handled by Controller at /tmdt/webhook/sepay (not REST API) -->
 </routes>

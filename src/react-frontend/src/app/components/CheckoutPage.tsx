@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
-import { Calendar, Clock, FileText, MapPin, PackageCheck, Phone, ShoppingBag, User, Wind, Thermometer, AlertTriangle, Truck, Store } from 'lucide-react';
+import { Calendar, Clock, FileText, MapPin, PackageCheck, Phone, ShoppingBag, User, Wind, Thermometer, AlertTriangle, Truck, Store, Ticket, Percent } from 'lucide-react';
 import { formatCartSupplierLabel, toCurrencyTextFromNumber, useCart, parsePrice } from '../cart/CartProvider';
 import { inferCategoryFromSku } from '../data/categories';
 
@@ -275,6 +275,7 @@ type CheckoutItem = {
   name: string;
   quantity: number;
   unitPrice: number;
+  discountedUnitPrice?: number;
   unit: string;
   image: string;
   category: string;
@@ -356,6 +357,11 @@ const isRealImageUrl = (value?: string | null) => {
 type MagentoCartItem = {
   id: number | string;
   quantity?: number;
+  prices?: {
+    price?: {
+      value?: number | null;
+    } | null;
+  } | null;
   product?: {
     sku?: string | null;
     name?: string | null;
@@ -474,7 +480,7 @@ const mapMagentoCartItems = (items: MagentoCartItem[] = []): CheckoutItem[] => {
       const file = entry.file?.trim() ?? '';
       return file && !file.toLowerCase().includes('placeholder');
     });
-    
+
     const finalImage =
       (isRealImageUrl(getMagentoMediaImageUrl(galleryImage?.file)) ? getMagentoMediaImageUrl(galleryImage?.file) : '') ||
       (isRealImageUrl(fixMagentoUrl(product.small_image?.url)) ? fixMagentoUrl(product.small_image?.url) : '') ||
@@ -572,6 +578,35 @@ const loadSavedInvoice = (): InvoiceInfo | null => {
   }
 };
 
+// Distribute cash discount proportionally across item unit prices
+function distributeCashDiscount(items: CheckoutItem[], discountAmount: number): CheckoutItem[] {
+  if (discountAmount <= 0) {
+    return items.map((item) => ({ ...item, discountedUnitPrice: item.unitPrice }));
+  }
+  const total = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+  if (total === 0) {
+    return items.map((item) => ({ ...item, discountedUnitPrice: item.unitPrice }));
+  }
+
+  let remainingDiscount = discountAmount;
+  return items.map((item, index) => {
+    if (index === items.length - 1) {
+      const itemSubtotal = item.quantity * item.unitPrice;
+      const itemDiscount = remainingDiscount;
+      const targetSubtotal = Math.max(0, itemSubtotal - itemDiscount);
+      const discountedUnitPrice = Math.round(targetSubtotal / item.quantity);
+      return { ...item, discountedUnitPrice };
+    } else {
+      const ratio = (item.quantity * item.unitPrice) / total;
+      const itemDiscount = Math.round(discountAmount * ratio);
+      remainingDiscount -= itemDiscount;
+      const targetSubtotal = Math.max(0, (item.quantity * item.unitPrice) - itemDiscount);
+      const discountedUnitPrice = Math.round(targetSubtotal / item.quantity);
+      return { ...item, discountedUnitPrice };
+    }
+  });
+}
+
 export function CheckoutPage() {
   const { cartItems } = useCart();
   const [checkoutItems, setCheckoutItems] = useState<CheckoutItem[]>([]);
@@ -598,6 +633,67 @@ export function CheckoutPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toastMessage, setToastMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showLocationPrompt, setShowLocationPrompt] = useState<boolean>(false);
+
+  // Voucher states
+  const [availableVouchers, setAvailableVouchers] = useState<any[]>([
+    {
+      id: 4,
+      title: 'Voucher Khách Hàng Mới',
+      description: 'Giảm 100.000đ cho đơn hàng sỉ đầu tiên từ 1.000.000đ.',
+      type: 'voucher',
+      discount_code: 'FRESO100',
+      discount_value: 100000,
+      min_order_amount: 1000000
+    },
+    {
+      id: 5,
+      title: 'Miễn Phí Vận Chuyển Sỉ',
+      description: 'Freeship tối đa 200.000đ cho đơn hàng sỉ từ 3.000.000đ.',
+      type: 'voucher',
+      discount_code: 'FREESHIP200',
+      discount_value: 200000,
+      min_order_amount: 3000000
+    }
+  ]);
+  const [appliedVoucher, setAppliedVoucher] = useState<any | null>(null);
+  const [voucherError, setVoucherError] = useState<string | null>(null);
+  const [claimedCodes, setClaimedCodes] = useState<string[]>([]);
+
+  // Load promotions/vouchers from backend
+  useEffect(() => {
+    const fetchVouchers = async () => {
+      try {
+        const res = await fetch('/rest/V1/tmdt-catalog/promotions');
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.success && Array.isArray(json.items)) {
+            const vouchers = json.items.filter((p: any) => p.type === 'voucher');
+            if (vouchers.length > 0) {
+              setAvailableVouchers(vouchers);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch promotions for vouchers:', err);
+      }
+    };
+    fetchVouchers();
+  }, []);
+
+  // Load claimed codes from localStorage
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem('freso_claimed_vouchers') || '[]';
+      setClaimedCodes(JSON.parse(raw) as string[]);
+    } catch {
+      setClaimedCodes([]);
+    }
+  }, []);
+
+  const claimedVouchersList = useMemo(() => {
+    return availableVouchers.filter((v) => claimedCodes.includes(v.discount_code));
+  }, [availableVouchers, claimedCodes]);
 
   // Subscription / Recurring Order states
   const [isRecurring, setIsRecurring] = useState(false);
@@ -742,19 +838,36 @@ export function CheckoutPage() {
     return Object.values(estimations).reduce((sum, est) => sum + (est.surcharge || 0), 0);
   }, [estimations]);
 
-  const shippingDiscount = 0;
+  // Reset voucher if subtotal doesn't meet the min_order_amount condition
+  useEffect(() => {
+    if (appliedVoucher && subtotal < (appliedVoucher.min_order_amount || 0)) {
+      setAppliedVoucher(null);
+      setVoucherError(`Đơn hàng chưa đạt giá trị tối thiểu ${toCurrencyTextFromNumber(appliedVoucher.min_order_amount)}`);
+    }
+  }, [subtotal, appliedVoucher]);
+
+  const voucherDiscount = useMemo(() => {
+    if (!appliedVoucher || appliedVoucher.type !== 'voucher') return 0;
+    const isShipping = (appliedVoucher.discount_code || '').toLowerCase().includes('ship');
+    if (isShipping) return 0;
+    if (subtotal < (appliedVoucher.min_order_amount || 0)) return 0;
+    return Math.min(subtotal, Number(appliedVoucher.discount_value || 0));
+  }, [appliedVoucher, subtotal]);
+
+  const shippingDiscount = useMemo(() => {
+    if (!appliedVoucher || appliedVoucher.type !== 'voucher') return 0;
+    const isShipping = (appliedVoucher.discount_code || '').toLowerCase().includes('ship');
+    if (!isShipping) return 0;
+    if (subtotal < (appliedVoucher.min_order_amount || 0)) return 0;
+    return Math.min(shippingFee, Number(appliedVoucher.discount_value || 0));
+  }, [appliedVoucher, subtotal, shippingFee]);
 
   const totalAmount = useMemo(() => {
-    return subtotal + shippingFee - shippingDiscount + weatherSurcharge;
-  }, [subtotal, shippingFee, shippingDiscount, weatherSurcharge]);
+    return subtotal - voucherDiscount + shippingFee - shippingDiscount + weatherSurcharge;
+  }, [subtotal, voucherDiscount, shippingFee, shippingDiscount, weatherSurcharge]);
 
 
-  // Immediately get initial location on mount to center the map on the user's actual GPS location
-  useEffect(() => {
-    const savedShipping = loadSavedShipping();
-    const activeBranch = savedShipping?.branch || '';
-    const defaultCoords = branchCoordinates[activeBranch] || { lat: 10.776, lng: 106.700 };
-
+  const requestGpsLocation = useCallback((defaultCoords: { lat: number; lng: number }) => {
     if (!navigator.geolocation) {
       setInitialCoordinates(defaultCoords);
       setCoordinates(defaultCoords);
@@ -798,6 +911,42 @@ export function CheckoutPage() {
       { timeout: 8000, enableHighAccuracy: true }
     );
   }, []);
+
+  const handleAllowLocation = () => {
+    window.localStorage.setItem('freso_location_choice', 'allowed');
+    setShowLocationPrompt(false);
+    const savedShipping = loadSavedShipping();
+    const activeBranch = savedShipping?.branch || '';
+    const defaultCoords = branchCoordinates[activeBranch] || { lat: 10.776, lng: 106.700 };
+    void requestGpsLocation(defaultCoords);
+  };
+
+  const handleDenyLocation = () => {
+    window.localStorage.setItem('freso_location_choice', 'denied');
+    setShowLocationPrompt(false);
+    const savedShipping = loadSavedShipping();
+    const activeBranch = savedShipping?.branch || '';
+    const defaultCoords = branchCoordinates[activeBranch] || { lat: 10.776, lng: 106.700 };
+    setInitialCoordinates(defaultCoords);
+    setCoordinates(defaultCoords);
+  };
+
+  // Get initial location on mount, asking the user first
+  useEffect(() => {
+    const savedShipping = loadSavedShipping();
+    const activeBranch = savedShipping?.branch || '';
+    const defaultCoords = branchCoordinates[activeBranch] || { lat: 10.776, lng: 106.700 };
+
+    const choice = window.localStorage.getItem('freso_location_choice');
+    if (choice === 'allowed') {
+      void requestGpsLocation(defaultCoords);
+    } else if (choice === 'denied') {
+      setInitialCoordinates(defaultCoords);
+      setCoordinates(defaultCoords);
+    } else {
+      setShowLocationPrompt(true);
+    }
+  }, [requestGpsLocation]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -867,19 +1016,19 @@ export function CheckoutPage() {
   }, [checkoutItems, isReady]);
 
   // Debounced effect for shipping address and branch selection changes
-    useEffect(() => {
-      const cleanAddress = shippingInfo.address.trim();
-      if (cleanAddress.length < 5) {
-        setEstimations({});
-        return;
-      }
-  
-      const timer = setTimeout(() => {
-        calculateWeatherAndEta(cleanAddress, shippingInfo.branch);
-      }, 1200);
-  
-      return () => clearTimeout(timer);
-    }, [shippingInfo.address, shippingInfo.branch]);
+  useEffect(() => {
+    const cleanAddress = shippingInfo.address.trim();
+    if (cleanAddress.length < 5) {
+      setEstimations({});
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      calculateWeatherAndEta(cleanAddress, shippingInfo.branch);
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [shippingInfo.address, shippingInfo.branch]);
 
 
   const calculateWeatherAndEta = async (address: string, branch: string) => {
@@ -996,7 +1145,7 @@ export function CheckoutPage() {
         const distance = calculateDistance(lat, lng, warehouse.lat, warehouse.lng || warehouse.lon);
         const baseDurationMinutes = Math.round(distance * 1.5) + 12;
         const finalDurationMinutes = Math.round(baseDurationMinutes * weatherDetails.factor);
-        
+
         // Sum weights of all products in this shop
         const shopItems = checkoutItems.filter(item => formatCartSupplierLabel(item) === supplierLabel);
         const shopWeight = shopItems.reduce((sum, item) => sum + calculateItemWeight(item.unit, item.quantity), 0);
@@ -1368,13 +1517,15 @@ export function CheckoutPage() {
       window.localStorage.setItem(checkoutInvoiceKey, JSON.stringify(invoiceInfo));
     }
 
+    const discountedItems = distributeCashDiscount(checkoutItems, voucherDiscount);
+
     const orderPayload = {
       userId: getCustomerEmail() || 'guest',
-      items: checkoutItems.map((item) => ({
+      items: discountedItems.map((item) => ({
         sku: item.sku,
         name: item.name,
         quantity: item.quantity,
-        unitPrice: item.unitPrice,
+        unitPrice: item.discountedUnitPrice ?? item.unitPrice,
         unit: item.unit
       })),
       supplier,
@@ -1388,17 +1539,17 @@ export function CheckoutPage() {
       customerEmail: getCustomerEmail(),
       orderReference: `TMDT-${Date.now()}`,
       customerRegion: getRegionFromBranch(shippingInfo.branch),
-      items: checkoutItems.map((item) => ({
+      items: discountedItems.map((item) => ({
         sku: item.sku,
         name: item.name,
         category: item.category,
         quantity: item.quantity,
-        unitPrice: item.unitPrice,
+        unitPrice: item.discountedUnitPrice ?? item.unitPrice,
         unit: item.unit,
         image: item.image
       })),
       supplier,
-      subtotal,
+      subtotal: subtotal - voucherDiscount,
       totalAmount,
       deliveryDate,
       deliveryTime,
@@ -1426,6 +1577,22 @@ export function CheckoutPage() {
         };
       });
 
+      // Apply shipping discount to suppliersShippingMap
+      if (shippingDiscount > 0) {
+        let remainingShippingDiscount = shippingDiscount;
+        const suppliersList = Object.keys(suppliersShippingMap);
+        suppliersList.forEach((supplierLabel, index) => {
+          const currentFee = suppliersShippingMap[supplierLabel].shippingFee || 0;
+          if (index === suppliersList.length - 1) {
+            suppliersShippingMap[supplierLabel].shippingFee = Math.max(0, currentFee - remainingShippingDiscount);
+          } else {
+            const deduct = Math.min(currentFee, remainingShippingDiscount);
+            suppliersShippingMap[supplierLabel].shippingFee = currentFee - deduct;
+            remainingShippingDiscount -= deduct;
+          }
+        });
+      }
+
       // Step 1: Create order in backend and get orderCode
       const createRes = await fetch('/rest/V1/tmdt-orders/create', {
         method: 'POST',
@@ -1437,11 +1604,11 @@ export function CheckoutPage() {
           customerEmail: getCustomerEmail() || 'guest',
           customerName: getCustomerName(),
           totalAmount,
-          itemsJson: JSON.stringify(checkoutItems.map((item) => ({
+          itemsJson: JSON.stringify(discountedItems.map((item) => ({
             sku: item.sku,
             name: item.name,
             quantity: item.quantity,
-            unitPrice: item.unitPrice,
+            unitPrice: item.discountedUnitPrice ?? item.unitPrice,
             unit: item.unit,
             supplierName: item.supplierName,
             supplierRegion: item.supplierRegion
@@ -1465,6 +1632,18 @@ export function CheckoutPage() {
 
       if (createRes.ok) {
         const orderData = await createRes.json();
+        // Consume applied voucher from localStorage
+        if (appliedVoucher) {
+          try {
+            const raw = window.localStorage.getItem('freso_claimed_vouchers') || '[]';
+            const claimed: string[] = JSON.parse(raw);
+            const updated = claimed.filter((code) => code !== appliedVoucher.discount_code);
+            window.localStorage.setItem('freso_claimed_vouchers', JSON.stringify(updated));
+            window.dispatchEvent(new Event('storage'));
+          } catch (err) {
+            console.error('Failed to consume voucher:', err);
+          }
+        }
         orderCode = orderData?.orderCode ?? `DH${Date.now().toString(36).toUpperCase().slice(-6)}`;
         expiresAt = orderData?.expiresAt ?? new Date(Date.now() + 15 * 60 * 1000).toISOString();
         childOrdersList = orderData?.childOrders ?? [];
@@ -1476,9 +1655,9 @@ export function CheckoutPage() {
           {
             orderCode,
             supplier: supplier || 'Tổng kho sỉ Thực phẩm B2B · Hà Nội',
-            subtotal,
+            subtotal: subtotal - voucherDiscount,
             totalAmount,
-            items: checkoutItems
+            items: discountedItems
           }
         ];
       }
@@ -1488,7 +1667,7 @@ export function CheckoutPage() {
       if (token && childOrdersList && childOrdersList.length > 0) {
         for (const child of childOrdersList) {
           const childSupplierLabel = child.supplier;
-          
+
           await fetch('/rest/V1/tmdt-search/purchase-history', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -1497,7 +1676,7 @@ export function CheckoutPage() {
               orderReference: child.orderCode,
               customerRegion: getRegionFromBranch(shippingInfo.branch),
               items: child.items.map((item: any) => {
-                const match = checkoutItems.find(i => i.sku === item.sku);
+                const match = discountedItems.find(i => i.sku === item.sku);
                 return {
                   sku: item.sku,
                   name: item.name,
@@ -1544,11 +1723,11 @@ export function CheckoutPage() {
               weekdays: recFrequency === 'weekly' ? recWeekdays.join(',') : null,
               monthDay: recFrequency === 'monthly' ? recMonthDay : null,
               deliveryTime: deliveryTime || '07:00 - 09:00',
-              itemsJson: JSON.stringify(checkoutItems.map((item) => ({
+              itemsJson: JSON.stringify(discountedItems.map((item) => ({
                 sku: item.sku,
                 name: item.name,
                 quantity: item.quantity,
-                unitPrice: item.unitPrice,
+                unitPrice: item.discountedUnitPrice ?? item.unitPrice,
                 unit: item.unit
               }))),
               shippingJson: JSON.stringify({
@@ -1844,7 +2023,7 @@ export function CheckoutPage() {
                               <Store className="size-3.5 text-green-600 shrink-0" />
                               {supplierLabel}
                             </div>
-                             <div className="space-y-2 text-xs text-gray-750">
+                            <div className="space-y-2 text-xs text-gray-750">
                               <div className="flex justify-between border-b border-gray-50 pb-1">
                                 <span className="text-gray-500">Trọng lượng đơn:</span>
                                 <span className="font-bold text-slate-800">{est.weightKg.toFixed(1)} kg</span>
@@ -1853,7 +2032,7 @@ export function CheckoutPage() {
                                 <span className="text-gray-500">Vận chuyển từ:</span>
                                 <span className="font-bold text-gray-900">{est.warehouseName} ({est.distanceKm} km)</span>
                               </div>
-                              
+
                               {/* Shipping carrier selector */}
                               <div className="space-y-1.5 mt-2">
                                 <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Chọn đơn vị vận chuyển:</div>
@@ -1866,11 +2045,10 @@ export function CheckoutPage() {
                                         key={rate.code}
                                         type="button"
                                         onClick={() => setSelectedCarriers(prev => ({ ...prev, [supplierLabel]: rate.code }))}
-                                        className={`flex items-center justify-between p-2 rounded-xl border text-left transition-all ${
-                                          isCurrent
-                                            ? 'border-green-600 bg-green-50/50 shadow-xs'
-                                            : 'border-gray-150 hover:bg-gray-50/30'
-                                        }`}
+                                        className={`flex items-center justify-between p-2 rounded-xl border text-left transition-all ${isCurrent
+                                          ? 'border-green-600 bg-green-50/50 shadow-xs'
+                                          : 'border-gray-150 hover:bg-gray-50/30'
+                                          }`}
                                       >
                                         <div className="flex items-center gap-2">
                                           <input
@@ -2072,22 +2250,20 @@ export function CheckoutPage() {
                         <button
                           type="button"
                           onClick={() => setRecFrequency('weekly')}
-                          className={`flex-1 py-2 px-4 rounded-xl border text-xs font-bold transition-all ${
-                            recFrequency === 'weekly'
-                              ? 'bg-green-600 border-transparent text-white shadow-sm'
-                              : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
-                          }`}
+                          className={`flex-1 py-2 px-4 rounded-xl border text-xs font-bold transition-all ${recFrequency === 'weekly'
+                            ? 'bg-green-600 border-transparent text-white shadow-sm'
+                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                            }`}
                         >
                           Hàng tuần
                         </button>
                         <button
                           type="button"
                           onClick={() => setRecFrequency('monthly')}
-                          className={`flex-1 py-2 px-4 rounded-xl border text-xs font-bold transition-all ${
-                            recFrequency === 'monthly'
-                              ? 'bg-green-600 border-transparent text-white shadow-sm'
-                              : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
-                          }`}
+                          className={`flex-1 py-2 px-4 rounded-xl border text-xs font-bold transition-all ${recFrequency === 'monthly'
+                            ? 'bg-green-600 border-transparent text-white shadow-sm'
+                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                            }`}
                         >
                           Hàng tháng
                         </button>
@@ -2121,11 +2297,10 @@ export function CheckoutPage() {
                                     setRecWeekdays([...recWeekdays, day.value]);
                                   }
                                 }}
-                                className={`w-9 h-9 rounded-xl border flex items-center justify-center text-xs font-bold transition-all ${
-                                  isSelected
-                                    ? 'bg-green-100 border-green-300 text-green-700'
-                                    : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
-                                }`}
+                                className={`w-9 h-9 rounded-xl border flex items-center justify-center text-xs font-bold transition-all ${isSelected
+                                  ? 'bg-green-100 border-green-300 text-green-700'
+                                  : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+                                  }`}
                               >
                                 {day.label}
                               </button>
@@ -2166,6 +2341,81 @@ export function CheckoutPage() {
                 Thanh toán
               </div>
 
+              {/* Voucher sỉ selector */}
+              <div className="border-b border-gray-100 pb-4">
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <Ticket className="size-4 text-green-600" />
+                  Voucher của bạn
+                </label>
+                {claimedVouchersList.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-gray-200 p-3 bg-gray-50/50 text-center">
+                    <p className="text-xs text-gray-400 mb-1.5">Bạn chưa có voucher nào được lưu.</p>
+                    <a
+                      href={reactHomePath}
+                      className="text-xs font-bold text-green-600 hover:text-green-700 inline-flex items-center gap-1"
+                    >
+                      Về trang chủ nhận voucher &rarr;
+                    </a>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <select
+                      value={appliedVoucher ? appliedVoucher.discount_code : ''}
+                      onChange={(e) => {
+                        const code = e.target.value;
+                        if (!code) {
+                          setAppliedVoucher(null);
+                          setVoucherError(null);
+                          return;
+                        }
+                        const selected = claimedVouchersList.find((v) => v.discount_code === code);
+                        if (selected) {
+                          if (subtotal < (selected.min_order_amount || 0)) {
+                            setVoucherError(`Đơn hàng chưa đạt giá trị tối thiểu ${toCurrencyTextFromNumber(selected.min_order_amount)}`);
+                            setAppliedVoucher(null);
+                          } else {
+                            setAppliedVoucher(selected);
+                            setVoucherError(null);
+                          }
+                        }
+                      }}
+                      className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-green-500 bg-white"
+                    >
+                      <option value="">-- Chọn voucher sỉ --</option>
+                      {claimedVouchersList.map((v) => {
+                        const isUnderMin = subtotal < (v.min_order_amount || 0);
+                        return (
+                          <option key={v.discount_code} value={v.discount_code} disabled={isUnderMin}>
+                            {v.discount_code} - Giảm {toCurrencyTextFromNumber(v.discount_value)} {isUnderMin ? '(Chưa đủ điều kiện)' : ''}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    {voucherError && (
+                      <p className="text-xs text-red-500 font-medium">{voucherError}</p>
+                    )}
+                    {appliedVoucher && !voucherError && (
+                      <div className="rounded-xl border border-green-100 bg-green-50/50 p-2.5 flex items-center justify-between text-xs text-green-800">
+                        <div className="pr-2">
+                          <p className="font-bold">{appliedVoucher.title}</p>
+                          <p className="text-gray-500">{appliedVoucher.description}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAppliedVoucher(null);
+                            setVoucherError(null);
+                          }}
+                          className="text-xs font-bold text-red-500 hover:text-red-700 bg-white border border-red-100 rounded-lg px-2 py-1 transition shrink-0"
+                        >
+                          Gỡ mã
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div className="space-y-3 text-sm text-gray-600">
                 <div className="flex items-center justify-between">
                   <span>Tổng tiền hàng</span>
@@ -2179,6 +2429,15 @@ export function CheckoutPage() {
                   <span>Giảm giá vận chuyển</span>
                   <span>- {toCurrencyTextFromNumber(shippingDiscount)}</span>
                 </div>
+                {voucherDiscount > 0 && (
+                  <div className="flex items-center justify-between text-green-700 font-semibold bg-green-50/60 px-3 py-2 rounded-xl border border-green-100">
+                    <span className="flex items-center gap-1.5 text-xs">
+                      <Percent className="size-4 text-green-600" />
+                      Voucher sỉ ({appliedVoucher?.discount_code})
+                    </span>
+                    <span className="text-xs">- {toCurrencyTextFromNumber(voucherDiscount)}</span>
+                  </div>
+                )}
                 {weatherSurcharge > 0 && (
                   <div className="flex items-center justify-between text-amber-700 font-semibold bg-amber-50/60 px-3 py-2 rounded-xl border border-amber-100">
                     <span className="flex items-center gap-1.5 text-xs">
@@ -2336,6 +2595,37 @@ export function CheckoutPage() {
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Location Permission Prompt Modal */}
+      {showLocationPrompt && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="relative w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl overflow-hidden border border-gray-100 text-center">
+            <div className="mx-auto my-3 flex h-16 w-16 items-center justify-center rounded-full bg-green-50 animate-pulse">
+              <MapPin className="size-8 text-green-600" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Sử dụng vị trí của bạn?</h3>
+            <p className="text-xs text-gray-500 mb-6 leading-relaxed">
+              Freso cần vị trí của bạn để tự động tìm chi nhánh gần nhất, định vị địa chỉ giao hàng và tính toán thời tiết chính xác cho lộ trình bảo quản lạnh.
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={handleAllowLocation}
+                className="w-full rounded-full bg-green-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-700 shadow-sm transition-all"
+              >
+                Đồng ý chia sẻ vị trí
+              </button>
+              <button
+                type="button"
+                onClick={handleDenyLocation}
+                className="w-full rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all"
+              >
+                Bỏ qua, dùng vị trí mặc định
+              </button>
             </div>
           </div>
         </div>

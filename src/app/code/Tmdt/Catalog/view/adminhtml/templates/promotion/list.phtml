@@ -1,0 +1,211 @@
+<?php
+/** @var \Tmdt\Catalog\Block\Adminhtml\Promotion $block */
+$rows = $block->getRows();
+$saveUrl = $block->getSaveUrl();
+?>
+<div class="promotion-management-wrapper" style="font-family: Arial, sans-serif; margin-top: 15px;">
+    <!-- Create Promotion Section -->
+    <div class="promo-card" style="background: #fff; border: 1px solid #d6d6d6; border-radius: 8px; padding: 20px; margin-bottom: 25px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <h3 style="margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 8px; font-weight: bold; color: #333;">
+            <span style="font-size: 18px; vertical-align: middle;">➕ Thêm Banner / Khuyến mãi mới</span>
+        </h3>
+        <form action="<?= $block->escapeUrl($saveUrl) ?>" method="post" id="create-promo-form">
+            <?= $block->getBlockHtml('formkey') ?>
+            <div style="display: grid; grid-template-cols: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px;">
+                <div>
+                    <label style="display: block; font-weight: bold; font-size: 12px; margin-bottom: 5px;">Tiêu đề *</label>
+                    <input type="text" name="title" required style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" placeholder="Ví dụ: Mùa vụ sầu riêng Ri6">
+                </div>
+                <div>
+                    <label style="display: block; font-weight: bold; font-size: 12px; margin-bottom: 5px;">Ảnh URL / Đường dẫn *</label>
+                    <input type="text" name="image" required style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" placeholder="https://unsplash.com/... hoặc /media/...">
+                </div>
+                <div>
+                    <label style="display: block; font-weight: bold; font-size: 12px; margin-bottom: 5px;">Nhãn nút bấm *</label>
+                    <input type="text" name="button_text" required style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" placeholder="Xem ngay, Nhận voucher...">
+                </div>
+                <div>
+                    <label style="display: block; font-weight: bold; font-size: 12px; margin-bottom: 5px;">Hành động nút *</label>
+                    <input type="text" name="button_action" required style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" placeholder="category:rau-cu-qua, coupon:CODE, register">
+                </div>
+                <div>
+                    <label style="display: block; font-weight: bold; font-size: 12px; margin-bottom: 5px;">Loại hiển thị *</label>
+                    <select name="type" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
+                        <option value="banner">Slide Banner chính (Center Banner)</option>
+                        <option value="voucher">Thẻ Voucher (Vouchers list)</option>
+                        <option value="seasonal">Khuyến mãi mùa vụ (Right Sidebar Cards)</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="display: block; font-weight: bold; font-size: 12px; margin-bottom: 5px;">Mã giảm giá (Nếu có)</label>
+                    <input type="text" name="discount_code" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" placeholder="Ví dụ: FRESO50">
+                </div>
+                <div>
+                    <label style="display: block; font-weight: bold; font-size: 12px; margin-bottom: 5px;">Giá trị giảm (VND / Số tiền)</label>
+                    <input type="number" step="0.01" name="discount_value" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" placeholder="50000">
+                </div>
+                <div>
+                    <label style="display: block; font-weight: bold; font-size: 12px; margin-bottom: 5px;">Đơn tối thiểu (VND)</label>
+                    <input type="number" step="0.01" name="min_order_amount" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" placeholder="1000000">
+                </div>
+                <div>
+                    <label style="display: block; font-weight: bold; font-size: 12px; margin-bottom: 5px;">Trạng thái</label>
+                    <select name="is_active" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
+                        <option value="1">Kích hoạt (Hoạt động)</option>
+                        <option value="0">Tạm ngưng (Ẩn)</option>
+                    </select>
+                </div>
+            </div>
+            <div style="margin-top: 15px;">
+                <label style="display: block; font-weight: bold; font-size: 12px; margin-bottom: 5px;">Mô tả chi tiết *</label>
+                <textarea name="description" required rows="2" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" placeholder="Nội dung hiển thị chương trình khuyến mãi..."></textarea>
+            </div>
+            <div style="margin-top: 15px; text-align: right;">
+                <button type="submit" class="action-primary" style="padding: 8px 20px; font-weight: bold; border-radius: 4px; cursor: pointer;">Tạo mới khuyến mãi</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Promotions List Grid -->
+    <div style="background: #fff; border: 1px solid #d6d6d6; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <h3 style="margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 8px; font-weight: bold; color: #333; display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 18px;">📋 Danh sách Banner & Khuyến mãi (<?= count($rows) ?> bản ghi)</span>
+        </h3>
+        
+        <?php if (empty($rows)): ?>
+            <div style="padding: 20px; text-align: center; color: #777;">Chưa có bản ghi khuyến mãi nào trong cơ sở dữ liệu.</div>
+        <?php else: ?>
+            <div style="overflow-x: auto;">
+                <table class="data-table" style="width: 100%; border-collapse: collapse; font-size: 12px; min-width: 900px;">
+                    <thead>
+                        <tr style="background: #f5f5f5; border-bottom: 2px solid #dfdfdf; text-align: left;">
+                            <th style="padding: 10px; font-weight: bold; width: 60px;">ID</th>
+                            <th style="padding: 10px; font-weight: bold; width: 140px;">Loại / Trạng thái</th>
+                            <th style="padding: 10px; font-weight: bold; width: 220px;">Tiêu đề / Ảnh</th>
+                            <th style="padding: 10px; font-weight: bold;">Mô tả khuyến mãi</th>
+                            <th style="padding: 10px; font-weight: bold; width: 180px;">Nút bấm / Hành động</th>
+                            <th style="padding: 10px; font-weight: bold; width: 160px;">Voucher / Đơn tối thiểu</th>
+                            <th style="padding: 10px; font-weight: bold; width: 150px; text-align: center;">Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($rows as $row): ?>
+                            <tr style="border-bottom: 1px solid #e0e0e0; vertical-align: top;">
+                                <td style="padding: 10px;"><?= $row['id'] ?></td>
+                                <td style="padding: 10px;">
+                                    <form action="<?= $block->escapeUrl($saveUrl) ?>" method="post" style="margin: 0;">
+                                        <?= $block->getBlockHtml('formkey') ?>
+                                        <input type="hidden" name="id" value="<?= $row['id'] ?>">
+                                        <input type="hidden" name="title" value="<?= $block->escapeHtmlAttr($row['title']) ?>">
+                                        <input type="hidden" name="description" value="<?= $block->escapeHtmlAttr($row['description']) ?>">
+                                        <input type="hidden" name="image" value="<?= $block->escapeHtmlAttr($row['image']) ?>">
+                                        <input type="hidden" name="button_text" value="<?= $block->escapeHtmlAttr($row['button_text']) ?>">
+                                        <input type="hidden" name="button_action" value="<?= $block->escapeHtmlAttr($row['button_action']) ?>">
+                                        <input type="hidden" name="discount_code" value="<?= $block->escapeHtmlAttr($row['discount_code']) ?>">
+                                        <input type="hidden" name="discount_value" value="<?= $row['discount_value'] ?>">
+                                        <input type="hidden" name="min_order_amount" value="<?= $row['min_order_amount'] ?>">
+                                        
+                                        <select name="type" onchange="this.form.submit()" style="width: 100%; padding: 4px; margin-bottom: 5px; border-radius: 4px; border: 1px solid #ccc;">
+                                            <option value="banner" <?= $row['type'] === 'banner' ? 'selected' : '' ?>>Slide Banner</option>
+                                            <option value="voucher" <?= $row['type'] === 'voucher' ? 'selected' : '' ?>>Voucher</option>
+                                            <option value="seasonal" <?= $row['type'] === 'seasonal' ? 'selected' : '' ?>>Mùa vụ</option>
+                                        </select>
+                                        
+                                        <select name="is_active" onchange="this.form.submit()" style="width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #ccc; font-weight: bold; color: <?= $row['is_active'] ? 'green' : 'red' ?>;">
+                                            <option value="1" <?= $row['is_active'] ? 'selected' : '' ?>>Hoạt động</option>
+                                            <option value="0" <?= !$row['is_active'] ? 'selected' : '' ?>>Đang ẩn</option>
+                                        </select>
+                                    </form>
+                                </td>
+                                <td style="padding: 10px;">
+                                    <form action="<?= $block->escapeUrl($saveUrl) ?>" method="post" style="margin: 0;">
+                                        <?= $block->getBlockHtml('formkey') ?>
+                                        <input type="hidden" name="id" value="<?= $row['id'] ?>">
+                                        <input type="hidden" name="type" value="<?= $row['type'] ?>">
+                                        <input type="hidden" name="is_active" value="<?= $row['is_active'] ?>">
+                                        <input type="hidden" name="description" value="<?= $block->escapeHtmlAttr($row['description']) ?>">
+                                        <input type="hidden" name="button_text" value="<?= $block->escapeHtmlAttr($row['button_text']) ?>">
+                                        <input type="hidden" name="button_action" value="<?= $block->escapeHtmlAttr($row['button_action']) ?>">
+                                        <input type="hidden" name="discount_code" value="<?= $block->escapeHtmlAttr($row['discount_code']) ?>">
+                                        <input type="hidden" name="discount_value" value="<?= $row['discount_value'] ?>">
+                                        <input type="hidden" name="min_order_amount" value="<?= $row['min_order_amount'] ?>">
+
+                                        <input type="text" name="title" value="<?= $block->escapeHtmlAttr($row['title']) ?>" style="width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #ccc; font-weight: bold; margin-bottom: 5px;" placeholder="Tiêu đề">
+                                        <input type="text" name="image" value="<?= $block->escapeHtmlAttr($row['image']) ?>" style="width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #ccc; font-size: 10px;" placeholder="Ảnh URL">
+                                        <button type="submit" style="display: none;"></button>
+                                    </form>
+                                    <?php if ($row['image']): ?>
+                                        <div style="margin-top: 5px;"><img src="<?= $block->escapeUrl($row['image']) ?>" alt="Preview" style="max-height: 40px; max-width: 120px; border-radius: 4px; border: 1px solid #eee; object-fit: cover;" /></div>
+                                    <?php endif; ?>
+                                </td>
+                                <td style="padding: 10px;">
+                                    <form action="<?= $block->escapeUrl($saveUrl) ?>" method="post" style="margin: 0;">
+                                        <?= $block->getBlockHtml('formkey') ?>
+                                        <input type="hidden" name="id" value="<?= $row['id'] ?>">
+                                        <input type="hidden" name="type" value="<?= $row['type'] ?>">
+                                        <input type="hidden" name="is_active" value="<?= $row['is_active'] ?>">
+                                        <input type="hidden" name="title" value="<?= $block->escapeHtmlAttr($row['title']) ?>">
+                                        <input type="hidden" name="image" value="<?= $block->escapeHtmlAttr($row['image']) ?>">
+                                        <input type="hidden" name="button_text" value="<?= $block->escapeHtmlAttr($row['button_text']) ?>">
+                                        <input type="hidden" name="button_action" value="<?= $block->escapeHtmlAttr($row['button_action']) ?>">
+                                        <input type="hidden" name="discount_code" value="<?= $block->escapeHtmlAttr($row['discount_code']) ?>">
+                                        <input type="hidden" name="discount_value" value="<?= $row['discount_value'] ?>">
+                                        <input type="hidden" name="min_order_amount" value="<?= $row['min_order_amount'] ?>">
+
+                                        <textarea name="description" rows="3" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #ccc; font-size: 11px; resize: vertical;"><?= $block->escapeHtml($row['description']) ?></textarea>
+                                        <button type="submit" style="display: none;"></button>
+                                    </form>
+                                </td>
+                                <td style="padding: 10px;">
+                                    <form action="<?= $block->escapeUrl($saveUrl) ?>" method="post" style="margin: 0;">
+                                        <?= $block->getBlockHtml('formkey') ?>
+                                        <input type="hidden" name="id" value="<?= $row['id'] ?>">
+                                        <input type="hidden" name="type" value="<?= $row['type'] ?>">
+                                        <input type="hidden" name="is_active" value="<?= $row['is_active'] ?>">
+                                        <input type="hidden" name="title" value="<?= $block->escapeHtmlAttr($row['title']) ?>">
+                                        <input type="hidden" name="image" value="<?= $block->escapeHtmlAttr($row['image']) ?>">
+                                        <input type="hidden" name="description" value="<?= $block->escapeHtmlAttr($row['description']) ?>">
+                                        <input type="hidden" name="discount_code" value="<?= $block->escapeHtmlAttr($row['discount_code']) ?>">
+                                        <input type="hidden" name="discount_value" value="<?= $row['discount_value'] ?>">
+                                        <input type="hidden" name="min_order_amount" value="<?= $row['min_order_amount'] ?>">
+
+                                        <input type="text" name="button_text" value="<?= $block->escapeHtmlAttr($row['button_text']) ?>" style="width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #ccc; margin-bottom: 5px;" placeholder="Nhãn nút">
+                                        <input type="text" name="button_action" value="<?= $block->escapeHtmlAttr($row['button_action']) ?>" style="width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #ccc;" placeholder="Hành động">
+                                        <button type="submit" style="display: none;"></button>
+                                    </form>
+                                </td>
+                                <td style="padding: 10px;">
+                                    <form action="<?= $block->escapeUrl($saveUrl) ?>" method="post" style="margin: 0;">
+                                        <?= $block->getBlockHtml('formkey') ?>
+                                        <input type="hidden" name="id" value="<?= $row['id'] ?>">
+                                        <input type="hidden" name="type" value="<?= $row['type'] ?>">
+                                        <input type="hidden" name="is_active" value="<?= $row['is_active'] ?>">
+                                        <input type="hidden" name="title" value="<?= $block->escapeHtmlAttr($row['title']) ?>">
+                                        <input type="hidden" name="image" value="<?= $block->escapeHtmlAttr($row['image']) ?>">
+                                        <input type="hidden" name="description" value="<?= $block->escapeHtmlAttr($row['description']) ?>">
+                                        <input type="hidden" name="button_text" value="<?= $block->escapeHtmlAttr($row['button_text']) ?>">
+                                        <input type="hidden" name="button_action" value="<?= $block->escapeHtmlAttr($row['button_action']) ?>">
+
+                                        <input type="text" name="discount_code" value="<?= $block->escapeHtmlAttr($row['discount_code']) ?>" style="width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #ccc; margin-bottom: 5px;" placeholder="Mã giảm">
+                                        <input type="number" step="0.01" name="discount_value" value="<?= $row['discount_value'] ?>" style="width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #ccc; margin-bottom: 5px;" placeholder="Giá trị">
+                                        <input type="number" step="0.01" name="min_order_amount" value="<?= $row['min_order_amount'] ?>" style="width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #ccc;" placeholder="Đơn tối thiểu">
+                                        <button type="submit" style="display: none;"></button>
+                                    </form>
+                                </td>
+                                <td style="padding: 10px; text-align: center;">
+                                    <div style="display: flex; flex-direction: column; gap: 5px; justify-content: center; height: 100%;">
+                                        <button type="button" onclick="this.closest('tr').querySelectorAll('form').forEach(f => f.dispatchEvent(new Event('submit', {cancelable:true})))" class="action-secondary" style="padding: 5px; font-size: 11px; cursor: pointer; font-weight: bold; background: #ebf3fc; border: 1px solid #bcd8f4; color: #1059a4; border-radius: 4px;">💾 Lưu dòng</button>
+                                        <a href="<?= $block->escapeUrl($block->getDeleteUrl((int)$row['id'])) ?>" onclick="return confirm('Bạn chắc chắn muốn xóa khuyến mãi này?')" class="action-delete" style="padding: 5px; font-size: 11px; cursor: pointer; font-weight: bold; background: #fdf2f2; border: 1px solid #f8baba; color: #a94442; border-radius: 4px; text-decoration: none; display: inline-block;">🗑️ Xóa</a>
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <div style="margin-top: 10px; color: #777; font-size: 11px;">
+                💡 *Mẹo: Bạn có thể sửa trực tiếp thông tin trên các trường dữ liệu ở bảng và nhấn nút <strong>Lưu dòng</strong> hoặc nhấn Enter trên trường đó để cập nhật.*
+            </div>
+        <?php endif; ?>
+    </div>
+</div>

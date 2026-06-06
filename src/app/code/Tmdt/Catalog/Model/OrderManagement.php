@@ -412,16 +412,24 @@ class OrderManagement implements OrderManagementInterface
     /**
      * @inheritDoc
      */
-    public function confirmDirectPayment(string $orderCode): bool
+    public function updateOrderFulfillment(string $orderCode, string $status): bool
     {
         $sellerId = (int)$this->getSellerIdFromSession();
         $connection = $this->resourceConnection->getConnection();
         $oTable = $connection->getTableName(self::TABLE);
         $oiTable = $connection->getTableName('tmdt_order_items');
 
+        // Validate target status
+        $allowedStatuses = ['preparing', 'shipping', 'delivered'];
+        if (!in_array($status, $allowedStatuses, true)) {
+            throw new \Magento\Framework\Exception\LocalizedException(
+                __('Trạng thái "%1" không hợp lệ. Chỉ chấp nhận: preparing, shipping, delivered.', $status)
+            );
+        }
+
         // Find the order
         $order = $connection->fetchRow(
-            "SELECT id, status, payment_method, order_code FROM {$oTable} WHERE order_code = ? LIMIT 1",
+            "SELECT id, status, order_code, parent_id FROM {$oTable} WHERE order_code = ? LIMIT 1",
             [$orderCode]
         );
 
@@ -430,7 +438,7 @@ class OrderManagement implements OrderManagementInterface
         }
 
         $orderId = (int)$order['id'];
-        
+
         // Verify this seller owns at least one item in the order
         $itemCount = (int)$connection->fetchOne(
             "SELECT COUNT(*) FROM {$oiTable} WHERE order_id = ? AND seller_id = ?",
@@ -438,23 +446,87 @@ class OrderManagement implements OrderManagementInterface
         );
 
         if ($itemCount === 0) {
-            throw new \Magento\Framework\Exception\LocalizedException(__('Bạn không có quyền xác nhận thanh toán cho đơn hàng này.'));
+            throw new \Magento\Framework\Exception\LocalizedException(
+                __('Bạn không có quyền cập nhật trạng thái cho đơn hàng này.')
+            );
         }
 
-        if ($order['payment_method'] !== 'direct_payment') {
-            throw new \Magento\Framework\Exception\LocalizedException(__('Đơn hàng không thuộc phương thức thanh toán trực tiếp.'));
+        // Validate status transition
+        $currentStatus = strtolower(trim((string)$order['status']));
+        $validTransitions = [
+            'preparing' => ['paid', 'processing'],
+            'shipping'  => ['preparing'],
+            'delivered' => ['shipping'],
+        ];
+
+        if (!in_array($currentStatus, $validTransitions[$status] ?? [], true)) {
+            $statusLabels = [
+                'paid' => 'Đã thanh toán',
+                'processing' => 'Đang xử lý',
+                'preparing' => 'Đang chuẩn bị',
+                'shipping' => 'Đang giao hàng',
+                'delivered' => 'Đã giao hàng',
+            ];
+            throw new \Magento\Framework\Exception\LocalizedException(
+                __('Không thể chuyển từ trạng thái "%1" sang "%2".', $statusLabels[$currentStatus] ?? $currentStatus, $statusLabels[$status] ?? $status)
+            );
         }
 
-        if ($order['status'] === 'paid') {
-            return true; // Already paid
-        }
+        // Status label for log comments
+        $commentMap = [
+            'preparing' => 'Người bán đã xác nhận chuẩn bị đơn hàng.',
+            'shipping'  => 'Đơn hàng đang được giao đến khách hàng.',
+            'delivered' => 'Đơn hàng đã được giao thành công.',
+        ];
+        $comment = $commentMap[$status] ?? "Đơn hàng chuyển sang trạng thái {$status}";
 
-        return $this->orderProcessor->confirmOrder(
-            $order['order_code'],
-            'COD-PAID-' . $order['order_code'],
-            'paid',
-            'Người bán xác nhận đã nhận tiền mặt từ khách hàng trực tiếp.'
+        // Update order status
+        $connection->update(
+            $oTable,
+            ['status' => $status],
+            ['id = ?' => $orderId]
         );
+
+        // Log status history
+        $connection->insert(
+            $connection->getTableName('tmdt_order_status_history'),
+            [
+                'order_code' => $orderCode,
+                'order_id'   => $orderId,
+                'status'     => $status,
+                'comment'    => $comment,
+                'created_at' => date('Y-m-d H:i:s'),
+            ]
+        );
+
+        // Also update child orders if this is a parent order
+        $childOrders = $connection->fetchAll(
+            "SELECT id, order_code FROM {$oTable} WHERE parent_id = ?",
+            [$orderId]
+        );
+
+        if ($childOrders) {
+            $connection->update(
+                $oTable,
+                ['status' => $status],
+                ['parent_id = ?' => $orderId]
+            );
+
+            foreach ($childOrders as $childOrder) {
+                $connection->insert(
+                    $connection->getTableName('tmdt_order_status_history'),
+                    [
+                        'order_code' => $childOrder['order_code'],
+                        'order_id'   => (int)$childOrder['id'],
+                        'status'     => $status,
+                        'comment'    => "Đơn hàng con được cập nhật theo đơn hàng tổng {$orderCode}: {$comment}",
+                        'created_at' => date('Y-m-d H:i:s'),
+                    ]
+                );
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -495,3 +567,4 @@ class OrderManagement implements OrderManagementInterface
         throw new \Magento\Framework\Exception\LocalizedException(__('Phiên làm việc hết hạn. Vui lòng đăng nhập lại.'));
     }
 }
+

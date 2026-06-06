@@ -111,5 +111,11 @@
             <resource ref="anonymous"/>
         </resources>
     </route>
+    <route url="/V1/tmdt-catalog/promotions" method="GET">
+        <service class="Tmdt\Catalog\Api\PromotionManagementInterface" method="getPromotions"/>
+        <resources>
+            <resource ref="anonymous"/>
+        </resources>
+    </route>
     <!-- NOTE: Webhook is handled by Controller at /tmdt/webhook/sepay (not REST API) -->
 </routes>

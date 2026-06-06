@@ -109,6 +109,24 @@
             <column name="status"/>
         </index>
     </table>
+
+    <table name="tmdt_promotions" resource="default" engine="innodb" comment="Tmdt Promotions and Banners">
+        <column xsi:type="int" name="id" padding="10" unsigned="true" nullable="false" identity="true" comment="ID"/>
+        <column xsi:type="varchar" name="title" length="255" nullable="false" comment="Title"/>
+        <column xsi:type="text" name="description" nullable="false" comment="Description"/>
+        <column xsi:type="varchar" name="image" length="255" nullable="false" comment="Image Path/URL"/>
+        <column xsi:type="varchar" name="button_text" length="64" nullable="false" comment="Button Text"/>
+        <column xsi:type="varchar" name="button_action" length="255" nullable="false" comment="Button Action"/>
+        <column xsi:type="varchar" name="type" length="32" nullable="false" comment="Type: banner, voucher, seasonal"/>
+        <column xsi:type="varchar" name="discount_code" length="32" nullable="true" comment="Discount Code"/>
+        <column xsi:type="decimal" name="discount_value" scale="2" precision="12" nullable="true" comment="Discount Value"/>
+        <column xsi:type="decimal" name="min_order_amount" scale="2" precision="12" nullable="true" comment="Min Order Amount"/>
+        <column xsi:type="smallint" name="is_active" padding="5" unsigned="true" nullable="false" default="1" comment="Is Active"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="id"/>
+        </constraint>
+    </table>
 </schema>
 
 

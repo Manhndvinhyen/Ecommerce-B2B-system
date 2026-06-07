@@ -29,6 +29,8 @@ const B2B_CATEGORIES = [
   'Tiện ích bếp'
 ];
 
+const SAMPLE_PRODUCT_SKUS = new Set(['CA-HOI-NORWAY', 'CAI-THAO-DALAT']);
+
 interface Variant {
   name: string;
   priceDelta: number;
@@ -125,6 +127,13 @@ export function SellerProductManager() {
     });
 
     const responseText = await response.text().catch(() => '');
+    console.info('[FresoSellerProduct] Catalog mutation response.', {
+      url,
+      method,
+      ok: response.ok,
+      status: response.status,
+      responsePreview: responseText.slice(0, 500),
+    });
     if (!response.ok) {
       throw new Error(responseText || 'Không thể đồng bộ sản phẩm lên website.');
     }
@@ -137,6 +146,9 @@ export function SellerProductManager() {
     setTimeout(() => setToast(null), 3500);
   };
 
+  const removeSampleProducts = (items: Product[]) =>
+    items.filter((item) => !SAMPLE_PRODUCT_SKUS.has(String(item.sku || '').trim().toUpperCase()));
+
   // Load products database (Magento API + localStorage fallback for Vite HMR sandbox)
   const loadProducts = async () => {
     setIsLoading(true);
@@ -147,7 +159,13 @@ export function SellerProductManager() {
     let customLocalProducts: Product[] = [];
     if (customLocalRaw) {
       try {
-        customLocalProducts = JSON.parse(customLocalRaw);
+        const parsedProducts = JSON.parse(customLocalRaw);
+        customLocalProducts = Array.isArray(parsedProducts) ? removeSampleProducts(parsedProducts) : [];
+        if (customLocalProducts.length > 0) {
+          window.localStorage.setItem('freso_custom_products', JSON.stringify(customLocalProducts));
+        } else {
+          window.localStorage.removeItem('freso_custom_products');
+        }
       } catch (e) {
         customLocalProducts = [];
       }
@@ -168,10 +186,13 @@ export function SellerProductManager() {
           const apiProducts = await response.json();
           if (Array.isArray(apiProducts)) {
             // Merge API products with local mock products (avoiding duplicates by SKU)
-            const apiSkus = new Set(apiProducts.map((p) => p.sku));
+            const realApiProducts = apiProducts.filter(
+              (p) => !SAMPLE_PRODUCT_SKUS.has(String(p.sku || '').trim().toUpperCase())
+            );
+            const apiSkus = new Set(realApiProducts.map((p) => p.sku));
             const filteredLocal = customLocalProducts.filter((p) => !apiSkus.has(p.sku));
             
-            const merged = [...apiProducts.map((p) => {
+            const merged = [...realApiProducts.map((p) => {
               const localMatch = customLocalProducts.find((lp) => lp.sku === p.sku);
               return {
                 id: String(p.id),
@@ -207,44 +228,7 @@ export function SellerProductManager() {
       }
     }
 
-    // Fallback display
-    if (customLocalProducts.length === 0) {
-      // Default seed data
-      const defaultSeed: Product[] = [
-        {
-          id: 'SEED-1',
-          sku: 'CA-HOI-NORWAY',
-          name: 'Cá Hồi Na Uy Cắt Lát Khay 500g',
-          price: 185000,
-          special_price: 165000,
-          qty: 240,
-          categoryLabel: 'Thuỷ hải sản',
-          unit: 'khay',
-          image: 'https://images.unsplash.com/photo-1615141982883-c7ad0e69fd62?w=500&h=500&fit=crop',
-          variants: [
-            { name: 'Khay 500g', priceDelta: 0, qty: 100 },
-            { name: 'Khay 1kg', priceDelta: 160000, qty: 140 }
-          ],
-          isCustom: true
-        },
-        {
-          id: 'SEED-2',
-          sku: 'CAI-THAO-DALAT',
-          name: 'Cải Thảo Sạch Đà Lạt (Bao 30kg)',
-          price: 90000,
-          qty: 85,
-          categoryLabel: 'Rau củ quả',
-          unit: 'bao',
-          image: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&h=500&fit=crop',
-          variants: [],
-          isCustom: true
-        }
-      ];
-      window.localStorage.setItem('freso_custom_products', JSON.stringify(defaultSeed));
-      setProducts(defaultSeed);
-    } else {
-      setProducts(customLocalProducts);
-    }
+    setProducts(customLocalProducts);
     setIsLoading(false);
   };
 
@@ -254,8 +238,13 @@ export function SellerProductManager() {
 
   // Save changes to localStorage
   const saveLocalProducts = (updatedList: Product[]) => {
-    window.localStorage.setItem('freso_custom_products', JSON.stringify(updatedList));
-    setProducts(updatedList);
+    const cleanedList = removeSampleProducts(updatedList);
+    if (cleanedList.length > 0) {
+      window.localStorage.setItem('freso_custom_products', JSON.stringify(cleanedList));
+    } else {
+      window.localStorage.removeItem('freso_custom_products');
+    }
+    setProducts(cleanedList);
   };
 
   // Open create form modal

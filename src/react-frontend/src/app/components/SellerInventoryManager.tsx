@@ -50,6 +50,8 @@ interface InventoryLog {
   created_at: string;
 }
 
+const SAMPLE_PRODUCT_SKUS = new Set(['CA-HOI-NORWAY', 'CAI-THAO-DALAT']);
+
 export function SellerInventoryManager() {
   const [products, setProducts] = useState<Product[]>([]);
   const [logs, setLogs] = useState<InventoryLog[]>([]);
@@ -70,6 +72,12 @@ export function SellerInventoryManager() {
     setTimeout(() => setToast(null), 3500);
   };
 
+  const removeSampleProducts = (items: Product[]) =>
+    items.filter((item) => !SAMPLE_PRODUCT_SKUS.has(String(item.sku || '').trim().toUpperCase()));
+
+  const removeSampleLogs = (items: InventoryLog[]) =>
+    items.filter((item) => !SAMPLE_PRODUCT_SKUS.has(String(item.sku || '').trim().toUpperCase()));
+
   // Sync databases from localStorage + Magento REST API fallbacks
   const syncData = async () => {
     setIsLoading(true);
@@ -80,7 +88,13 @@ export function SellerInventoryManager() {
     let customLocalProducts: Product[] = [];
     if (customLocalRaw) {
       try {
-        customLocalProducts = JSON.parse(customLocalRaw);
+        const parsedProducts = JSON.parse(customLocalRaw);
+        customLocalProducts = Array.isArray(parsedProducts) ? removeSampleProducts(parsedProducts) : [];
+        if (customLocalProducts.length > 0) {
+          window.localStorage.setItem('freso_custom_products', JSON.stringify(customLocalProducts));
+        } else {
+          window.localStorage.removeItem('freso_custom_products');
+        }
       } catch (e) {
         customLocalProducts = [];
       }
@@ -91,7 +105,13 @@ export function SellerInventoryManager() {
     let localLogs: InventoryLog[] = [];
     if (localLogsRaw) {
       try {
-        localLogs = JSON.parse(localLogsRaw);
+        const parsedLogs = JSON.parse(localLogsRaw);
+        localLogs = Array.isArray(parsedLogs) ? removeSampleLogs(parsedLogs) : [];
+        if (localLogs.length > 0) {
+          window.localStorage.setItem('freso_inventory_logs', JSON.stringify(localLogs));
+        } else {
+          window.localStorage.removeItem('freso_inventory_logs');
+        }
       } catch (e) {
         localLogs = [];
       }
@@ -122,11 +142,15 @@ export function SellerInventoryManager() {
           const apiLogs = await lResponse.json();
 
           if (Array.isArray(apiProducts) && Array.isArray(apiLogs)) {
-            const apiSkus = new Set(apiProducts.map((p) => p.sku));
+            const realApiProducts = apiProducts.filter(
+              (p) => !SAMPLE_PRODUCT_SKUS.has(String(p.sku || '').trim().toUpperCase())
+            );
+            const realApiLogs = removeSampleLogs(apiLogs);
+            const apiSkus = new Set(realApiProducts.map((p) => p.sku));
             const filteredLocal = customLocalProducts.filter((p) => !apiSkus.has(p.sku));
 
             const merged = [
-              ...apiProducts.map((p) => {
+              ...realApiProducts.map((p) => {
                 const localMatch = customLocalProducts.find((lp) => lp.sku === p.sku);
                 return {
                   ...localMatch,
@@ -142,7 +166,7 @@ export function SellerInventoryManager() {
 
             setProducts(merged);
 
-            setLogs(apiLogs.map((l) => ({
+            setLogs(realApiLogs.map((l) => ({
               log_id: String(l.log_id),
               sku: l.sku,
               action_type: l.action_type,
@@ -159,54 +183,6 @@ export function SellerInventoryManager() {
       } catch (e) {
         // API fallback
       }
-    }
-
-    // Local Storage Mock fallback
-    if (customLocalProducts.length === 0) {
-      // Default seeds
-      customLocalProducts = [
-        {
-          sku: 'CA-HOI-NORWAY',
-          name: 'Cá Hồi Na Uy Cắt Lát Khay 500g',
-          qty: 240,
-          unit: 'khay',
-          categoryLabel: 'Thuỷ hải sản',
-          image: 'https://images.unsplash.com/photo-1615141982883-c7ad0e69fd62?w=500&h=500&fit=crop'
-        },
-        {
-          sku: 'CAI-THAO-DALAT',
-          name: 'Cải Thảo Sạch Đà Lạt (Bao 30kg)',
-          qty: 8, // Low Stock Trigger seed
-          unit: 'bao',
-          categoryLabel: 'Rau củ quả',
-          image: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&h=500&fit=crop'
-        }
-      ];
-      window.localStorage.setItem('freso_custom_products', JSON.stringify(customLocalProducts));
-    }
-
-    if (localLogs.length === 0) {
-      localLogs = [
-        {
-          log_id: 'LOG-1',
-          sku: 'CA-HOI-NORWAY',
-          action_type: 'inbound',
-          qty_change: 150,
-          qty_after: 240,
-          note: 'Nhập kho hàng sỉ từ cảng Cát Bà Hải Phòng',
-          created_at: '2026-06-01 10:45:00'
-        },
-        {
-          log_id: 'LOG-2',
-          sku: 'CAI-THAO-DALAT',
-          action_type: 'outbound',
-          qty_change: -30,
-          qty_after: 8,
-          note: 'Xuất hàng giao sỉ cho Lotte Mart',
-          created_at: '2026-06-01 09:12:00'
-        }
-      ];
-      window.localStorage.setItem('freso_inventory_logs', JSON.stringify(localLogs));
     }
 
     setProducts(customLocalProducts);
@@ -280,13 +256,22 @@ export function SellerInventoryManager() {
     }
 
     // Local Sync Fallback
-    const updatedProducts = products.map((p) => 
+    const updatedProducts = removeSampleProducts(products.map((p) => 
       p.sku === selectedProduct.sku ? { ...p, qty: finalQty } : p
-    );
-    window.localStorage.setItem('freso_custom_products', JSON.stringify(updatedProducts));
+    ));
+    if (updatedProducts.length > 0) {
+      window.localStorage.setItem('freso_custom_products', JSON.stringify(updatedProducts));
+    } else {
+      window.localStorage.removeItem('freso_custom_products');
+    }
     setProducts(updatedProducts);
 
     // Save adjustment log
+    if (SAMPLE_PRODUCT_SKUS.has(String(selectedProduct.sku || '').trim().toUpperCase())) {
+      setIsModalOpen(false);
+      return;
+    }
+
     const newLog: InventoryLog = {
       log_id: `LOG-${Date.now()}`,
       sku: selectedProduct.sku,
@@ -297,8 +282,12 @@ export function SellerInventoryManager() {
       created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
     };
 
-    const updatedLogs = [newLog, ...logs];
-    window.localStorage.setItem('freso_inventory_logs', JSON.stringify(updatedLogs));
+    const updatedLogs = removeSampleLogs([newLog, ...logs]);
+    if (updatedLogs.length > 0) {
+      window.localStorage.setItem('freso_inventory_logs', JSON.stringify(updatedLogs));
+    } else {
+      window.localStorage.removeItem('freso_inventory_logs');
+    }
     setLogs(updatedLogs);
 
     showToast(

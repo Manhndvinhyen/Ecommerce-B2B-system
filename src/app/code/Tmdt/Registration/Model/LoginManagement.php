@@ -76,8 +76,27 @@ class LoginManagement implements LoginInterface
             'full_name' => (string) ($registrationRow['full_name'] ?? ''),
             'branch_name' => (string) ($registrationRow['unit_nickname'] ?? ''),
             'role' => $role,
-            'redirect_url' => '/react/index.html',
+            'status' => $status,
+            'seller_access' => $this->hasSellerAccess($role, $status),
+            'is_owner' => $role === 'seller' && $status === 'approved' ? 1 : 0,
+            'is_super_admin' => 0,
+            'redirect_url' => $this->getPostLoginRedirect($role, $status),
         ];
+    }
+
+    private function hasSellerAccess(string $role, string $status): bool
+    {
+        return ($role === 'seller' && $status === 'approved')
+            || ($role === 'branch' && ($status === 'approved' || $status === 'active'));
+    }
+
+    private function getPostLoginRedirect(string $role, string $status): string
+    {
+        if ($this->hasSellerAccess($role, $status)) {
+            return '/react/index.html?view=seller-dashboard';
+        }
+
+        return '/react/index.html?view=dashboard';
     }
 
     private function getRegistrationByLoginCodeAndIdentifier(string $loginCode, string $identifier): ?array

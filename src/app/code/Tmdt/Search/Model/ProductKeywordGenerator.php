@@ -34,7 +34,7 @@ class ProductKeywordGenerator
 
         $terms = $this->dictionary->dedupe($terms);
         $terms = array_merge($terms, $this->buildNamePhrases((string) $product->getName()));
-        $terms = $this->dictionary->expand($terms);
+        $terms = array_merge($terms, $this->buildControlledSynonyms($terms));
 
         foreach ($terms as $term) {
             $normalized = $this->dictionary->normalize($term);
@@ -62,6 +62,41 @@ class ProductKeywordGenerator
         }
 
         return $phrases;
+    }
+
+    private function buildControlledSynonyms(array $terms): array
+    {
+        $haystack = ' ' . $this->dictionary->normalize(implode(' ', $terms)) . ' ';
+        $synonyms = [];
+
+        $groups = [
+            ['signals' => [' rau ', ' vegetable ', ' cai ', ' lettuce ', ' salad '], 'terms' => ['rau', 'rau xanh', 'rau tuoi', 'vegetable']],
+            ['signals' => [' ca chua ', ' tomato '], 'terms' => ['ca chua', 'tomato', 'rau cu', 'cu qua']],
+            ['signals' => [' ca rot ', ' carrot '], 'terms' => ['ca rot', 'carrot', 'rau cu', 'cu qua']],
+            ['signals' => [' khoai tay ', ' potato '], 'terms' => ['khoai tay', 'potato', 'rau cu', 'cu qua']],
+            ['signals' => [' su su ', ' chayote '], 'terms' => ['su su', 'chayote', 'rau cu', 'cu qua']],
+            ['signals' => [' sup lo ', ' cauliflower ', ' broccoli '], 'terms' => ['sup lo', 'cauliflower', 'broccoli', 'rau cu', 'cu qua']],
+            ['signals' => [' dua leo ', ' dua chuot ', ' cucumber '], 'terms' => ['dua leo', 'dua chuot', 'cucumber', 'rau cu']],
+            ['signals' => [' nam ', ' mushroom '], 'terms' => ['nam', 'mushroom', 'rau cu']],
+            ['signals' => [' trai cay ', ' hoa qua ', ' fruit '], 'terms' => ['trai cay', 'hoa qua', 'qua tuoi', 'fruit']],
+            ['signals' => [' thit heo ', ' thit lon ', ' pork ', ' ba chi ', ' suon heo '], 'terms' => ['thit heo', 'thit lon', 'pork']],
+            ['signals' => [' thit bo ', ' beef '], 'terms' => ['thit bo', 'beef']],
+            ['signals' => [' thit ga ', ' chicken '], 'terms' => ['thit ga', 'chicken']],
+            ['signals' => [' trung ', ' egg '], 'terms' => ['trung', 'egg']],
+            ['signals' => [' hai san ', ' seafood ', ' ca hoi ', ' fish ', ' tom ', ' shrimp ', ' muc ', ' squid '], 'terms' => ['hai san', 'seafood']],
+            ['signals' => [' gao ', ' rice '], 'terms' => ['gao', 'rice']],
+        ];
+
+        foreach ($groups as $group) {
+            foreach ($group['signals'] as $signal) {
+                if (str_contains($haystack, $signal)) {
+                    array_push($synonyms, ...$group['terms']);
+                    break;
+                }
+            }
+        }
+
+        return $this->dictionary->dedupe($synonyms);
     }
 
     private function getCategoryNames(ProductInterface $product): array

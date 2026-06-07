@@ -25,8 +25,7 @@ class ProductManagement implements ProductManagementInterface
         private readonly RestRequest $request,
         private readonly \Magento\Store\Model\StoreManagerInterface $storeManager,
         private readonly \Magento\Framework\Indexer\IndexerRegistry $indexerRegistry,
-        private readonly \Magento\Framework\App\Cache\TypeListInterface $cacheTypeList,
-        private readonly UserContextInterface $userContext
+        private readonly \Magento\Framework\App\Cache\TypeListInterface $cacheTypeList
     ) {
     }
 
@@ -559,19 +558,18 @@ class ProductManagement implements ProductManagementInterface
         }
 
         // 3. Legacy fallback: manual Bearer â†’ oauth_token lookup
-        $token = '';
-        $authHeader = $this->request->getHeader('Authorization');
-        if ($authHeader) {
-            if (preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
-                $token = trim($matches[1]);
-            }
-        }
+        $token = $this->extractBearerToken();
 
         if ($token === '') {
             $token = trim((string)$this->request->getParam('token'));
         }
 
         if ($token !== '') {
+            $jwtCustomerId = $this->getCustomerIdFromJwtToken($token);
+            if ($jwtCustomerId > 0) {
+                return (string)$jwtCustomerId;
+            }
+
             $connection = $this->resourceConnection->getConnection();
             $tableName = $connection->getTableName('oauth_token');
             $customerId = $connection->fetchOne(
@@ -586,6 +584,39 @@ class ProductManagement implements ProductManagementInterface
         }
 
         throw new LocalizedException(__('PhiÃªn lÃ m viá»‡c háº¿t háº¡n. Vui lÃ²ng Ä‘Äƒng nháº­p láº¡i.'));
+    }
+
+    private function extractBearerToken(): string
+    {
+        $headers = [
+            (string)$this->request->getHeader('Authorization'),
+            (string)$this->request->getServerValue('HTTP_AUTHORIZATION'),
+            (string)$this->request->getServerValue('REDIRECT_HTTP_AUTHORIZATION'),
+        ];
+
+        foreach ($headers as $authHeader) {
+            if ($authHeader !== '' && preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
+                return trim((string)($matches[1] ?? ''));
+            }
+        }
+
+        return trim((string)$this->request->getQueryValue('token', ''));
+    }
+
+    private function getCustomerIdFromJwtToken(string $token): int
+    {
+        try {
+            $reader = ObjectManager::getInstance()->get(\Magento\Integration\Api\UserTokenReaderInterface::class);
+            $validator = ObjectManager::getInstance()->get(\Magento\Integration\Api\UserTokenValidatorInterface::class);
+            $userToken = $reader->read($token);
+            $validator->validate($userToken);
+            $context = $userToken->getUserContext();
+            if ($context->getUserType() === UserContextInterface::USER_TYPE_CUSTOMER) {
+                return (int)$context->getUserId();
+            }
+        } catch (\Throwable) {
+            return 0;
+        }
     }
 
     private function resolveCompanySellerId(string $customerId): string

@@ -8,6 +8,7 @@ import { RecurringSubscriptionsContent } from './RecurringSubscriptionsContent';
 import { Header } from './Header';
 import { AuthPageFooter } from './auth/AuthPageFooter';
 import { ChatbotWidget } from './ChatbotWidget';
+import { parseRegistrationProfilePayload } from '../utils/registrationProfile';
 
 export function UserDashboardPage() {
   const readStorageValue = (key: string) =>
@@ -31,7 +32,7 @@ export function UserDashboardPage() {
     const token = readStorageValue('freso_customer_token');
     if (!token) return;
 
-    fetch(`${window.location.origin}/rest/V1/customers/me`, {
+    fetch(`${window.location.origin}/rest/V1/tmdt-registration/profile`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -39,34 +40,47 @@ export function UserDashboardPage() {
       },
     })
       .then((res) => res.json())
-      .then((data) => {
-        if (!data || typeof data !== 'object') return;
-        const customAttributes = Array.isArray((data as { custom_attributes?: unknown }).custom_attributes)
-          ? ((data as { custom_attributes?: unknown }).custom_attributes as Array<{ attribute_code?: string; value?: unknown }>)
-          : [];
-        const ownerAttr = customAttributes.find((attr) => attr?.attribute_code === 'is_owner');
-        const superAdminAttr = customAttributes.find((attr) => attr?.attribute_code === 'is_super_admin');
-        const roleAttr = customAttributes.find((attr) => attr?.attribute_code === 'tmdt_role');
+      .then((payload) => {
+        const data = parseRegistrationProfilePayload(payload);
 
-        if (ownerAttr || superAdminAttr) {
-          const nextOwner = parseBoolFlag(String(ownerAttr?.value ?? ''));
-          const nextSuperAdmin = parseBoolFlag(String(superAdminAttr?.value ?? ''));
-          window.localStorage.setItem('freso_is_owner', nextOwner ? '1' : '0');
-          window.sessionStorage.setItem('freso_is_owner', nextOwner ? '1' : '0');
-          window.localStorage.setItem('freso_is_super_admin', nextSuperAdmin ? '1' : '0');
-          window.sessionStorage.setItem('freso_is_super_admin', nextSuperAdmin ? '1' : '0');
+        const nextRole = String(data.role ?? readStorageValue('freso_role')).trim().toLowerCase();
+        const status = String(data.status ?? '').trim().toLowerCase();
+        const nextOwner = parseBoolFlag(String(data.is_owner ?? ''));
+        const nextSuperAdmin = parseBoolFlag(String(data.is_super_admin ?? ''));
+        const sellerAccess = parseBoolFlag(String(data.seller_access ?? ''));
+        console.info('[FresoUserDashboard] Registration profile loaded.', {
+          role: nextRole,
+          status,
+          sellerAccess,
+          isOwner: nextOwner,
+          isSuperAdmin: nextSuperAdmin,
+          raw: data,
+        });
+
+        window.localStorage.setItem('freso_role', nextRole);
+        window.sessionStorage.setItem('freso_role', nextRole);
+        window.localStorage.setItem('freso_status', status);
+        window.sessionStorage.setItem('freso_status', status);
+        window.localStorage.setItem('freso_seller_access', sellerAccess ? '1' : '0');
+        window.sessionStorage.setItem('freso_seller_access', sellerAccess ? '1' : '0');
+        window.localStorage.setItem('freso_is_owner', nextOwner ? '1' : '0');
+        window.sessionStorage.setItem('freso_is_owner', nextOwner ? '1' : '0');
+        window.localStorage.setItem('freso_is_super_admin', nextSuperAdmin ? '1' : '0');
+        window.sessionStorage.setItem('freso_is_super_admin', nextSuperAdmin ? '1' : '0');
+
+        if (sellerAccess || ((nextRole === 'seller' || nextRole === 'branch') && (status === 'approved' || status === 'active'))) {
+          console.info('[FresoUserDashboard] Approved seller/branch detected, redirecting to seller dashboard.');
+          window.location.replace('/react/index.html?view=seller-dashboard');
+          return;
         }
-        const nextRole = roleAttr ? String(roleAttr.value ?? '').trim().toLowerCase() : readStorageValue('freso_role').trim().toLowerCase();
-        if (roleAttr) {
-          window.localStorage.setItem('freso_role', nextRole);
-          window.sessionStorage.setItem('freso_role', nextRole);
-        }
+
         const hasPrivilege =
-          parseBoolFlag(String(ownerAttr?.value ?? '')) || parseBoolFlag(String(superAdminAttr?.value ?? ''));
+          nextOwner || nextSuperAdmin;
         setCanManageBranches(nextRole === 'seller' && hasPrivilege);
+        window.dispatchEvent(new CustomEvent('freso:profile-updated'));
       })
-      .catch(() => {
-        // ignore permission fetch failures
+      .catch((error: unknown) => {
+        console.error('[FresoUserDashboard] Could not load registration profile.', error);
       });
   }, []);
 

@@ -2,6 +2,7 @@
 
 # Bash scripts — LF bắt buộc để chạy được trong Linux/WSL container
 bin/* text eol=lf
+src/bin/* text eol=lf
 
 # Env files — LF để tránh lỗi \r trong bash khi source
 env/*.env   text eol=lf

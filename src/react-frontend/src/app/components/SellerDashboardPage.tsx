@@ -11,6 +11,7 @@ import { BranchManagementPanel } from './BranchManagementPanel';
 import { SellerHeader } from './SellerHeader';
 import { AuthPageFooter } from './auth/AuthPageFooter';
 import { ChatbotWidget } from './ChatbotWidget';
+import { parseRegistrationProfilePayload } from '../utils/registrationProfile';
 
 export function SellerDashboardPage() {
   const readStorageValue = (key: string) =>
@@ -28,26 +29,31 @@ export function SellerDashboardPage() {
     return role === 'seller' && (parseBoolFlag(isOwner) || parseBoolFlag(isSuperAdmin));
   };
 
+  const getStoredSellerAccess = () => parseBoolFlag(readStorageValue('freso_seller_access'));
+
   const [canManageBranches, setCanManageBranches] = useState(getStoredCanManageBranches());
   const [, setUserRole] = useState('seller');
   const [isCheckingSellerAccess, setIsCheckingSellerAccess] = useState(true);
+  const [hasSellerAccess, setHasSellerAccess] = useState(getStoredSellerAccess());
+  const [sellerAccessError, setSellerAccessError] = useState('');
   const storedToken = readStorageValue('freso_customer_token');
-  const storedRole = readStorageValue('freso_role').trim().toLowerCase();
-  const canAccessSellerArea = Boolean(storedToken) && (storedRole === 'seller' || storedRole === 'branch');
 
   useEffect(() => {
-    if (canAccessSellerArea) return;
+    if (storedToken) return;
 
-    window.location.replace(storedToken ? '/react/index.html?view=dashboard' : '/react/index.html?view=login');
-  }, [canAccessSellerArea, storedToken]);
+    window.location.replace('/react/index.html?view=login');
+  }, [storedToken]);
 
   useEffect(() => {
     const token = readStorageValue('freso_customer_token');
-    if (!token || !canAccessSellerArea) {
+    if (!token) {
+      console.warn('[FresoSellerAccess] Missing customer token, cannot verify seller dashboard access.');
       setIsCheckingSellerAccess(false);
       return;
     }
 
+    setSellerAccessError('');
+    console.info('[FresoSellerAccess] Verifying seller profile before opening dashboard.');
     fetch(`${window.location.origin}/rest/V1/tmdt-registration/profile`, {
       method: 'GET',
       headers: {
@@ -55,36 +61,86 @@ export function SellerDashboardPage() {
         Authorization: `Bearer ${token}`,
       },
     })
-      .then((res) => res.json())
+      .then(async (res) => {
+        const payload = await res.json().catch(() => null);
+        if (!res.ok) {
+          const message =
+            payload && typeof payload === 'object' && 'message' in payload
+              ? String((payload as { message?: unknown }).message ?? '')
+              : '';
+          console.error('[FresoSellerAccess] Profile API rejected seller access check.', {
+            status: res.status,
+            payload,
+          });
+          throw new Error(message || `Khong the kiem tra quyen nguoi ban (HTTP ${res.status}).`);
+        }
+        return payload;
+      })
       .then((payload) => {
-        const payloadObject =
-          payload && typeof payload === 'object' && !Array.isArray(payload)
-            ? (payload as Record<string, unknown>)
-            : {};
-        const data =
-          payloadObject.data && typeof payloadObject.data === 'object' && !Array.isArray(payloadObject.data)
-            ? (payloadObject.data as Record<string, unknown>)
-            : payloadObject;
+        const data = parseRegistrationProfilePayload(payload);
         const role = String((data as { role?: unknown }).role ?? readStorageValue('freso_role')).trim().toLowerCase();
         const status = String((data as { status?: unknown }).status ?? '').trim().toLowerCase();
+        const isOwner = parseBoolFlag(String((data as { is_owner?: unknown; isOwner?: unknown }).is_owner ?? (data as { isOwner?: unknown }).isOwner ?? ''));
+        const isSuperAdmin = parseBoolFlag(String((data as { is_super_admin?: unknown; isSuperAdmin?: unknown }).is_super_admin ?? (data as { isSuperAdmin?: unknown }).isSuperAdmin ?? ''));
+        const profileSellerAccess = parseBoolFlag(String((data as { seller_access?: unknown; sellerAccess?: unknown }).seller_access ?? (data as { sellerAccess?: unknown }).sellerAccess ?? ''));
+        const approvedSeller = role === 'seller' && status === 'approved';
+        const approvedBranch = role === 'branch' && (status === 'approved' || status === 'active');
+        const sellerAccess = profileSellerAccess || approvedSeller || approvedBranch;
+        console.info('[FresoSellerAccess] Profile check result.', {
+          role,
+          status,
+          isOwner,
+          isSuperAdmin,
+          sellerAccess,
+          approvedSeller,
+          approvedBranch,
+          raw: data,
+        });
 
-        if (role === 'seller' && status !== 'approved') {
+        if (!sellerAccess) {
+          console.warn('[FresoSellerAccess] Account is not allowed to enter seller dashboard, redirecting to customer dashboard.', {
+            role,
+            status,
+          });
           window.localStorage.setItem('freso_role', 'customer');
           window.sessionStorage.setItem('freso_role', 'customer');
+          window.localStorage.setItem('freso_seller_access', '0');
+          window.sessionStorage.setItem('freso_seller_access', '0');
           window.localStorage.setItem('freso_is_owner', '0');
           window.sessionStorage.setItem('freso_is_owner', '0');
           window.localStorage.setItem('freso_is_super_admin', '0');
           window.sessionStorage.setItem('freso_is_super_admin', '0');
           window.location.replace('/react/index.html?view=dashboard');
+          return;
         }
+
+        window.localStorage.setItem('freso_role', role);
+        window.sessionStorage.setItem('freso_role', role);
+        window.localStorage.setItem('freso_status', status);
+        window.sessionStorage.setItem('freso_status', status);
+        window.localStorage.setItem('freso_seller_access', sellerAccess ? '1' : '0');
+        window.sessionStorage.setItem('freso_seller_access', sellerAccess ? '1' : '0');
+        window.localStorage.setItem('freso_is_owner', isOwner ? '1' : '0');
+        window.sessionStorage.setItem('freso_is_owner', isOwner ? '1' : '0');
+        window.localStorage.setItem('freso_is_super_admin', isSuperAdmin ? '1' : '0');
+        window.sessionStorage.setItem('freso_is_super_admin', isSuperAdmin ? '1' : '0');
+        setUserRole(role);
+        setCanManageBranches((role === 'seller' || approvedSeller) && (isOwner || isSuperAdmin));
+        setHasSellerAccess(true);
+        window.dispatchEvent(new CustomEvent('freso:profile-updated'));
       })
-      .catch(() => {
-        // Keep the existing guard if the profile check cannot complete.
+      .catch((error: unknown) => {
+        console.error('[FresoSellerAccess] Could not verify seller dashboard access.', error);
+        setSellerAccessError(
+          error instanceof Error && error.message
+            ? error.message
+            : 'Khong the kiem tra quyen nguoi ban. Vui long thu lai.'
+        );
       })
       .finally(() => {
         setIsCheckingSellerAccess(false);
       });
-  }, [canAccessSellerArea]);
+  }, []);
 
   useEffect(() => {
     const token = readStorageValue('freso_customer_token');
@@ -119,11 +175,24 @@ export function SellerDashboardPage() {
         let resolvedRole = readStorageValue('freso_role').trim().toLowerCase();
         if (roleAttr) {
           const nextRole = String(roleAttr.value ?? '').trim().toLowerCase();
-          window.localStorage.setItem('freso_role', nextRole);
-          window.sessionStorage.setItem('freso_role', nextRole);
-          setUserRole(nextRole);
-          resolvedRole = nextRole;
-          window.dispatchEvent(new CustomEvent('freso:profile-updated'));
+          const shouldKeepRegistrationRole =
+            (resolvedRole === 'seller' || resolvedRole === 'branch') && nextRole === 'customer';
+          if (!shouldKeepRegistrationRole) {
+            console.info('[FresoSellerAccess] Syncing role from customers/me.', {
+              previousRole: resolvedRole,
+              nextRole,
+            });
+            window.localStorage.setItem('freso_role', nextRole);
+            window.sessionStorage.setItem('freso_role', nextRole);
+            setUserRole(nextRole);
+            resolvedRole = nextRole;
+            window.dispatchEvent(new CustomEvent('freso:profile-updated'));
+          } else {
+            console.info('[FresoSellerAccess] Ignoring stale customers/me role downgrade.', {
+              registrationRole: resolvedRole,
+              customersMeRole: nextRole,
+            });
+          }
         }
         const hasPrivilege =
           parseBoolFlag(String(ownerAttr?.value ?? '')) || parseBoolFlag(String(superAdminAttr?.value ?? ''));
@@ -174,8 +243,40 @@ export function SellerDashboardPage() {
     }
   }, [activeTab, dashboardLabel, tabLabels]);
 
-  if (!canAccessSellerArea || isCheckingSellerAccess) {
+  if (!storedToken || isCheckingSellerAccess) {
     return null;
+  }
+
+  if (!hasSellerAccess) {
+    return (
+      <div className="min-h-screen bg-[#F5FAF6]">
+        <SellerHeader />
+        <main className="mx-auto flex min-h-[60vh] max-w-[720px] flex-col items-center justify-center px-6 text-center">
+          <div className="rounded-2xl border border-amber-200 bg-white p-8 shadow-sm">
+            <h1 className="mb-3 text-2xl font-extrabold text-[#004d39]">Chua the mo giao dien nguoi ban</h1>
+            <p className="mb-6 text-sm font-medium text-gray-600">
+              {sellerAccessError || 'He thong chua xac nhan duoc quyen nguoi ban cua tai khoan nay.'}
+            </p>
+            <div className="flex flex-wrap justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="rounded-full bg-[#00b14f] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#009642]"
+              >
+                Thu lai
+              </button>
+              <a
+                href="/react/index.html?view=dashboard"
+                className="rounded-full border border-gray-200 px-5 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50"
+              >
+                Ve trang tai khoan
+              </a>
+            </div>
+          </div>
+        </main>
+        <AuthPageFooter />
+      </div>
+    );
   }
 
   return (

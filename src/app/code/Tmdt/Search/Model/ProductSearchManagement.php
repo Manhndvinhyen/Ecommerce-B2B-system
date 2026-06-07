@@ -8,6 +8,7 @@ use Magento\Catalog\Model\Product\Attribute\Source\Status;
 use Magento\Catalog\Model\Product\Visibility;
 use Magento\Catalog\Api\CategoryRepositoryInterface;
 use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory as ProductCollectionFactory;
+use Magento\Framework\App\ObjectManager;
 use Magento\Framework\Exception\NoSuchEntityException;
 use Magento\Framework\UrlInterface;
 use Magento\Framework\Webapi\Rest\Request as RestRequest;
@@ -24,7 +25,8 @@ class ProductSearchManagement implements ProductSearchInterface
         private readonly CategoryRepositoryInterface $categoryRepository,
         private readonly StoreManagerInterface $storeManager,
         private readonly RestRequest $request,
-        private readonly SearchDictionary $searchDictionary
+        private readonly SearchDictionary $searchDictionary,
+        private readonly ?ProductRetrievalService $productRetrievalService = null
     ) {
     }
 
@@ -35,6 +37,11 @@ class ProductSearchManagement implements ProductSearchInterface
 
         if ($query === '') {
             return [];
+        }
+
+        $retriever = $this->getProductRetrievalService();
+        if ($retriever !== null) {
+            return $retriever->retrieve($query, $limit);
         }
 
         $keywords = $this->buildKeywords($query);
@@ -64,6 +71,19 @@ class ProductSearchManagement implements ProductSearchInterface
         }
 
         return $items;
+    }
+
+    private function getProductRetrievalService(): ?ProductRetrievalService
+    {
+        if ($this->productRetrievalService !== null) {
+            return $this->productRetrievalService;
+        }
+
+        try {
+            return ObjectManager::getInstance()->get(ProductRetrievalService::class);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function createCollection(array $keywords, int $limit): \Magento\Catalog\Model\ResourceModel\Product\Collection

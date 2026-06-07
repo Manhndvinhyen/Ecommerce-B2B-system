@@ -7,6 +7,8 @@ export const AUTH_STORAGE_KEYS = [
   'freso_branch_name',
   'freso_login_code',
   'freso_role',
+  'freso_status',
+  'freso_seller_access',
   'freso_is_owner',
   'freso_is_super_admin',
   'freso_customer_cart_id',
@@ -43,6 +45,10 @@ export const persistAuthSession = (
     fullName?: string;
     branchName?: string;
     role?: string;
+    status?: string;
+    sellerAccess?: boolean;
+    isOwner?: boolean;
+    isSuperAdmin?: boolean;
   }
 ) => {
   clearStoredAuthSession();
@@ -53,6 +59,10 @@ export const persistAuthSession = (
   persistAuthValue(primaryStorage, 'freso_customer_name', values.fullName);
   persistAuthValue(primaryStorage, 'freso_branch_name', values.branchName);
   persistAuthValue(primaryStorage, 'freso_role', values.role);
+  persistAuthValue(primaryStorage, 'freso_status', values.status);
+  primaryStorage.setItem('freso_seller_access', values.sellerAccess ? '1' : '0');
+  primaryStorage.setItem('freso_is_owner', values.isOwner ? '1' : '0');
+  primaryStorage.setItem('freso_is_super_admin', values.isSuperAdmin ? '1' : '0');
 
   // Keep the non-primary storage clean so "Ghi nho dang nhap" has predictable behavior.
   secondaryStorage.removeItem('freso_customer_token');

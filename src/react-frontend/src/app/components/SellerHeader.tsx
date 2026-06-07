@@ -24,6 +24,7 @@ export function SellerHeader() {
   const [notifications, setNotifications] = useState<SellerNotification[]>([]);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const notifMenuRef = useRef<HTMLDivElement | null>(null);
+  const notificationPollingDisabledRef = useRef(false);
 
   const reactHomePath = '/react/index.html';
   const isEmbeddedInIframe = window.self !== window.top;
@@ -272,6 +273,8 @@ export function SellerHeader() {
 
   // Load B2B notifications for seller
   const fetchNotifications = async () => {
+    if (notificationPollingDisabledRef.current) return;
+
     const token = window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
     if (!token) return;
     try {
@@ -294,9 +297,33 @@ export function SellerHeader() {
             created_at: String(n.created_at)
           })));
         }
+        return;
+      }
+
+      const payload = await res.json().catch(() => null);
+      const message =
+        payload && typeof payload === 'object' && 'message' in payload
+          ? String((payload as { message?: unknown }).message ?? '')
+          : '';
+      console.warn('[FresoSellerHeader] Notifications API rejected request.', {
+        status: res.status,
+        message,
+        payload,
+      });
+
+      const normalizedMessage = message.toLowerCase();
+      const isAuthFailure =
+        res.status === 401 ||
+        normalizedMessage.includes('token') ||
+        normalizedMessage.includes('session') ||
+        normalizedMessage.includes('authorized') ||
+        normalizedMessage.includes('phi');
+      if (isAuthFailure) {
+        notificationPollingDisabledRef.current = true;
+        console.warn('[FresoSellerHeader] Stopped notifications polling until the user signs in again.');
       }
     } catch (e) {
-      // ignore
+      console.warn('[FresoSellerHeader] Notifications request failed.', e);
     }
   };
 

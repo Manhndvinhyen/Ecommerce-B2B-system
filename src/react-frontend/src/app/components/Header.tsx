@@ -161,17 +161,15 @@ export function Header() {
         if (ownerAttr || superAdminAttr) {
           const isOwner = ownerAttr ? parseBoolFlag(String(ownerAttr.value ?? '')) : false;
           const isSuper = superAdminAttr ? parseBoolFlag(String(superAdminAttr.value ?? '')) : false;
-          const hasPrivilege = isOwner || isSuper;
-          window.localStorage.setItem('freso_is_owner', hasPrivilege ? '1' : '0');
-          window.sessionStorage.setItem('freso_is_owner', hasPrivilege ? '1' : '0');
-          window.localStorage.setItem('freso_is_super_admin', hasPrivilege ? '1' : '0');
-          window.sessionStorage.setItem('freso_is_super_admin', hasPrivilege ? '1' : '0');
+          window.localStorage.setItem('freso_is_owner', isOwner ? '1' : '0');
+          window.sessionStorage.setItem('freso_is_owner', isOwner ? '1' : '0');
+          window.localStorage.setItem('freso_is_super_admin', isSuper ? '1' : '0');
+          window.sessionStorage.setItem('freso_is_super_admin', isSuper ? '1' : '0');
         }
 
         const nextRole = roleAttr ? String(roleAttr.value ?? '').trim().toLowerCase() : userRole;
         const hasBranchManagementPrivilege =
-          nextRole !== 'branch' &&
-          nextRole !== 'customer' &&
+          nextRole === 'seller' &&
           (parseBoolFlag(String(ownerAttr?.value ?? '')) || parseBoolFlag(String(superAdminAttr?.value ?? '')));
         setCanManageBranches(hasBranchManagementPrivilege);
 
@@ -273,8 +271,6 @@ export function Header() {
     : `${reactHomePath}?view=dashboard`;
   const getDashboardHref = (tabLabel: string) => `${dashboardBase}&tab=${encodeURIComponent(tabLabel)}`;
   const activeDashboardTab = new URLSearchParams(window.location.search).get('tab');
-  const normalizedUserRole = userRole.trim().toLowerCase();
-  const isSellerAccount = normalizedUserRole === 'seller' || normalizedUserRole === 'manager' || normalizedUserRole === 'branch';
   const visibleMenuItems = useMemo(() => {
     const customerMenuItemIds = new Set(['profile-seller', 'lich-su-mua-hang', 'don-hang', 'bao-gia', 'dat-hang-dinh-ky']);
 
@@ -324,8 +320,7 @@ export function Header() {
       setCustomerName(name);
       setUserRole(role);
       setCanManageBranches(
-        normalizedRole !== 'branch' &&
-          normalizedRole !== 'customer' &&
+        normalizedRole === 'seller' &&
           (parseStoredBoolFlag(isOwner) || parseStoredBoolFlag(isSuperAdmin))
       );
       if (branch.trim()) {
@@ -575,7 +570,7 @@ export function Header() {
                     </a>
                     <span className="text-gray-300">|</span>
                   </>
-                ) : userRole === 'seller' ? (
+                ) : userRole === 'seller' || userRole === 'branch' ? (
                   <>
                     <a
                       href={`${reactHomePath}?view=seller-dashboard`}

@@ -226,7 +226,7 @@ class BranchManagerUpdateManagement implements BranchManagerUpdateInterface
         $isOwner = $isOwnerAttr ? $this->normalizeBool($isOwnerAttr->getValue()) : false;
         $isSuper = $isSuperAttr ? $this->normalizeBool($isSuperAttr->getValue()) : false;
         $role = $roleAttr ? strtolower(trim((string) $roleAttr->getValue())) : '';
-        return $role !== 'branch' && ($isOwner || $isSuper || $role === '' || $role === 'manager' || $role === 'seller');
+        return $role === 'seller' && ($isOwner || $isSuper);
     }
 
     private function normalizeBool(mixed $value): bool

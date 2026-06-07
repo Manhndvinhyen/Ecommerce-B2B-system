@@ -238,8 +238,12 @@ export function RegisterPage() {
           throw new Error(data?.message || 'Không thể nâng cấp lên tài khoản người bán.');
         }
 
-        window.localStorage.setItem('freso_role', 'seller');
-        window.sessionStorage.setItem('freso_role', 'seller');
+        window.localStorage.setItem('freso_role', 'customer');
+        window.sessionStorage.setItem('freso_role', 'customer');
+        window.localStorage.setItem('freso_is_owner', '0');
+        window.sessionStorage.setItem('freso_is_owner', '0');
+        window.localStorage.setItem('freso_is_super_admin', '0');
+        window.sessionStorage.setItem('freso_is_super_admin', '0');
         window.dispatchEvent(new CustomEvent('freso:profile-updated'));
         
         setIsSubmitted(true);
@@ -334,9 +338,6 @@ export function RegisterPage() {
         throw new Error(data?.message || 'Không thể lưu đăng ký vào Magento.');
       }
 
-      const ownerFlag = window.localStorage.getItem('freso_is_owner') || window.sessionStorage.getItem('freso_is_owner');
-      const superAdminFlag =
-        window.localStorage.getItem('freso_is_super_admin') || window.sessionStorage.getItem('freso_is_super_admin');
       if (data && 'token' in data && data.token) {
         const token = data.token;
         const email = data.email || formData.email;
@@ -353,12 +354,10 @@ export function RegisterPage() {
         window.localStorage.setItem('freso_role', isSeller ? 'seller' : 'customer');
         window.sessionStorage.setItem('freso_role', isSeller ? 'seller' : 'customer');
 
-        if (isSeller || (!ownerFlag && !superAdminFlag)) {
-          window.localStorage.setItem('freso_is_owner', '1');
-          window.sessionStorage.setItem('freso_is_owner', '1');
-          window.localStorage.setItem('freso_is_super_admin', '1');
-          window.sessionStorage.setItem('freso_is_super_admin', '1');
-        }
+        window.localStorage.setItem('freso_is_owner', '0');
+        window.sessionStorage.setItem('freso_is_owner', '0');
+        window.localStorage.setItem('freso_is_super_admin', '0');
+        window.sessionStorage.setItem('freso_is_super_admin', '0');
 
         // Call session endpoint to login to Magento session
         await fetch(`${window.location.origin}/tmdt/registration/session`, {
@@ -370,10 +369,8 @@ export function RegisterPage() {
           body: JSON.stringify({ token }),
         }).catch(() => null);
 
-        // Redirect to homepage or dashboard
-        window.location.href = isSeller
-          ? '/react/index.html?view=seller-dashboard'
-          : '/react/index.html?view=dashboard';
+        // Redirect to customer dashboard. Seller accounts need admin approval before seller dashboard access.
+        window.location.href = '/react/index.html?view=dashboard';
         return;
       }
 
@@ -408,7 +405,7 @@ export function RegisterPage() {
           </h1>
           <p className="text-gray-600 leading-relaxed font-medium">
             {isLoggedIn && isSeller ? (
-              'Tài khoản của bạn đã được chuyển đổi thành Người bán thành công. Bạn có thể truy cập trang quản trị bán hàng ngay bây giờ.'
+              'Hồ sơ kinh doanh của bạn đã được gửi thành công. Bạn có thể dùng tài khoản mua hàng như bình thường và chờ admin duyệt trước khi vào kênh người bán.'
             ) : (
               <>
                 Cảm ơn doanh nghiệp <span className="font-bold text-[#00b14f]">{formData.businessName}</span> đã tin tưởng Freso.
@@ -420,14 +417,14 @@ export function RegisterPage() {
             type="button"
             onClick={() => {
               if (isLoggedIn && isSeller) {
-                window.location.href = '/react/index.html?view=seller-dashboard';
+                window.location.href = '/react/index.html?view=dashboard';
               } else {
                 navigateHome();
               }
             }}
             className="w-full py-4 bg-[#00b14f] text-white font-bold rounded-2xl hover:bg-[#009642] transition-all shadow-lg shadow-green-200/50"
           >
-            {isLoggedIn && isSeller ? 'Vào trang người bán ngay' : 'Quay lại trang chủ'}
+            {isLoggedIn && isSeller ? 'Về tài khoản của tôi' : 'Quay lại trang chủ'}
           </button>
         </div>
       </div>

@@ -58,9 +58,7 @@ export const ProfileContent = ({ showBusinessInfo = true }: ProfileContentProps)
     if (roleAttr === 'branch') {
       return 'Cơ sở/chi nhánh';
     }
-    const isOwner = parseBoolFlag(readStorageValue('freso_is_owner'));
-    const isSuperAdmin = parseBoolFlag(readStorageValue('freso_is_super_admin'));
-    return isOwner || isSuperAdmin ? 'Chủ sở hữu' : 'Quản lý';
+    return 'Khách hàng';
   };
 
   const getStoredProfile = (): Profile => {
@@ -135,7 +133,7 @@ export const ProfileContent = ({ showBusinessInfo = true }: ProfileContentProps)
       const isSuperAdmin = parseBoolFlag(String(superAdminAttr ?? ''));
       const roleVal = String(roleAttr ?? '').trim().toLowerCase();
 
-      let role = isOwner || isSuperAdmin ? 'Chủ sở hữu' : 'Quản lý';
+      let role = 'Khách hàng';
       if (roleVal === 'customer') {
         role = 'Khách hàng';
       } else if (roleVal === 'seller') {
@@ -229,7 +227,7 @@ export const ProfileContent = ({ showBusinessInfo = true }: ProfileContentProps)
         ? String((info as { role?: unknown }).role ?? '').trim().toLowerCase()
         : readStorageValue('freso_role');
 
-      let roleLabel = roleOwnerFlag || roleSuperFlag ? 'Chủ sở hữu' : 'Quản lý';
+      let roleLabel = 'Khách hàng';
       if (roleVal === 'customer') {
         roleLabel = 'Khách hàng';
       } else if (roleVal === 'seller') {

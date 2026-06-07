@@ -436,7 +436,7 @@ class OrderManagement implements OrderManagementInterface
         }
 
         $status = strtolower(trim((string)$order['status']));
-        if (in_array($status, ['processing', 'paid', 'preparing', 'shipping', 'delivered'], true)) {
+        if (in_array($status, ['paid', 'preparing', 'shipping', 'delivered'], true)) {
             return true;
         }
 
@@ -446,11 +446,23 @@ class OrderManagement implements OrderManagementInterface
             );
         }
 
+        $sellerId = (int)$this->resolveCompanySellerId($this->getSellerIdFromSession());
+        $itemCount = (int)$connection->fetchOne(
+            "SELECT COUNT(*) FROM {$connection->getTableName('tmdt_order_items')} WHERE order_id = ? AND seller_id = ?",
+            [(int)$order['id'], $sellerId]
+        );
+
+        if ($itemCount === 0) {
+            throw new \Magento\Framework\Exception\LocalizedException(
+                __('You do not have permission to confirm payment for this order.')
+            );
+        }
+
         return $this->orderProcessor->confirmOrder(
             $orderCode,
             'COD-' . $orderCode,
-            'processing',
-            'Direct payment order has been confirmed and is now processing.'
+            'paid',
+            'Direct payment has been collected by the seller.'
         );
     }
 
@@ -459,7 +471,7 @@ class OrderManagement implements OrderManagementInterface
      */
     public function updateOrderFulfillment(string $orderCode, string $status): bool
     {
-        $sellerId = (int)$this->getSellerIdFromSession();
+        $sellerId = (int)$this->resolveCompanySellerId($this->getSellerIdFromSession());
         $connection = $this->resourceConnection->getConnection();
         $oTable = $connection->getTableName(self::TABLE);
         $oiTable = $connection->getTableName('tmdt_order_items');
@@ -610,6 +622,82 @@ class OrderManagement implements OrderManagementInterface
         }
 
         throw new \Magento\Framework\Exception\LocalizedException(__('Phiên làm việc hết hạn. Vui lòng đăng nhập lại.'));
+    }
+
+    private function resolveCompanySellerId(string $customerId): string
+    {
+        $connection = $this->resourceConnection->getConnection();
+        $registrationTable = $connection->getTableName('tmdt_customer_registration');
+        $row = $connection->fetchRow(
+            $connection->select()
+                ->from($registrationTable, ['login_code'])
+                ->where('customer_id = ?', (int)$customerId)
+                ->limit(1)
+        );
+
+        $loginCode = is_array($row) ? trim((string)($row['login_code'] ?? '')) : '';
+        if ($loginCode === '') {
+            return $customerId;
+        }
+
+        $ownerIds = $connection->fetchCol(
+            $connection->select()
+                ->from($registrationTable, ['customer_id'])
+                ->where('login_code = ?', $loginCode)
+                ->where('role = ?', 'seller')
+        );
+
+        foreach ($ownerIds as $ownerId) {
+            if ($this->customerHasOwnerPrivilege((int)$ownerId)) {
+                return (string)$ownerId;
+            }
+        }
+
+        return $customerId;
+    }
+
+    private function customerHasOwnerPrivilege(int $customerId): bool
+    {
+        if ($customerId <= 0) {
+            return false;
+        }
+
+        try {
+            $connection = $this->resourceConnection->getConnection();
+            $entityTypeId = (int)$connection->fetchOne(
+                "SELECT entity_type_id FROM {$connection->getTableName('eav_entity_type')} WHERE entity_type_code = 'customer' LIMIT 1"
+            );
+            if ($entityTypeId <= 0) {
+                return false;
+            }
+
+            $attrs = $connection->fetchPairs(
+                $connection->select()
+                    ->from($connection->getTableName('eav_attribute'), ['attribute_code', 'attribute_id'])
+                    ->where('entity_type_id = ?', $entityTypeId)
+                    ->where('attribute_code IN (?)', ['is_owner', 'is_super_admin'])
+            );
+            if (!$attrs) {
+                return false;
+            }
+
+            $values = $connection->fetchPairs(
+                $connection->select()
+                    ->from($connection->getTableName('customer_entity_int'), ['attribute_id', 'value'])
+                    ->where('entity_id = ?', $customerId)
+                    ->where('attribute_id IN (?)', array_values($attrs))
+            );
+
+            foreach ($attrs as $attributeId) {
+                if (!empty($values[(int)$attributeId])) {
+                    return true;
+                }
+            }
+        } catch (\Throwable) {
+            return false;
+        }
+
+        return false;
     }
 }
 

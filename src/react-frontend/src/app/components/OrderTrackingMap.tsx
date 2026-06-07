@@ -27,9 +27,8 @@ type OrderTrackingMapProps = {
   order: TrackingOrder;
 };
 
-const SIMULATED_SPEED_KMH = 30;
-const SHIPPER_STEP = 0.018;
-const SHIPPER_TICK_MS = 1800;
+const TIME_MULTIPLIER = 1; // Real-world time (1 real second = 1 simulated second)
+const CITY_SPEED_KMH = 25; // Speed in city: 25 km/h
 
 const trackingSteps = [
   'Đã đặt hàng',
@@ -127,12 +126,12 @@ const sliceRouteUntil = (points: LatLng[], distanceKm: number) => {
 
 const formatDistance = (value: number) => `${value.toFixed(value >= 10 ? 1 : 2)} km`;
 
-const formatEta = (remainingKm: number) => {
-  if (remainingKm <= 0.05) return '0 phút';
-  const minutes = Math.max(1, Math.round((remainingKm / SIMULATED_SPEED_KMH) * 60));
-  if (minutes < 60) return `${minutes} phút`;
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
+const formatEtaMinutes = (minutes: number) => {
+  if (minutes <= 0.05) return '0 phút';
+  const rounded = Math.max(1, Math.round(minutes));
+  if (rounded < 60) return `${rounded} phút`;
+  const hours = Math.floor(rounded / 60);
+  const rest = rounded % 60;
   return rest ? `${hours} giờ ${rest} phút` : `${hours} giờ`;
 };
 
@@ -179,7 +178,7 @@ const buildDestination = (shippingAddress: string, customerRegion: string, wareh
   return {
     lat: warehouse.lat + latOffset * direction,
     lng: warehouse.lng + lngOffset,
-    label: shippingAddress || customerRegion || 'Địa chỉ nhận hàng mô phỏng',
+    label: shippingAddress || customerRegion || 'Địa chỉ nhận hàng',
   };
 };
 
@@ -261,26 +260,23 @@ export function TrackingTimeline({ currentIndex }: { currentIndex: number }) {
             <div key={step} className="relative flex gap-3 md:block">
               {index < trackingSteps.length - 1 && (
                 <div
-                  className={`absolute left-[15px] top-8 h-[calc(100%+0.75rem)] w-px md:left-[calc(50%+18px)] md:top-4 md:h-px md:w-[calc(100%-36px)] ${
-                    done ? 'bg-emerald-300' : 'bg-slate-200'
-                  }`}
+                  className={`absolute left-[15px] top-8 h-[calc(100%+0.75rem)] w-px md:left-[calc(50%+18px)] md:top-4 md:h-px md:w-[calc(100%-36px)] ${done ? 'bg-emerald-300' : 'bg-slate-200'
+                    }`}
                 />
               )}
               <div
-                className={`relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full border text-xs font-black md:mx-auto ${
-                  done
-                    ? 'border-emerald-500 bg-emerald-500 text-white'
-                    : active
-                      ? 'border-emerald-500 bg-white text-emerald-700 shadow-[0_0_0_4px_rgba(16,185,129,0.12)]'
-                      : 'border-slate-200 bg-slate-50 text-slate-400'
-                }`}
+                className={`relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full border text-xs font-black md:mx-auto ${done
+                  ? 'border-emerald-500 bg-emerald-500 text-white'
+                  : active
+                    ? 'border-emerald-500 bg-white text-emerald-700 shadow-[0_0_0_4px_rgba(16,185,129,0.12)]'
+                    : 'border-slate-200 bg-slate-50 text-slate-400'
+                  }`}
               >
                 {done ? <Check className="size-4" /> : index + 1}
               </div>
               <p
-                className={`pt-1 text-xs font-bold md:mt-2 md:text-center ${
-                  active || done ? 'text-slate-900' : 'text-slate-400'
-                }`}
+                className={`pt-1 text-xs font-bold md:mt-2 md:text-center ${active || done ? 'text-slate-900' : 'text-slate-400'
+                  }`}
               >
                 {step}
               </p>
@@ -294,8 +290,8 @@ export function TrackingTimeline({ currentIndex }: { currentIndex: number }) {
 
 export function OrderTrackingMap({ order }: OrderTrackingMapProps) {
   const [leafletLoaded, setLeafletLoaded] = useState(false);
-  const [progress, setProgress] = useState(0.34);
   const [dbWarehouses, setDbWarehouses] = useState<any[]>([]);
+  const [elapsedMinutes, setElapsedMinutes] = useState(0);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const layersRef = useRef<Record<string, any>>({});
@@ -325,25 +321,150 @@ export function OrderTrackingMap({ order }: OrderTrackingMapProps) {
     };
   }, [order.customerRegion, order.orderReference, order.shippingAddress, order.supplier, dbWarehouses]);
 
+  const isTrackingActive = useMemo(() => {
+    const s = normalize(order.status || '');
+    return s !== 'pending' && s !== 'expired' && s !== 'cancelled';
+  }, [order.status]);
+
+  // Calculate phases based on trackingModel
+  const phases = useMemo(() => {
+    const dTotal = trackingModel.totalDistanceKm;
+    const v = CITY_SPEED_KMH / 60; // km per minute
+
+    const d1 = 0.25 * dTotal;
+    const t1 = d1 / v;
+
+    const t2_stop = 10; // 10 minutes stop at Stop 1
+
+    const d2 = 0.45 * dTotal;
+    const t3 = d2 / v;
+
+    const t4_stop = 10; // 10 minutes stop at Stop 2
+
+    const d3 = 0.30 * dTotal;
+    const t5 = d3 / v;
+
+    const t_total = t1 + t2_stop + t3 + t4_stop + t5;
+
+    return {
+      v,
+      dTotal,
+      t1,
+      t2_stop,
+      t3,
+      t4_stop,
+      t5,
+      t_total
+    };
+  }, [trackingModel.totalDistanceKm]);
+
+  useEffect(() => {
+    if (!isTrackingActive) {
+      setElapsedMinutes(0);
+      return;
+    }
+
+    const storageKey = `freso_tracking_start_${order.orderReference}`;
+    let startVal = window.localStorage.getItem(storageKey);
+    if (!startVal) {
+      startVal = Date.now().toString();
+      window.localStorage.setItem(storageKey, startVal);
+    }
+    const startTime = parseInt(startVal, 10);
+
+    const updateProgress = () => {
+      const realElapsedMs = Date.now() - startTime;
+      const simulatedElapsedMinutes = (realElapsedMs / 1000) * (TIME_MULTIPLIER / 60);
+      setElapsedMinutes(simulatedElapsedMinutes);
+    };
+
+    updateProgress();
+    const interval = window.setInterval(updateProgress, 1000);
+    return () => window.clearInterval(interval);
+  }, [isTrackingActive, order.orderReference]);
+
+  // Compute smooth position and dynamic metrics
+  const dynamicMetrics = useMemo(() => {
+    const { v, dTotal, t1, t2_stop, t3, t4_stop, t_total } = phases;
+
+    let dTravelled = 0;
+    let statusDetails = 'Đang giao hàng';
+    let speedKmh = CITY_SPEED_KMH;
+
+    if (elapsedMinutes < t1) {
+      dTravelled = elapsedMinutes * v;
+      statusDetails = 'Đang di chuyển từ Kho xuất phát';
+      speedKmh = CITY_SPEED_KMH;
+    } else if (elapsedMinutes >= t1 && elapsedMinutes < t1 + t2_stop) {
+      dTravelled = 0.25 * dTotal;
+      statusDetails = 'Đang phân loại tại Điểm trung chuyển 1';
+      speedKmh = 0;
+    } else if (elapsedMinutes >= t1 + t2_stop && elapsedMinutes < t1 + t2_stop + t3) {
+      dTravelled = 0.25 * dTotal + (elapsedMinutes - t1 - t2_stop) * v;
+      statusDetails = 'Đang di chuyển trên tuyến đường chính';
+      speedKmh = CITY_SPEED_KMH;
+    } else if (elapsedMinutes >= t1 + t2_stop + t3 && elapsedMinutes < t1 + t2_stop + t3 + t4_stop) {
+      dTravelled = 0.70 * dTotal;
+      statusDetails = 'Đang bàn giao tại Trạm trung chuyển 2';
+      speedKmh = 0;
+    } else if (elapsedMinutes >= t1 + t2_stop + t3 + t4_stop && elapsedMinutes < t_total) {
+      dTravelled = 0.70 * dTotal + (elapsedMinutes - t1 - t2_stop - t3 - t4_stop) * v;
+      statusDetails = 'Đang giao hàng chặng cuối';
+      speedKmh = CITY_SPEED_KMH;
+    } else {
+      dTravelled = dTotal;
+      statusDetails = 'Đã giao thành công';
+      speedKmh = 0;
+    }
+
+    // Step-wise updates on map every 30 simulated minutes
+    let reportedElapsedMinutes = elapsedMinutes;
+    if (elapsedMinutes < t_total) {
+      reportedElapsedMinutes = Math.floor(elapsedMinutes / 30) * 30;
+    } else {
+      reportedElapsedMinutes = t_total;
+    }
+
+    let reportedD = 0;
+    if (reportedElapsedMinutes < t1) {
+      reportedD = reportedElapsedMinutes * v;
+    } else if (reportedElapsedMinutes >= t1 && reportedElapsedMinutes < t1 + t2_stop) {
+      reportedD = 0.25 * dTotal;
+    } else if (reportedElapsedMinutes >= t1 + t2_stop && reportedElapsedMinutes < t1 + t2_stop + t3) {
+      reportedD = 0.25 * dTotal + (reportedElapsedMinutes - t1 - t2_stop) * v;
+    } else if (reportedElapsedMinutes >= t1 + t2_stop + t3 && reportedElapsedMinutes < t1 + t2_stop + t3 + t4_stop) {
+      reportedD = 0.70 * dTotal;
+    } else if (reportedElapsedMinutes >= t1 + t2_stop + t3 + t4_stop && reportedElapsedMinutes < t_total) {
+      reportedD = 0.70 * dTotal + (reportedElapsedMinutes - t1 - t2_stop - t3 - t4_stop) * v;
+    } else {
+      reportedD = dTotal;
+    }
+
+    const smoothProgressVal = dTotal > 0 ? Math.min(1, dTravelled / dTotal) : 0;
+    const progressVal = dTotal > 0 ? Math.min(1, reportedD / dTotal) : 0;
+
+    return {
+      dTravelled,
+      reportedD,
+      smoothProgress: smoothProgressVal,
+      progress: progressVal,
+      statusDetails,
+      speedKmh,
+      remainingMinutes: Math.max(0, t_total - elapsedMinutes)
+    };
+  }, [elapsedMinutes, phases]);
+
+  const { dTravelled, reportedD, smoothProgress, progress, statusDetails, speedKmh, remainingMinutes } = dynamicMetrics;
 
   const travelledKm = trackingModel.totalDistanceKm * progress;
   const remainingKm = Math.max(0, trackingModel.totalDistanceKm - travelledKm);
   const shipperPosition = pointOnRoute(trackingModel.routePoints, travelledKm);
-  const currentIndex = getTimelineIndex(order.status, progress);
-  const currentStatus = progress >= 1 ? 'Đã giao thành công' : trackingSteps[currentIndex];
+  const currentIndex = getTimelineIndex(order.status, smoothProgress);
+  const currentStatus = smoothProgress >= 1 ? 'Đã giao thành công' : statusDetails;
 
   useEffect(() => {
     loadLeaflet(() => setLeafletLoaded(true));
   }, []);
-
-  useEffect(() => {
-    if (progress >= 1) return;
-    const timer = window.setInterval(() => {
-      setProgress((prev) => Math.min(1, prev + SHIPPER_STEP));
-    }, SHIPPER_TICK_MS);
-
-    return () => window.clearInterval(timer);
-  }, [progress]);
 
   useEffect(() => {
     if (!leafletLoaded || !mapContainerRef.current || mapRef.current || !window.L) return;
@@ -437,10 +558,6 @@ export function OrderTrackingMap({ order }: OrderTrackingMapProps) {
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Order Tracking Map</p>
               <h3 className="text-sm font-black text-slate-900">Theo dõi đơn hàng trên bản đồ</h3>
             </div>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-orange-700">
-              <Truck className="size-3.5" />
-              Shipper mô phỏng
-            </span>
           </div>
           <div className="relative h-[340px] bg-slate-100">
             <div ref={mapContainerRef} className="h-full w-full" />
@@ -475,7 +592,7 @@ export function OrderTrackingMap({ order }: OrderTrackingMapProps) {
             <div className="rounded-2xl border border-slate-100 bg-white p-4">
               <Clock3 className="mb-2 size-4 text-slate-400" />
               <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">ETA còn lại</p>
-              <p className="mt-1 text-lg font-black text-slate-900">{formatEta(remainingKm)}</p>
+              <p className="mt-1 text-lg font-black text-slate-900">{formatEtaMinutes(remainingMinutes)}</p>
             </div>
           </div>
 
@@ -502,14 +619,14 @@ export function OrderTrackingMap({ order }: OrderTrackingMapProps) {
           <div className="rounded-2xl border border-slate-100 bg-white p-4">
             <div className="mb-2 flex items-center justify-between text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
               <span>Tiến độ tuyến đường</span>
-              <span>{Math.round(progress * 100)}%</span>
+              <span>{Math.round(smoothProgress * 100)}%</span>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-              <div className="h-full rounded-full bg-emerald-500 transition-all duration-700" style={{ width: `${progress * 100}%` }} />
+              <div className="h-full rounded-full bg-emerald-500 transition-all duration-700" style={{ width: `${smoothProgress * 100}%` }} />
             </div>
             <p className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
               <Navigation className="size-3.5 text-orange-500" />
-              Còn lại {formatDistance(remainingKm)} với tốc độ giả lập {SIMULATED_SPEED_KMH} km/h.
+              Còn lại {formatDistance(remainingKm)} với tốc độ {speedKmh} km/h.
             </p>
           </div>
         </div>

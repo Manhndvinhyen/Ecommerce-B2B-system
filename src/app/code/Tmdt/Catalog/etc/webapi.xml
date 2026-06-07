@@ -117,6 +117,12 @@
             <resource ref="anonymous"/>
         </resources>
     </route>
+    <route url="/V1/tmdt-catalog/suppliers" method="GET">
+        <service class="Tmdt\Catalog\Api\PromotionManagementInterface" method="getSuppliers"/>
+        <resources>
+            <resource ref="anonymous"/>
+        </resources>
+    </route>
     <!-- COD payment confirmation REST route for authenticated B2B sellers -->
     <route url="/V1/tmdt-orders/confirm-payment" method="POST">
         <service class="Tmdt\Catalog\Api\OrderManagementInterface" method="confirmDirectPayment"/>
@@ -127,6 +133,62 @@
     <!-- Customer purchase history - authenticated customer token required -->
     <route url="/V1/tmdt-search/purchase-history" method="GET">
         <service class="Tmdt\Catalog\Api\ProductManagementInterface" method="getPurchaseHistory"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+
+    <!-- Request For Quotation (RFQ) System Routes -->
+    <route url="/V1/tmdt-rfq/create" method="POST">
+        <service class="Tmdt\Catalog\Api\RfqManagementInterface" method="createRfq"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+    <route url="/V1/tmdt-rfq/buyer-list" method="GET">
+        <service class="Tmdt\Catalog\Api\RfqManagementInterface" method="getBuyerRfqs"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+    <route url="/V1/tmdt-rfq/open-list" method="GET">
+        <service class="Tmdt\Catalog\Api\RfqManagementInterface" method="getOpenRfqs"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+    <route url="/V1/tmdt-rfq/quote/submit" method="POST">
+        <service class="Tmdt\Catalog\Api\RfqManagementInterface" method="submitQuote"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+    <route url="/V1/tmdt-rfq/quotes/:rfqId" method="GET">
+        <service class="Tmdt\Catalog\Api\RfqManagementInterface" method="getQuotesForRfq"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+    <route url="/V1/tmdt-rfq/seller-quotes" method="GET">
+        <service class="Tmdt\Catalog\Api\RfqManagementInterface" method="getSellerQuotes"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+    <route url="/V1/tmdt-rfq/quote/accept" method="POST">
+        <service class="Tmdt\Catalog\Api\RfqManagementInterface" method="acceptQuote"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+    <route url="/V1/tmdt-rfq/message/add" method="POST">
+        <service class="Tmdt\Catalog\Api\RfqManagementInterface" method="addRfqMessage"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+    <route url="/V1/tmdt-rfq/messages/:rfqId" method="GET">
+        <service class="Tmdt\Catalog\Api\RfqManagementInterface" method="getRfqMessages"/>
         <resources>
             <resource ref="self"/>
         </resources>

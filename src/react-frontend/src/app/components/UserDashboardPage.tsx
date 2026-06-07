@@ -8,6 +8,7 @@ import { RecurringSubscriptionsContent } from './RecurringSubscriptionsContent';
 import { Header } from './Header';
 import { AuthPageFooter } from './auth/AuthPageFooter';
 import { ChatbotWidget } from './ChatbotWidget';
+import { RfqDashboard } from './RfqDashboard';
 
 export function UserDashboardPage() {
   const readStorageValue = (key: string) =>
@@ -120,12 +121,7 @@ export function UserDashboardPage() {
               />
             )}
             {activeTab === quoteLabel && (
-              <div className="p-8">
-                <h1 className="text-2xl font-bold text-gray-900">Đàm phán giá</h1>
-                <p className="mt-2 text-sm text-gray-500">
-                  Mục này chưa có module báo giá/thương lượng. Cần thiết kế bảng dữ liệu và API trước khi hiển thị.
-                </p>
-              </div>
+              <RfqDashboard mode="buyer" />
             )}
             {activeTab !== profileLabel &&
               activeTab !== branchLabel &&

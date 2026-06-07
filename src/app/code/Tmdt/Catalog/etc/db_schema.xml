@@ -221,4 +221,55 @@
             <column name="id"/>
         </constraint>
     </table>
+
+    <table name="tmdt_rfq" resource="default" engine="innodb" comment="Request for Quotations">
+        <column xsi:type="int" name="id" padding="10" unsigned="true" nullable="false" identity="true" comment="RFQ ID"/>
+        <column xsi:type="int" name="customer_id" padding="10" unsigned="true" nullable="false" comment="Buyer Customer ID"/>
+        <column xsi:type="varchar" name="product_name" length="255" nullable="false" comment="Product Name / Description"/>
+        <column xsi:type="decimal" name="quantity" scale="4" precision="12" nullable="false" comment="Quantity"/>
+        <column xsi:type="varchar" name="unit" length="32" nullable="false" comment="Unit of Measure"/>
+        <column xsi:type="decimal" name="desired_price" scale="2" precision="12" nullable="false" comment="Desired Price VND"/>
+        <column xsi:type="text" name="shipping_address" nullable="false" comment="Shipping Address"/>
+        <column xsi:type="timestamp" name="delivery_date" nullable="false" comment="Delivery Date"/>
+        <column xsi:type="timestamp" name="expiry_date" nullable="false" comment="Expiry Date for quotes"/>
+        <column xsi:type="varchar" name="status" length="32" nullable="false" default="open" comment="open|closed|ordered"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
+        <column xsi:type="timestamp" name="updated_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Updated At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="id"/>
+        </constraint>
+        <constraint xsi:type="foreign" referenceId="TMDT_RFQ_CUSTOMER_ID_CUSTOMER_ENTITY_ENTITY_ID" table="tmdt_rfq" column="customer_id" referenceTable="customer_entity" referenceColumn="entity_id" onDelete="CASCADE"/>
+    </table>
+
+    <table name="tmdt_rfq_quote" resource="default" engine="innodb" comment="Supplier Quotes for RFQ">
+        <column xsi:type="int" name="id" padding="10" unsigned="true" nullable="false" identity="true" comment="Quote ID"/>
+        <column xsi:type="int" name="rfq_id" padding="10" unsigned="true" nullable="false" comment="RFQ ID"/>
+        <column xsi:type="int" name="seller_id" padding="10" unsigned="true" nullable="false" comment="Seller Customer ID"/>
+        <column xsi:type="decimal" name="price" scale="2" precision="12" nullable="false" comment="Offered Price VND"/>
+        <column xsi:type="decimal" name="quantity" scale="4" precision="12" nullable="false" comment="Offered Quantity"/>
+        <column xsi:type="timestamp" name="delivery_date" nullable="false" comment="Expected Delivery Date"/>
+        <column xsi:type="text" name="note" nullable="true" comment="Notes"/>
+        <column xsi:type="varchar" name="status" length="32" nullable="false" default="pending" comment="pending|accepted|rejected"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="id"/>
+        </constraint>
+        <constraint xsi:type="foreign" referenceId="TMDT_RFQ_QUOTE_RFQ_ID_TMDT_RFQ_ID" table="tmdt_rfq_quote" column="rfq_id" referenceTable="tmdt_rfq" referenceColumn="id" onDelete="CASCADE"/>
+        <constraint xsi:type="foreign" referenceId="TMDT_RFQ_QUOTE_SELLER_ID_CUSTOMER_ENTITY_ENTITY_ID" table="tmdt_rfq_quote" column="seller_id" referenceTable="customer_entity" referenceColumn="entity_id" onDelete="CASCADE"/>
+    </table>
+
+    <table name="tmdt_rfq_message" resource="default" engine="innodb" comment="RFQ Negotiation Messages">
+        <column xsi:type="int" name="id" padding="10" unsigned="true" nullable="false" identity="true" comment="Message ID"/>
+        <column xsi:type="int" name="rfq_id" padding="10" unsigned="true" nullable="false" comment="RFQ ID"/>
+        <column xsi:type="int" name="quote_id" padding="10" unsigned="true" nullable="true" comment="Quote ID (optional)"/>
+        <column xsi:type="int" name="sender_id" padding="10" unsigned="true" nullable="false" comment="Sender Customer ID"/>
+        <column xsi:type="varchar" name="sender_role" length="32" nullable="false" comment="buyer|seller"/>
+        <column xsi:type="text" name="message" nullable="false" comment="Message content"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="id"/>
+        </constraint>
+        <constraint xsi:type="foreign" referenceId="TMDT_RFQ_MESSAGE_RFQ_ID_TMDT_RFQ_ID" table="tmdt_rfq_message" column="rfq_id" referenceTable="tmdt_rfq" referenceColumn="id" onDelete="CASCADE"/>
+        <constraint xsi:type="foreign" referenceId="TMDT_RFQ_MESSAGE_QUOTE_ID_TMDT_RFQ_QUOTE_ID" table="tmdt_rfq_message" column="quote_id" referenceTable="tmdt_rfq_quote" referenceColumn="id" onDelete="CASCADE"/>
+    </table>
 </schema>

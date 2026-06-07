@@ -221,7 +221,6 @@ export function PurchaseHistoryContent({
     { key: 'all', label: 'Tất cả' },
     { key: 'paid', label: 'Đã thanh toán' },
     { key: 'pending', label: 'Chờ thanh toán' },
-    { key: 'processing', label: 'Đang xử lý' },
     { key: 'cancelled', label: 'Đã hủy' },
   ];
 

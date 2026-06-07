@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CustomerSidebar } from './CustomerSidebar';
 import { adminMenuItems } from './SidebarMenu';
 import { ProfileContent } from './ProfileContent';
@@ -71,7 +71,7 @@ export function UserDashboardPage() {
   }, []);
 
   const menuItems = useMemo(() => {
-    const visibleIds = new Set(['profile-seller', 'nhan-vien', 'lich-su-mua-hang', 'don-hang', 'bao-gia', 'dat-hang-dinh-ky']);
+    const visibleIds = new Set(['profile-seller', 'nhan-vien', 'lich-su-mua-hang', 'bao-gia', 'dat-hang-dinh-ky']);
     return adminMenuItems.filter((item) => visibleIds.has(item.id) && (canManageBranches || item.id !== 'nhan-vien'));
   }, [canManageBranches]);
 

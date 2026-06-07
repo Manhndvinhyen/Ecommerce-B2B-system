@@ -3,13 +3,14 @@ declare(strict_types=1);
 
 namespace Tmdt\Catalog\Model;
 
-use Tmdt\Catalog\Api\InventoryManagementInterface;
+use Magento\Authorization\Model\UserContextInterface;
+use Magento\Catalog\Api\ProductRepositoryInterface;
 use Magento\CatalogInventory\Api\StockRegistryInterface;
 use Magento\Customer\Model\Session as CustomerSession;
+use Magento\Framework\App\RequestInterface;
 use Magento\Framework\App\ResourceConnection;
-use Magento\Catalog\Api\ProductRepositoryInterface;
 use Magento\Framework\Exception\LocalizedException;
-use Magento\Authorization\Model\UserContextInterface;
+use Tmdt\Catalog\Api\InventoryManagementInterface;
 
 class InventoryManagement implements InventoryManagementInterface
 {
@@ -18,7 +19,8 @@ class InventoryManagement implements InventoryManagementInterface
         private readonly CustomerSession $customerSession,
         private readonly ResourceConnection $resourceConnection,
         private readonly ProductRepositoryInterface $productRepository,
-        private readonly UserContextInterface $userContext
+        private readonly UserContextInterface $userContext,
+        private readonly RequestInterface $request
     ) {
     }
 
@@ -31,33 +33,28 @@ class InventoryManagement implements InventoryManagementInterface
         $data = (array) $adjustmentData;
 
         if (empty($data['sku']) || !isset($data['qty_change']) || empty($data['action_type'])) {
-            throw new LocalizedException(__('SKU, Số lượng thay đổi và loại nhập/xuất là bắt buộc.'));
+            throw new LocalizedException(__('SKU, So luong thay doi va loai nhap/xuat la bat buoc.'));
         }
 
         $sku = (string) $data['sku'];
         $qtyChange = (float) $data['qty_change'];
-        $actionType = (string) $data['action_type']; // inbound, outbound, system_adjust
+        $actionType = (string) $data['action_type'];
         $note = isset($data['note']) ? (string) $data['note'] : '';
 
-        // Verify product ownership
         $this->verifyProductOwnership($sku, $sellerId);
 
         try {
             $stockItem = $this->stockRegistry->getStockItemBySku($sku);
             $qtyBefore = (float) $stockItem->getQty();
-            
-            // Calculate new quantity
             $qtyAfter = $qtyBefore + $qtyChange;
             if ($qtyAfter < 0) {
-                throw new LocalizedException(__('Số lượng xuất vượt quá tồn kho khả dụng hiện tại.'));
+                throw new LocalizedException(__('So luong xuat vuot qua ton kho kha dung hien tai.'));
             }
 
-            // Update Magento Core stock level
             $stockItem->setQty($qtyAfter);
             $stockItem->setIsInStock($qtyAfter > 0);
             $this->stockRegistry->updateStockItemBySku($sku, $stockItem);
 
-            // Record log in tmdt_inventory_log
             $connection = $this->resourceConnection->getConnection();
             $connection->insert(
                 $connection->getTableName('tmdt_inventory_log'),
@@ -73,7 +70,7 @@ class InventoryManagement implements InventoryManagementInterface
 
             return json_encode([
                 'success' => true,
-                'message' => 'Điều chỉnh tồn kho sỉ thành công!',
+                'message' => 'Dieu chinh ton kho si thanh cong!',
                 'sku' => $sku,
                 'qty_after' => $qtyAfter
             ]);
@@ -91,8 +88,7 @@ class InventoryManagement implements InventoryManagementInterface
     {
         $sellerId = $this->resolveCompanySellerId($this->getCurrentCustomerId());
         $connection = $this->resourceConnection->getConnection();
-        
-        // Fetch logs only for products belonging to the logged-in seller
+
         $select = $connection->select()
             ->from(['il' => $connection->getTableName('tmdt_inventory_log')])
             ->joinInner(
@@ -111,20 +107,43 @@ class InventoryManagement implements InventoryManagementInterface
         return $connection->fetchAll($select);
     }
 
-    /**
-     * Get Seller ID from session
-     */
     private function getCurrentCustomerId(): string
     {
-        $userId = (int) $this->userContext->getUserId();
-        if ($userId > 0) {
-            return (string) $userId;
+        if ($this->customerSession->isLoggedIn()) {
+            return (string) $this->customerSession->getCustomerId();
         }
 
-        if (!$this->customerSession->isLoggedIn()) {
-            throw new LocalizedException(__('Phiên làm việc hết hạn. Vui lòng đăng nhập lại.'));
+        if ($this->userContext->getUserType() === UserContextInterface::USER_TYPE_CUSTOMER) {
+            $userId = (int) $this->userContext->getUserId();
+            if ($userId > 0) {
+                return (string) $userId;
+            }
         }
-        return (string) $this->customerSession->getCustomerId();
+
+        $token = '';
+        $authHeader = $this->request->getHeader('Authorization');
+        if ($authHeader && preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
+            $token = trim($matches[1]);
+        }
+
+        if ($token === '') {
+            $token = trim((string) $this->request->getParam('token'));
+        }
+
+        if ($token !== '') {
+            $connection = $this->resourceConnection->getConnection();
+            $customerId = $connection->fetchOne(
+                $connection->select()
+                    ->from($connection->getTableName('oauth_token'), ['customer_id'])
+                    ->where('token = ?', $token)
+                    ->limit(1)
+            );
+            if ($customerId) {
+                return (string) $customerId;
+            }
+        }
+
+        throw new LocalizedException(__('Phien lam viec het han. Vui long dang nhap lai.'));
     }
 
     private function resolveCompanySellerId(string $customerId): string
@@ -203,22 +222,21 @@ class InventoryManagement implements InventoryManagementInterface
         return false;
     }
 
-    /**
-     * Verify that the requested product belongs to the seller
-     */
     private function verifyProductOwnership(string $sku, string $sellerId): void
     {
         try {
             $product = $this->productRepository->get($sku);
-            $prodSellerId = $product->getCustomAttribute('tmdt_seller_id') 
-                ? (string) $product->getCustomAttribute('tmdt_seller_id')->getValue() 
+            $prodSellerId = $product->getCustomAttribute('tmdt_seller_id')
+                ? (string) $product->getCustomAttribute('tmdt_seller_id')->getValue()
                 : '';
 
             if ($prodSellerId !== $sellerId) {
-                throw new LocalizedException(__('Bạn không có quyền quản lý kho cho sản phẩm này.'));
+                throw new LocalizedException(__('Ban khong co quyen quan ly kho cho san pham nay.'));
             }
-        } catch (\Exception $e) {
-            throw new LocalizedException(__('Không tìm thấy sản phẩm.'));
+        } catch (LocalizedException $e) {
+            throw $e;
+        } catch (\Exception) {
+            throw new LocalizedException(__('Khong tim thay san pham.'));
         }
     }
 }

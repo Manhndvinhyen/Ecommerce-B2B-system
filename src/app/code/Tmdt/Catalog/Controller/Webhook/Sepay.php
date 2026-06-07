@@ -30,10 +30,7 @@ class Sepay extends Action implements HttpPostActionInterface, CsrfAwareActionIn
         private readonly JsonFactory $jsonFactory,
         private readonly ResourceConnection $resourceConnection,
         private readonly LoggerInterface $logger,
-        private readonly StockRegistryInterface $stockRegistry,
-        private readonly ProductRepositoryInterface $productRepository,
-        private readonly IndexerRegistry $indexerRegistry,
-        private readonly TypeListInterface $cacheTypeList
+        private readonly \Tmdt\Catalog\Model\OrderProcessor $orderProcessor
     ) {
         parent::__construct($context);
     }
@@ -132,218 +129,16 @@ class Sepay extends Action implements HttpPostActionInterface, CsrfAwareActionIn
                 ]);
             }
 
-            // Mark parent as paid
-            $connection->update(
-                $table,
-                [
-                    'status'         => 'paid',
-                    'transaction_id' => $transactionId,
-                    'paid_at'        => date('Y-m-d H:i:s'),
-                ],
-                ['order_code = ?' => $orderCode]
+            // Mark parent as paid and process inventory/etc via OrderProcessor
+            $confirmed = $this->orderProcessor->confirmOrder(
+                $orderCode,
+                $transactionId,
+                'paid',
+                'Thanh toán thành công. Đơn hàng tổng chuyển sang trạng thái Đã thanh toán và Đang xử lý.'
             );
 
-            // Log status history transition for parent
-            $connection->insert(
-                $connection->getTableName('tmdt_order_status_history'),
-                [
-                    'order_code' => $orderCode,
-                    'status'     => 'paid',
-                    'comment'    => 'Thanh toán thành công. Đơn hàng tổng chuyển sang trạng thái Đã thanh toán và Đang xử lý.',
-                    'created_at' => date('Y-m-d H:i:s'),
-                ]
-            );
-
-            // Fetch any child orders
-            $childOrders = $connection->fetchAll(
-                "SELECT order_code, items_json FROM {$table} WHERE parent_code = ?",
-                [$orderCode]
-            );
-
-            if ($childOrders) {
-                // Mark all child orders as paid
-                $connection->update(
-                    $table,
-                    [
-                        'status'         => 'paid',
-                        'transaction_id' => $transactionId,
-                        'paid_at'        => date('Y-m-d H:i:s'),
-                    ],
-                    ['parent_code = ?' => $orderCode]
-                );
-
-                // Add status history for each child order
-                foreach ($childOrders as $childOrder) {
-                    $connection->insert(
-                        $connection->getTableName('tmdt_order_status_history'),
-                        [
-                            'order_code' => $childOrder['order_code'],
-                            'status'     => 'paid',
-                            'comment'    => 'Thanh toán thành công qua đơn hàng tổng ' . $orderCode . '.',
-                            'created_at' => date('Y-m-d H:i:s'),
-                        ]
-                    );
-                }
-            }
-
-            // Identify which orders to process for inventory and seller revenue
-            $ordersToProcess = [];
-            if ($childOrders) {
-                foreach ($childOrders as $childOrder) {
-                    $ordersToProcess[] = [
-                        'order_code' => $childOrder['order_code'],
-                        'items_json' => $childOrder['items_json']
-                    ];
-                }
-            } else {
-                $ordersToProcess[] = [
-                    'order_code' => $orderCode,
-                    'items_json' => $row['items_json']
-                ];
-            }
-
-            foreach ($ordersToProcess as $orderInfo) {
-                $currentOrderCode = $orderInfo['order_code'];
-                $this->logger->info('[SePay Webhook] Processing order: ' . $currentOrderCode);
-                $this->logger->info('[SePay Webhook] Raw items_json from DB: ' . ($orderInfo['items_json'] ?? 'null'));
-                $items = json_decode((string)($orderInfo['items_json'] ?? '[]'), true);
-                $this->logger->info('[SePay Webhook] Decoded items count: ' . (is_array($items) ? count($items) : 'not an array'));
-
-                $sellerRevenues = [];
-                $sellerItems = [];
-
-                if (is_array($items)) {
-                    foreach ($items as $item) {
-                        $sku = isset($item['sku']) ? (string)$item['sku'] : '';
-                        $qtySold = isset($item['quantity']) ? (float)$item['quantity'] : 0.0;
-                        if (empty($sku) || $qtySold <= 0) {
-                            continue;
-                        }
-
-                        try {
-                            // 1. Get product info
-                            $product = $this->productRepository->get($sku);
-                            $productId = (int)$product->getId();
-                            $sellerIdAttr = $product->getCustomAttribute('tmdt_seller_id');
-                            $sellerId = $sellerIdAttr ? (string)$sellerIdAttr->getValue() : '';
-
-                            if (!empty($sellerId) && $sellerId !== 'NONE') {
-                                $unitPrice = isset($item['unitPrice']) ? (float)$item['unitPrice'] : (float)$product->getPrice();
-                                $rowTotal = $qtySold * $unitPrice;
-                                $sellerRevenues[$sellerId] = ($sellerRevenues[$sellerId] ?? 0.0) + $rowTotal;
-                                $sellerItems[$sellerId][] = ($product->getName() ?: $sku) . ' (x' . $qtySold . ')';
-                            }
-
-                            // 2. Get current stock
-                            $stockItem = $this->stockRegistry->getStockItemBySku($sku);
-                            $qtyBefore = (float)$stockItem->getQty();
-                            $qtyAfter = max(0.0, $qtyBefore - $qtySold);
-
-                            // 3. Update stock level
-                            $stockItem->setQty($qtyAfter);
-                            $stockItem->setIsInStock($qtyAfter > 0);
-                            $this->stockRegistry->updateStockItemBySku($sku, $stockItem);
-
-                            // 4. Record log in tmdt_inventory_log
-                            $connection->insert(
-                                $connection->getTableName('tmdt_inventory_log'),
-                                [
-                                    'sku' => $sku,
-                                    'action_type' => 'outbound',
-                                    'qty_change' => -$qtySold,
-                                    'qty_after' => $qtyAfter,
-                                    'note' => 'Hệ thống tự động trừ kho cho đơn hàng ' . $currentOrderCode,
-                                    'created_at' => date('Y-m-d H:i:s')
-                                ]
-                            );
-
-                            // 5. Reindex and flush cache for product
-                            try {
-                                $indexers = [
-                                    'catalog_category_product',
-                                    'catalog_product_category',
-                                    'catalog_product_price',
-                                    'catalogsearch_fulltext'
-                                ];
-                                foreach ($indexers as $indexerId) {
-                                    try {
-                                        $indexer = $this->indexerRegistry->get($indexerId);
-                                        $indexer->reindexRow($productId);
-                                    } catch (\Exception $e) {
-                                        // Ignore indexer errors
-                                    }
-                                }
-                                
-                                $cacheTypes = ['full_page', 'block_html', 'collections', 'graphql_query_resolver_result'];
-                                foreach ($cacheTypes as $type) {
-                                    $this->cacheTypeList->cleanType($type);
-                                }
-                            } catch (\Exception $e) {
-                                $this->logger->warning('[SePay Webhook] Failed to reindex/flush cache for SKU: ' . $sku);
-                            }
-
-                            // 6. Check if out of stock, send alert to seller
-                            if ($qtyAfter <= 0) {
-                                if (!empty($sellerId) && $sellerId !== 'NONE') {
-                                    try {
-                                        $connection->insert(
-                                            $connection->getTableName('tmdt_seller_notifications'),
-                                            [
-                                                'seller_id' => $sellerId,
-                                                'sku' => $sku,
-                                                'message' => 'Sản phẩm "' . $product->getName() . '" (SKU: ' . $sku . ') đã hết hàng.',
-                                                'is_read' => 0,
-                                                'created_at' => date('Y-m-d H:i:s')
-                                            ]
-                                        );
-                                        $this->logger->info('[SePay Webhook] Out of stock warning created for seller: ' . $sellerId . ' SKU: ' . $sku);
-                                    } catch (\Exception $e) {
-                                        $this->logger->error('[SePay Webhook] Failed to create out of stock warning: ' . $e->getMessage());
-                                    }
-                                }
-                            }
-
-                        } catch (\Exception $e) {
-                            $this->logger->error('[SePay Webhook] Failed to adjust stock for SKU: ' . $sku . ' error: ' . $e->getMessage());
-                        }
-                    }
-                }
-
-                // Create seller notifications and write revenue transactions for this order
-                foreach ($sellerRevenues as $sellerId => $amount) {
-                    try {
-                        $itemsList = implode(', ', $sellerItems[$sellerId]);
-                        $formattedAmount = number_format($amount, 0, ',', '.') . 'đ';
-                        
-                        // Insert order notification
-                        $connection->insert(
-                            $connection->getTableName('tmdt_seller_notifications'),
-                            [
-                                'seller_id' => $sellerId,
-                                'sku'       => $currentOrderCode,
-                                'message'   => "Bạn có đơn hàng mới {$currentOrderCode}. Sản phẩm: {$itemsList}. Tổng doanh thu: {$formattedAmount}.",
-                                'is_read'   => 0,
-                                'created_at'=> date('Y-m-d H:i:s')
-                            ]
-                        );
-
-                        // Insert revenue transaction
-                        $connection->insert(
-                            $connection->getTableName('tmdt_transactions'),
-                            [
-                                'order_code'     => $currentOrderCode,
-                                'transaction_id' => $transactionId,
-                                'amount'         => $amount,
-                                'seller_id'      => $sellerId,
-                                'created_at'     => date('Y-m-d H:i:s')
-                            ]
-                        );
-
-                        $this->logger->info("[SePay Webhook] Logged new order notification and revenue transaction for seller: {$sellerId}, amount: {$amount} on order: {$currentOrderCode}");
-                    } catch (\Exception $e) {
-                        $this->logger->error('[SePay Webhook] Failed to create seller order notification / transaction: ' . $e->getMessage());
-                    }
-                }
+            if (!$confirmed) {
+                return $result->setData(['success' => false, 'message' => 'Không thể xử lý xác nhận đơn hàng.']);
             }
 
             $this->logger->info('[SePay Webhook] Order marked as PAID', [

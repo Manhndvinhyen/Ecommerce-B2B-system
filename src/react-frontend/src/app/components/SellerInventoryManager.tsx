@@ -17,12 +17,27 @@ import {
 } from 'lucide-react';
 
 interface Product {
+  id?: string | number;
   sku: string;
   name: string;
+  price?: number;
+  special_price?: number;
   qty: number;
   unit: string;
   categoryLabel: string;
   image: string;
+  variants?: any[];
+  wholesale_tiers?: any[];
+  isCustom?: boolean;
+  origin?: string;
+  note?: string;
+  store_name?: string;
+  description?: {
+    features?: string;
+    benefits?: string;
+    storage?: string;
+    expiry?: string;
+  };
 }
 
 interface InventoryLog {
@@ -114,22 +129,15 @@ export function SellerInventoryManager() {
               ...apiProducts.map((p) => {
                 const localMatch = customLocalProducts.find((lp) => lp.sku === p.sku);
                 return {
-                  sku: p.sku,
-                  name: p.name,
+                  ...localMatch,
+                  ...p,
                   qty: Number(p.qty),
                   unit: p.unit || localMatch?.unit || 'kg',
-                  categoryLabel: localMatch?.categoryLabel || 'Rau củ quả',
-                  image: localMatch?.image || p.image || 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&h=500&fit=crop'
+                  categoryLabel: p.categoryLabel || localMatch?.categoryLabel || 'Rau củ quả',
+                  image: p.image || localMatch?.image || 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&h=500&fit=crop'
                 };
               }),
-              ...filteredLocal.map((p) => ({
-                sku: p.sku,
-                name: p.name,
-                qty: Number(p.qty),
-                unit: p.unit || 'kg',
-                categoryLabel: p.categoryLabel || 'Rau củ quả',
-                image: p.image || 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&h=500&fit=crop'
-              }))
+              ...filteredLocal
             ];
 
             setProducts(merged);

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { FileText, Heart, Minus, Plus, Search, Send, ShoppingBag, Store } from 'lucide-react';
-import { formatCartSupplierLabel, toCurrencyTextFromNumber, useCart } from '../cart/CartProvider';
+import { formatCartSupplierLabel, toCurrencyTextFromNumber, useCart, parsePrice } from '../cart/CartProvider';
 
 export function ShoppingCartPage() {
   const {
@@ -443,7 +443,9 @@ export function ShoppingCartPage() {
                     }
                     const sku = (item.sku ?? '').trim().toLowerCase();
                     const matchingProduct = customLocalProducts.find(p => (p.sku ?? '').trim().toLowerCase() === sku);
-                    const originalPrice = matchingProduct ? Number(matchingProduct.price) : item.unitPrice;
+                    const specialPrice = matchingProduct ? parsePrice(matchingProduct.special_price ?? matchingProduct.specialPrice) : 0;
+                    const normalPrice = matchingProduct ? parsePrice(matchingProduct.price ?? matchingProduct.priceValue) : 0;
+                    const originalPrice = (specialPrice && specialPrice > 0) ? specialPrice : (normalPrice && normalPrice > 0 ? normalPrice : item.unitPrice);
                     const tiers = matchingProduct?.wholesale_tiers || [];
                     const activeTier = tiers
                       .filter((t: any) => item.quantity >= t.qty)

@@ -15,17 +15,75 @@ class Recurring implements RecurringInterface
     ) {}
 
     /**
+     * Helper to save subscription items into tmdt_recurring_items
+     */
+    private function saveRecurringItems(int $scheduleId, array $items, $connection): void
+    {
+        $recurItemsTable = $connection->getTableName('tmdt_recurring_items');
+        $productTable = $connection->getTableName('catalog_product_entity');
+        $productVarcharTable = $connection->getTableName('catalog_product_entity_varchar');
+        $attributeTable = $connection->getTableName('eav_attribute');
+
+        $sellerAttrId = (int)$connection->fetchOne(
+            "SELECT attribute_id FROM {$attributeTable} WHERE attribute_code = 'tmdt_seller_id' AND entity_type_id = 4 LIMIT 1"
+        );
+
+        foreach ($items as $item) {
+            $sku = trim((string)($item['sku'] ?? ''));
+            if (empty($sku)) {
+                continue;
+            }
+
+            $productId = (int)$connection->fetchOne(
+                "SELECT entity_id FROM {$productTable} WHERE sku = ?",
+                [$sku]
+            );
+
+            if ($productId <= 0) {
+                continue;
+            }
+
+            $sellerId = null;
+            if ($sellerAttrId > 0) {
+                $sellerVal = trim((string)$connection->fetchOne(
+                    "SELECT value FROM {$productVarcharTable} WHERE entity_id = ? AND attribute_id = ? LIMIT 1",
+                    [$productId, $sellerAttrId]
+                ));
+                if (!empty($sellerVal) && $sellerVal !== 'NONE' && is_numeric($sellerVal)) {
+                    $sellerId = (int)$sellerVal;
+                }
+            }
+
+            $qty = (float)($item['quantity'] ?? 0);
+            $price = (float)($item['unitPrice'] ?? 0);
+
+            $connection->insert($recurItemsTable, [
+                'schedule_id'     => $scheduleId,
+                'product_id'      => $productId,
+                'sku'             => $sku,
+                'name'            => $item['name'] ?? $sku,
+                'unit'            => $item['unit'] ?? 'kg',
+                'quantity'        => $qty,
+                'unit_price'      => $price,
+                'seller_id'       => $sellerId,
+                'supplier_name'   => $item['supplierName'] ?? null,
+                'supplier_region' => $item['supplierRegion'] ?? null,
+            ]);
+        }
+    }
+
+    /**
      * @inheritDoc
      */
     public function subscribe(
         string $customerEmail,
         string $customerName,
         string $frequency,
-        ?string $weekdays,
-        ?int $monthDay,
-        string $deliveryTime,
-        string $itemsJson,
-        string $shippingJson
+        ?string $weekdays = null,
+        ?int $monthDay = null,
+        string $deliveryTime = '',
+        string $itemsJson = '[]',
+        string $shippingJson = '{}'
     ): array {
         if (empty($customerEmail)) {
             return ['success' => false, 'message' => 'Email khách hàng không được để trống.'];
@@ -46,12 +104,21 @@ class Recurring implements RecurringInterface
         $connection = $this->resourceConnection->getConnection();
         $table = $connection->getTableName(self::TABLE);
 
+        // Fetch customer_id from email
+        $customerTable = $connection->getTableName('customer_entity');
+        $customerIdVal = $connection->fetchOne(
+            "SELECT entity_id FROM {$customerTable} WHERE email = ? LIMIT 1",
+            [$customerEmail]
+        );
+        $customerId = $customerIdVal ? (int)$customerIdVal : null;
+
         // Calculate next run date starting from tomorrow
         $todayStr = date('Y-m-d');
         $nextRunDate = $this->calculateNextRunDate($frequency, $weekdays, $monthDay, $todayStr);
 
         try {
             $connection->insert($table, [
+                'customer_id'    => $customerId,
                 'customer_email' => $customerEmail,
                 'customer_name'  => $customerName,
                 'frequency'      => $frequency,
@@ -65,6 +132,10 @@ class Recurring implements RecurringInterface
                 'next_run_date'  => $nextRunDate,
                 'created_at'     => date('Y-m-d H:i:s')
             ]);
+            $scheduleId = (int)$connection->lastInsertId();
+
+            $items = json_decode($itemsJson, true) ?: [];
+            $this->saveRecurringItems($scheduleId, $items, $connection);
 
             return [
                 'success' => true,

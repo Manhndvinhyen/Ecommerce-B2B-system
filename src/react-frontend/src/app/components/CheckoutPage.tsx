@@ -621,7 +621,7 @@ function distributeCashDiscount(items: CheckoutItem[], discountAmount: number): 
 }
 
 export function CheckoutPage() {
-  const { cartItems } = useCart();
+  const { cartItems, removeCartItem } = useCart();
   const [checkoutItems, setCheckoutItems] = useState<CheckoutItem[]>([]);
   const [supplierOptions, setSupplierOptions] = useState<string[]>([]);
   const [supplier, setSupplier] = useState('');
@@ -1658,6 +1658,17 @@ export function CheckoutPage() {
 
       if (createRes.ok) {
         const orderData = await createRes.json();
+        // Clear successfully ordered items from the cart
+        try {
+          for (const item of checkoutItems) {
+            if (item.id) {
+              await removeCartItem(String(item.id));
+            }
+          }
+        } catch (cartErr) {
+          console.error('Failed to remove ordered items from cart:', cartErr);
+        }
+
         // Consume applied voucher from localStorage
         if (appliedVoucher) {
           try {

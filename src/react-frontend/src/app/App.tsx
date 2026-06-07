@@ -24,6 +24,7 @@ import { CheckoutPage } from './components/CheckoutPage';
 import { NewsPage } from './components/NewsPage';
 import { ThankYouPage } from './components/ThankYouPage';
 import { OrderTrackingPage } from './components/OrderTrackingPage';
+import { SupplierDetailPage } from './components/SupplierDetailPage';
 import { getCategoryNameFromQuery, getSubcategoryNameFromQuery } from './data/categories';
 import { CartProvider } from './cart/CartProvider';
 import { applySeo, buildCanonicalPath, getSiteName } from './utils/seo';
@@ -50,6 +51,9 @@ function AppContent() {
   const isNewsView = view === 'news';
   const isThankYouView = view === 'thank-you';
   const isOrderTrackingView = view === 'order-tracking';
+  const isSupplierDetailView = view === 'supplier-detail';
+  const supplierId = params.get('supplierId') || '';
+  const supplierName = params.get('supplierName') || '';
 
   useEffect(() => {
     const root = document.documentElement;
@@ -119,6 +123,15 @@ function AppContent() {
       return;
     }
 
+    if (isSupplierDetailView) {
+      applySeo({
+        title: `${supplierName} | ${siteName}`,
+        description: `Xem các sản phẩm nông sản sạch từ nhà cung cấp ${supplierName} trên ${siteName}.`,
+        canonicalPath
+      });
+      return;
+    }
+
     if (isCartView || isLoginView || isRegisterView || isForgotPasswordView || isWishlistView || isCheckoutView || isDashboardView || isSellerDashboardView || isOrderTrackingView) {
       applySeo({
         title: `${siteName} | Tài khoản và mua hàng`,
@@ -150,7 +163,8 @@ function AppContent() {
     isDashboardView,
     isSellerDashboardView,
     isNewsView,
-    isOrderTrackingView
+    isOrderTrackingView,
+    isSupplierDetailView
   ]);
 
   if (isDashboardView) {
@@ -239,6 +253,19 @@ function AppContent() {
         <Header />
         <main>
           <OrderTrackingPage />
+        </main>
+        <Footer />
+        <ChatbotWidget />
+      </div>
+    );
+  }
+
+  if (isSupplierDetailView) {
+    return (
+      <div className="min-h-screen bg-white">
+        <Header />
+        <main>
+          <SupplierDetailPage supplierId={supplierId} supplierName={supplierName} />
         </main>
         <Footer />
         <ChatbotWidget />

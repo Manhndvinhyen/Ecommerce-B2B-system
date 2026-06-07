@@ -26,11 +26,66 @@ export function SellerDashboardPage() {
     const isOwner = readStorageValue('freso_is_owner');
     const isSuperAdmin = readStorageValue('freso_is_super_admin');
     const role = readStorageValue('freso_role').trim().toLowerCase();
-    return role !== 'branch' && (parseBoolFlag(isOwner) || parseBoolFlag(isSuperAdmin) || role === '' || role === 'manager' || role === 'seller');
+    return role === 'seller' && (parseBoolFlag(isOwner) || parseBoolFlag(isSuperAdmin));
   };
 
   const [canManageBranches, setCanManageBranches] = useState(getStoredCanManageBranches());
   const [, setUserRole] = useState('seller');
+  const [isCheckingSellerAccess, setIsCheckingSellerAccess] = useState(true);
+  const storedToken = readStorageValue('freso_customer_token');
+  const storedRole = readStorageValue('freso_role').trim().toLowerCase();
+  const canAccessSellerArea = Boolean(storedToken) && (storedRole === 'seller' || storedRole === 'branch');
+
+  useEffect(() => {
+    if (canAccessSellerArea) return;
+
+    window.location.replace(storedToken ? '/react/index.html?view=dashboard' : '/react/index.html?view=login');
+  }, [canAccessSellerArea, storedToken]);
+
+  useEffect(() => {
+    const token = readStorageValue('freso_customer_token');
+    if (!token || !canAccessSellerArea) {
+      setIsCheckingSellerAccess(false);
+      return;
+    }
+
+    fetch(`${window.location.origin}/rest/V1/tmdt-registration/profile`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    })
+      .then((res) => res.json())
+      .then((payload) => {
+        const payloadObject =
+          payload && typeof payload === 'object' && !Array.isArray(payload)
+            ? (payload as Record<string, unknown>)
+            : {};
+        const data =
+          payloadObject.data && typeof payloadObject.data === 'object' && !Array.isArray(payloadObject.data)
+            ? (payloadObject.data as Record<string, unknown>)
+            : payloadObject;
+        const role = String((data as { role?: unknown }).role ?? readStorageValue('freso_role')).trim().toLowerCase();
+        const status = String((data as { status?: unknown }).status ?? '').trim().toLowerCase();
+
+        if (role === 'seller' && status !== 'approved') {
+          window.localStorage.setItem('freso_role', 'customer');
+          window.sessionStorage.setItem('freso_role', 'customer');
+          window.localStorage.setItem('freso_is_owner', '0');
+          window.sessionStorage.setItem('freso_is_owner', '0');
+          window.localStorage.setItem('freso_is_super_admin', '0');
+          window.sessionStorage.setItem('freso_is_super_admin', '0');
+          window.location.replace('/react/index.html?view=dashboard');
+        }
+      })
+      .catch(() => {
+        // Keep the existing guard if the profile check cannot complete.
+      })
+      .finally(() => {
+        setIsCheckingSellerAccess(false);
+      });
+  }, [canAccessSellerArea]);
 
   useEffect(() => {
     const token = readStorageValue('freso_customer_token');
@@ -54,12 +109,12 @@ export function SellerDashboardPage() {
         const roleAttr = customAttributes.find((attr) => attr?.attribute_code === 'tmdt_role');
 
         if (ownerAttr || superAdminAttr) {
-          const nextValue =
-            parseBoolFlag(String(ownerAttr?.value ?? '')) || parseBoolFlag(String(superAdminAttr?.value ?? ''));
-          window.localStorage.setItem('freso_is_owner', nextValue ? '1' : '0');
-          window.sessionStorage.setItem('freso_is_owner', nextValue ? '1' : '0');
-          window.localStorage.setItem('freso_is_super_admin', nextValue ? '1' : '0');
-          window.sessionStorage.setItem('freso_is_super_admin', nextValue ? '1' : '0');
+          const nextOwner = parseBoolFlag(String(ownerAttr?.value ?? ''));
+          const nextSuperAdmin = parseBoolFlag(String(superAdminAttr?.value ?? ''));
+          window.localStorage.setItem('freso_is_owner', nextOwner ? '1' : '0');
+          window.sessionStorage.setItem('freso_is_owner', nextOwner ? '1' : '0');
+          window.localStorage.setItem('freso_is_super_admin', nextSuperAdmin ? '1' : '0');
+          window.sessionStorage.setItem('freso_is_super_admin', nextSuperAdmin ? '1' : '0');
         }
 
         let resolvedRole = readStorageValue('freso_role').trim().toLowerCase();
@@ -73,7 +128,7 @@ export function SellerDashboardPage() {
         }
         const hasPrivilege =
           parseBoolFlag(String(ownerAttr?.value ?? '')) || parseBoolFlag(String(superAdminAttr?.value ?? ''));
-        setCanManageBranches(resolvedRole !== 'branch' && (hasPrivilege || resolvedRole === '' || resolvedRole === 'manager' || resolvedRole === 'seller'));
+        setCanManageBranches(resolvedRole === 'seller' && hasPrivilege);
       })
       .catch(() => {
         // ignore permission fetch failures
@@ -91,14 +146,18 @@ export function SellerDashboardPage() {
       'don-hang',
       'bao-gia'
     ]);
-    return adminMenuItems.filter((item) => visibleIds.has(item.id) && (canManageBranches || item.id !== 'nhan-vien'));
+    return adminMenuItems.filter(
+      (item) =>
+        visibleIds.has(item.id) &&
+        (canManageBranches || (item.id !== 'nhan-vien' && item.id !== 'quan-ly-san-pham'))
+    );
   }, [canManageBranches]);
 
   const dashboardLabel = adminMenuItems.find((item) => item.id === 'dashboard')?.label ?? 'Dashboard';
   const profileLabel = adminMenuItems.find((item) => item.id === 'profile-seller')?.label ?? 'Thông tin hồ sơ';
   const branchLabel = adminMenuItems.find((item) => item.id === 'nhan-vien')?.label ?? 'Quản lý cơ sở';
   const productLabel = adminMenuItems.find((item) => item.id === 'quan-ly-san-pham')?.label ?? 'Quản lý sản phẩm';
-  const cartLabel = adminMenuItems.find((item) => item.id === 'quan-ly-gio-hang')?.label ?? 'Quản lý giỏ hàng';
+  const cartLabel = adminMenuItems.find((item) => item.id === 'quan-ly-gio-hang')?.label ?? 'Yêu cầu báo giá';
   const inventoryLabel = adminMenuItems.find((item) => item.id === 'quan-ly-kho')?.label ?? 'Quản lý kho hàng';
   const orderLabel = adminMenuItems.find((item) => item.id === 'don-hang')?.label ?? 'Quản lý đơn hàng';
   const quoteLabel = adminMenuItems.find((item) => item.id === 'bao-gia')?.label ?? 'Đàm phán giá';
@@ -109,6 +168,16 @@ export function SellerDashboardPage() {
   const initialTab = tabFromQuery && tabLabels.has(tabFromQuery) ? tabFromQuery : dashboardLabel;
   const [activeTab, setActiveTab] = useState(initialTab);
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({ 'nhan-vien': false, 'bao-cao': false });
+
+  useEffect(() => {
+    if (!tabLabels.has(activeTab)) {
+      setActiveTab(dashboardLabel);
+    }
+  }, [activeTab, dashboardLabel, tabLabels]);
+
+  if (!canAccessSellerArea || isCheckingSellerAccess) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-[#F5FAF6]">
@@ -129,7 +198,7 @@ export function SellerDashboardPage() {
           <div className="flex-1 min-w-0">
             {activeTab === dashboardLabel && <SellerOverviewDashboard />}
             {activeTab === profileLabel && <SellerProfile />}
-            {activeTab === productLabel && <SellerProductManager />}
+            {activeTab === productLabel && canManageBranches && <SellerProductManager />}
             {activeTab === cartLabel && <SellerCartManager />}
             {activeTab === inventoryLabel && <SellerInventoryManager />}
             {activeTab === branchLabel && (

@@ -48,5 +48,16 @@ interface OrderManagementInterface
      * @throws \Magento\Framework\Exception\LocalizedException
      */
     public function confirmDirectPayment(string $orderCode): bool;
+
+    /**
+     * Update order fulfillment status (preparing / shipping / delivered).
+     * Only the seller who owns items in the order can update fulfillment.
+     *
+     * @param string $orderCode
+     * @param string $status  One of: preparing, shipping, delivered
+     * @return bool
+     * @throws \Magento\Framework\Exception\LocalizedException
+     */
+    public function updateOrderFulfillment(string $orderCode, string $status): bool;
 }
 

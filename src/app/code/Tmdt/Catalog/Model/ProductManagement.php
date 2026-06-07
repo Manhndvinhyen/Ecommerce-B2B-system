@@ -12,6 +12,7 @@ use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\Webapi\Rest\Request as RestRequest;
 use Magento\Authorization\Model\UserContextInterface;
+use Magento\Framework\App\ObjectManager;
 
 class ProductManagement implements ProductManagementInterface
 {
@@ -30,18 +31,28 @@ class ProductManagement implements ProductManagementInterface
     }
 
     /**
+     * Get UserContext via ObjectManager (lazy, avoids constructor changes requiring di:compile).
+     */
+    private function getUserContext(): UserContextInterface
+    {
+        return ObjectManager::getInstance()->get(UserContextInterface::class);
+    }
+
+    /**
      * @inheritDoc
      */
     public function createProduct(string $productData): string
     {
-        $sellerId = $this->getSellerIdFromSession();
+        $currentCustomerId = $this->getCurrentCustomerId();
+        $this->assertCanManageProductCatalog($currentCustomerId);
+        $sellerId = $this->resolveCompanySellerId($currentCustomerId);
         $data = json_decode($productData, true);
         if (!is_array($data)) {
             $data = [];
         }
 
         if (empty($data['name']) || empty($data['sku']) || empty($data['price'])) {
-            throw new LocalizedException(__('Tên, SKU và giá sỉ là bắt buộc.'));
+            throw new LocalizedException(__('TÃªn, SKU vÃ  giÃ¡ sá»‰ lÃ  báº¯t buá»™c.'));
         }
 
         try {
@@ -85,16 +96,16 @@ class ProductManagement implements ProductManagementInterface
             if (!empty($data['description'])) {
                 $desc = $data['description'];
                 if (!empty($desc['features'])) {
-                    $descriptionHtml .= '<p><strong>Đặc điểm:</strong> ' . htmlspecialchars($desc['features']) . '</p>';
+                    $descriptionHtml .= '<p><strong>Äáº·c Ä‘iá»ƒm:</strong> ' . htmlspecialchars($desc['features']) . '</p>';
                 }
                 if (!empty($desc['benefits'])) {
-                    $descriptionHtml .= '<p><strong>Công dụng:</strong> ' . htmlspecialchars($desc['benefits']) . '</p>';
+                    $descriptionHtml .= '<p><strong>CÃ´ng dá»¥ng:</strong> ' . htmlspecialchars($desc['benefits']) . '</p>';
                 }
                 if (!empty($desc['storage'])) {
-                    $descriptionHtml .= '<p><strong>Cách bảo quản:</strong> ' . htmlspecialchars($desc['storage']) . '</p>';
+                    $descriptionHtml .= '<p><strong>CÃ¡ch báº£o quáº£n:</strong> ' . htmlspecialchars($desc['storage']) . '</p>';
                 }
                 if (!empty($desc['expiry'])) {
-                    $descriptionHtml .= '<p><strong>Thời hạn sử dụng:</strong> ' . htmlspecialchars($desc['expiry']) . '</p>';
+                    $descriptionHtml .= '<p><strong>Thá»i háº¡n sá»­ dá»¥ng:</strong> ' . htmlspecialchars($desc['expiry']) . '</p>';
                 }
             }
             if ($descriptionHtml) {
@@ -154,7 +165,7 @@ class ProductManagement implements ProductManagementInterface
 
             return json_encode([
                 'success' => true,
-                'message' => 'Đăng sản phẩm sỉ thành công!',
+                'message' => 'ÄÄƒng sáº£n pháº©m sá»‰ thÃ nh cÃ´ng!',
                 'sku' => $product->getSku()
             ]);
         } catch (\Exception $e) {
@@ -168,6 +179,7 @@ class ProductManagement implements ProductManagementInterface
     public function updateProduct(string $sku, string $productData): string
     {
         try {
+            $this->assertCanManageProductCatalog($this->getCurrentCustomerId());
             $this->verifyProductOwnership($sku);
             $data = json_decode($productData, true);
             if (!is_array($data)) {
@@ -198,16 +210,16 @@ class ProductManagement implements ProductManagementInterface
                 $descriptionHtml = '';
                 $desc = $data['description'];
                 if (!empty($desc['features'])) {
-                    $descriptionHtml .= '<p><strong>Đặc điểm:</strong> ' . htmlspecialchars($desc['features']) . '</p>';
+                    $descriptionHtml .= '<p><strong>Äáº·c Ä‘iá»ƒm:</strong> ' . htmlspecialchars($desc['features']) . '</p>';
                 }
                 if (!empty($desc['benefits'])) {
-                    $descriptionHtml .= '<p><strong>Công dụng:</strong> ' . htmlspecialchars($desc['benefits']) . '</p>';
+                    $descriptionHtml .= '<p><strong>CÃ´ng dá»¥ng:</strong> ' . htmlspecialchars($desc['benefits']) . '</p>';
                 }
                 if (!empty($desc['storage'])) {
-                    $descriptionHtml .= '<p><strong>Cách bảo quản:</strong> ' . htmlspecialchars($desc['storage']) . '</p>';
+                    $descriptionHtml .= '<p><strong>CÃ¡ch báº£o quáº£n:</strong> ' . htmlspecialchars($desc['storage']) . '</p>';
                 }
                 if (!empty($desc['expiry'])) {
-                    $descriptionHtml .= '<p><strong>Thời hạn sử dụng:</strong> ' . htmlspecialchars($desc['expiry']) . '</p>';
+                    $descriptionHtml .= '<p><strong>Thá»i háº¡n sá»­ dá»¥ng:</strong> ' . htmlspecialchars($desc['expiry']) . '</p>';
                 }
                 if ($descriptionHtml) {
                     $product->setDescription($descriptionHtml);
@@ -262,7 +274,7 @@ class ProductManagement implements ProductManagementInterface
 
             return json_encode([
                 'success' => true,
-                'message' => 'Cập nhật sản phẩm sỉ thành công!',
+                'message' => 'Cáº­p nháº­t sáº£n pháº©m sá»‰ thÃ nh cÃ´ng!',
                 'sku' => $sku
             ]);
         } catch (\Exception $e) {
@@ -278,6 +290,7 @@ class ProductManagement implements ProductManagementInterface
      */
     public function deleteProduct(string $sku): string
     {
+        $this->assertCanManageProductCatalog($this->getCurrentCustomerId());
         $this->verifyProductOwnership($sku);
 
         try {
@@ -296,7 +309,7 @@ class ProductManagement implements ProductManagementInterface
 
             return json_encode([
                 'success' => true,
-                'message' => 'Đã xóa sản phẩm thành công khỏi catalog.'
+                'message' => 'ÄÃ£ xÃ³a sáº£n pháº©m thÃ nh cÃ´ng khá»i catalog.'
             ]);
         } catch (\Exception $e) {
             throw new LocalizedException(__($e->getMessage()));
@@ -308,7 +321,7 @@ class ProductManagement implements ProductManagementInterface
      */
     public function getSellerProducts()
     {
-        $sellerId = $this->getSellerIdFromSession();
+        $sellerId = $this->resolveCompanySellerId($this->getCurrentCustomerId());
         $connection = $this->resourceConnection->getConnection();
         $storeId = (int)$this->storeManager->getStore()->getId();
         
@@ -522,14 +535,14 @@ class ProductManagement implements ProductManagementInterface
             \Magento\Framework\App\ObjectManager::getInstance()->get(\Psr\Log\LoggerInterface::class)->error(
                 "TMDT Image Error: " . $e->getMessage() . "\n" . $e->getTraceAsString()
             );
-            throw new LocalizedException(__("Lỗi xử lý ảnh: %1", $e->getMessage()));
+            throw new LocalizedException(__("Lá»—i xá»­ lÃ½ áº£nh: %1", $e->getMessage()));
         }
     }
 
     /**
      * Get Seller ID from Customer Session.
      */
-    private function getSellerIdFromSession(): string
+    private function getCurrentCustomerId(): string
     {
         // 1. Try PHP session first (browser-based access)
         if ($this->customerSession->isLoggedIn()) {
@@ -537,14 +550,15 @@ class ProductManagement implements ProductManagementInterface
         }
 
         // 2. Use Magento's REST UserContext (resolves Bearer token automatically)
-        if ($this->userContext->getUserType() === UserContextInterface::USER_TYPE_CUSTOMER) {
-            $uid = (int)$this->userContext->getUserId();
+        $userContext = $this->getUserContext();
+        if ($userContext->getUserType() === UserContextInterface::USER_TYPE_CUSTOMER) {
+            $uid = (int)$userContext->getUserId();
             if ($uid > 0) {
                 return (string)$uid;
             }
         }
 
-        // 3. Legacy fallback: manual Bearer → oauth_token lookup
+        // 3. Legacy fallback: manual Bearer â†’ oauth_token lookup
         $token = '';
         $authHeader = $this->request->getHeader('Authorization');
         if ($authHeader) {
@@ -571,7 +585,90 @@ class ProductManagement implements ProductManagementInterface
             }
         }
 
-        throw new LocalizedException(__('Phiên làm việc hết hạn. Vui lòng đăng nhập lại.'));
+        throw new LocalizedException(__('PhiÃªn lÃ m viá»‡c háº¿t háº¡n. Vui lÃ²ng Ä‘Äƒng nháº­p láº¡i.'));
+    }
+
+    private function resolveCompanySellerId(string $customerId): string
+    {
+        $connection = $this->resourceConnection->getConnection();
+        $registrationTable = $connection->getTableName('tmdt_customer_registration');
+        $row = $connection->fetchRow(
+            $connection->select()
+                ->from($registrationTable, ['login_code'])
+                ->where('customer_id = ?', (int) $customerId)
+                ->limit(1)
+        );
+
+        $loginCode = is_array($row) ? trim((string) ($row['login_code'] ?? '')) : '';
+        if ($loginCode === '') {
+            return $customerId;
+        }
+
+        $ownerIds = $connection->fetchCol(
+            $connection->select()
+                ->from($registrationTable, ['customer_id'])
+                ->where('login_code = ?', $loginCode)
+                ->where('role = ?', 'seller')
+        );
+
+        foreach ($ownerIds as $ownerId) {
+            if ($this->customerHasOwnerPrivilege((int) $ownerId)) {
+                return (string) $ownerId;
+            }
+        }
+
+        return $customerId;
+    }
+
+    private function assertCanManageProductCatalog(string $customerId): void
+    {
+        if (!$this->customerHasOwnerPrivilege((int) $customerId)) {
+            throw new LocalizedException(__('Chi chu doanh nghiep moi co quyen quan ly san pham. Co so/chi nhanh chi duoc quan ly kho hang.'));
+        }
+    }
+
+    private function customerHasOwnerPrivilege(int $customerId): bool
+    {
+        if ($customerId <= 0) {
+            return false;
+        }
+
+        try {
+            $connection = $this->resourceConnection->getConnection();
+            $entityTypeId = (int) $connection->fetchOne(
+                "SELECT entity_type_id FROM eav_entity_type WHERE entity_type_code = 'customer' LIMIT 1"
+            );
+            if ($entityTypeId <= 0) {
+                return false;
+            }
+
+            $attrs = $connection->fetchPairs(
+                $connection->select()
+                    ->from($connection->getTableName('eav_attribute'), ['attribute_code', 'attribute_id'])
+                    ->where('entity_type_id = ?', $entityTypeId)
+                    ->where('attribute_code IN (?)', ['is_owner', 'is_super_admin'])
+            );
+            if (!$attrs) {
+                return false;
+            }
+
+            $values = $connection->fetchPairs(
+                $connection->select()
+                    ->from($connection->getTableName('customer_entity_int'), ['attribute_id', 'value'])
+                    ->where('entity_id = ?', $customerId)
+                    ->where('attribute_id IN (?)', array_values($attrs))
+            );
+
+            foreach ($attrs as $attributeId) {
+                if (!empty($values[(int) $attributeId])) {
+                    return true;
+                }
+            }
+        } catch (\Throwable) {
+            return false;
+        }
+
+        return false;
     }
 
     /**
@@ -579,7 +676,7 @@ class ProductManagement implements ProductManagementInterface
      */
     private function verifyProductOwnership(string $sku): void
     {
-        $sellerId = $this->getSellerIdFromSession();
+        $sellerId = $this->resolveCompanySellerId($this->getCurrentCustomerId());
         try {
             $product = $this->productRepository->get($sku);
             $prodSellerId = $product->getCustomAttribute('tmdt_seller_id') 
@@ -587,12 +684,12 @@ class ProductManagement implements ProductManagementInterface
                 : '';
 
             if ($prodSellerId !== '' && $prodSellerId !== 'NONE' && $prodSellerId !== $sellerId) {
-                throw new LocalizedException(__('Bạn không có quyền sửa sản phẩm này.'));
+                throw new LocalizedException(__('Báº¡n khÃ´ng cÃ³ quyá»n sá»­a sáº£n pháº©m nÃ y.'));
             }
         } catch (LocalizedException $e) {
             throw $e;
         } catch (\Exception $e) {
-            throw new LocalizedException(__('Không tìm thấy sản phẩm.'));
+            throw new LocalizedException(__('KhÃ´ng tÃ¬m tháº¥y sáº£n pháº©m.'));
         }
     }
 
@@ -602,13 +699,13 @@ class ProductManagement implements ProductManagementInterface
     private function resolveCategoryIdByName(string $categoryName): ?int
     {
         $categoryMap = [
-            'Rau củ quả' => 6,
-            'Trái cây' => 10,
-            'Thực phẩm tươi sống' => 13,
-            'Thuỷ hải sản' => 17,
-            'Thực phẩm đông lạnh' => 21,
-            'Thực phẩm khô' => 25,
-            'Tiện ích bếp' => 29
+            'Rau cá»§ quáº£' => 6,
+            'TrÃ¡i cÃ¢y' => 10,
+            'Thá»±c pháº©m tÆ°Æ¡i sá»‘ng' => 13,
+            'Thuá»· háº£i sáº£n' => 17,
+            'Thá»±c pháº©m Ä‘Ã´ng láº¡nh' => 21,
+            'Thá»±c pháº©m khÃ´' => 25,
+            'Tiá»‡n Ã­ch báº¿p' => 29
         ];
 
         if (isset($categoryMap[$categoryName])) {
@@ -661,20 +758,20 @@ class ProductManagement implements ProductManagementInterface
      */
     private function removeVietnameseAccents(string $str): string
     {
-        $str = preg_replace("/(à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ)/", "a", $str);
-        $str = preg_replace("/(è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ)/", "e", $str);
-        $str = preg_replace("/(ì|í|ị|ỉ|ĩ)/", "i", $str);
-        $str = preg_replace("/(ò|ó|ọ|ỏ|õ|ô|ồ|ố|ộ|ổ|ỗ|ơ|ờ|ớ|ợ|ở|ỡ)/", "o", $str);
-        $str = preg_replace("/(ù|ú|ụ|ủ|ũ|ư|ừ|ứ|ự|ử|ữ)/", "u", $str);
-        $str = preg_replace("/(ỳ|ý|ỵ|ỷ|ỹ)/", "y", $str);
-        $str = preg_replace("/(đ)/", "d", $str);
-        $str = preg_replace("/(À|Á|Ạ|Ả|Ã|Â|Ầ|Ấ|Ậ|Ẩ|Ẫ|Ă|Ằ|Ắ|Ặ|Ẳ|Ẵ)/", "A", $str);
-        $str = preg_replace("/(È|É|Ẹ|Ẻ|E|Ê|Ề|Ế|Ệ|Ể|Ễ)/", "E", $str);
-        $str = preg_replace("/(Ì|Í|Ị|Ỉ|Ĩ)/", "I", $str);
-        $str = preg_replace("/(Ò|Ó|Ọ|Ỏ|Õ|Ô|Ồ|Ố|Ộ|Ổ|Ỗ|Ơ|Ờ|Ớ|Ợ|Ở|Ỡ)/", "O", $str);
-        $str = preg_replace("/(Ù|Ú|Ụ|Ủ|Ũ|Ư|Ừ|Ứ|Ự|Ử|Ữ)/", "U", $str);
-        $str = preg_replace("/(Ý|Ý|Ý|Ý|Ý)/", "Y", $str);
-        $str = preg_replace("/(Đ)/", "D", $str);
+        $str = preg_replace("/(Ã |Ã¡|áº¡|áº£|Ã£|Ã¢|áº§|áº¥|áº­|áº©|áº«|Äƒ|áº±|áº¯|áº·|áº³|áºµ)/", "a", $str);
+        $str = preg_replace("/(Ã¨|Ã©|áº¹|áº»|áº½|Ãª|á»|áº¿|á»‡|á»ƒ|á»…)/", "e", $str);
+        $str = preg_replace("/(Ã¬|Ã­|á»‹|á»‰|Ä©)/", "i", $str);
+        $str = preg_replace("/(Ã²|Ã³|á»|á»|Ãµ|Ã´|á»“|á»‘|á»™|á»•|á»—|Æ¡|á»|á»›|á»£|á»Ÿ|á»¡)/", "o", $str);
+        $str = preg_replace("/(Ã¹|Ãº|á»¥|á»§|Å©|Æ°|á»«|á»©|á»±|á»­|á»¯)/", "u", $str);
+        $str = preg_replace("/(á»³|Ã½|á»µ|á»·|á»¹)/", "y", $str);
+        $str = preg_replace("/(Ä‘)/", "d", $str);
+        $str = preg_replace("/(Ã€|Ã|áº |áº¢|Ãƒ|Ã‚|áº¦|áº¤|áº¬|áº¨|áºª|Ä‚|áº°|áº®|áº¶|áº²|áº´)/", "A", $str);
+        $str = preg_replace("/(Ãˆ|Ã‰|áº¸|áºº|E|ÃŠ|á»€|áº¾|á»†|á»‚|á»„)/", "E", $str);
+        $str = preg_replace("/(ÃŒ|Ã|á»Š|á»ˆ|Ä¨)/", "I", $str);
+        $str = preg_replace("/(Ã’|Ã“|á»Œ|á»Ž|Ã•|Ã”|á»’|á»|á»˜|á»”|á»–|Æ |á»œ|á»š|á»¢|á»ž|á» )/", "O", $str);
+        $str = preg_replace("/(Ã™|Ãš|á»¤|á»¦|Å¨|Æ¯|á»ª|á»¨|á»°|á»¬|á»®)/", "U", $str);
+        $str = preg_replace("/(Ã|Ã|Ã|Ã|Ã)/", "Y", $str);
+        $str = preg_replace("/(Ä)/", "D", $str);
         return $str;
     }
 
@@ -738,7 +835,7 @@ class ProductManagement implements ProductManagementInterface
      */
     public function getSellerNotifications(): array
     {
-        $sellerId = $this->getSellerIdFromSession();
+        $sellerId = $this->resolveCompanySellerId($this->getCurrentCustomerId());
         $connection = $this->resourceConnection->getConnection();
         
         $select = $connection->select()
@@ -754,7 +851,7 @@ class ProductManagement implements ProductManagementInterface
      */
     public function markNotificationsAsRead(): bool
     {
-        $sellerId = $this->getSellerIdFromSession();
+        $sellerId = $this->resolveCompanySellerId($this->getCurrentCustomerId());
         $connection = $this->resourceConnection->getConnection();
         
         $connection->update(
@@ -771,7 +868,7 @@ class ProductManagement implements ProductManagementInterface
      */
     public function getSellerRevenueStats(): array
     {
-        $sellerId = (int)$this->getSellerIdFromSession();
+        $sellerId = (int) $this->resolveCompanySellerId($this->getCurrentCustomerId());
         $connection = $this->resourceConnection->getConnection();
         
         $oTable = $connection->getTableName('tmdt_orders');
@@ -797,7 +894,7 @@ class ProductManagement implements ProductManagementInterface
         for ($i = 5; $i >= 0; $i--) {
             $monthNum = date('n', strtotime("-{$i} month"));
             $monthYear = date('Y-m', strtotime("-{$i} month"));
-            $monthName = 'Tháng ' . $monthNum;
+            $monthName = 'ThÃ¡ng ' . $monthNum;
             $months[$monthYear] = [
                 'name' => $monthName,
                 'DoanhThu' => 0.0,
@@ -831,7 +928,7 @@ class ProductManagement implements ProductManagementInterface
         // 3. Category distribution
         $categoryDataQuery = "
             SELECT 
-                COALESCE(ccev.value, 'Khác') AS name,
+                COALESCE(ccev.value, 'KhÃ¡c') AS name,
                 SUM(CASE WHEN o.status = 'paid' THEN oi.row_total ELSE 0 END) AS value
             FROM {$oTable} o
             INNER JOIN {$oiTable} oi ON o.id = oi.order_id
@@ -876,26 +973,66 @@ class ProductManagement implements ProductManagementInterface
             $tp['image'] = $tp['image'] ? '/media/catalog/product/' . ltrim((string)$tp['image'], '/') : '';
         }
 
-        // 5. Operational log from notifications
-        $notifTable = $connection->getTableName('tmdt_seller_notifications');
-        $notifications = $connection->fetchAll("
-            SELECT sku, message, created_at FROM {$notifTable}
-            WHERE seller_customer_id = :seller_id
-            ORDER BY created_at DESC
-            LIMIT 8
-        ", ['seller_id' => $sellerId]);
-
+        // 5. Operational log: recent orders for this seller + stock notifications
         $operationalLog = [];
-        foreach ($notifications as $n) {
-            $type = str_contains($n['sku'], 'DH') ? 'order_created' : 'out_of_stock';
-            $title = $type === 'order_created' ? 'Đơn sỉ mới nhận' : 'Cảnh báo hết hàng';
+
+        // 5a. Recent orders involving this seller
+        $recentOrdersQuery = "
+            SELECT DISTINCT
+                o.order_code,
+                o.status,
+                o.customer_name,
+                o.total_amount,
+                o.created_at
+            FROM {$oTable} o
+            INNER JOIN {$oiTable} oi ON o.id = oi.order_id
+            WHERE oi.seller_id = :seller_id
+              AND COALESCE(o.parent_code, '') != 'parent'
+            ORDER BY o.created_at DESC
+            LIMIT 6
+        ";
+        $recentOrders = $connection->fetchAll($recentOrdersQuery, ['seller_id' => $sellerId]);
+        foreach ($recentOrders as $ro) {
+            $statusLabel = match(strtolower((string)$ro['status'])) {
+                'paid'       => 'Ä‘Ã£ thanh toÃ¡n',
+                'processing' => 'Ä‘ang xá»­ lÃ½ (COD)',
+                'cancelled','canceled' => 'Ä‘Ã£ há»§y',
+                'expired'    => 'háº¿t háº¡n',
+                default      => 'chá» thanh toÃ¡n'
+            };
             $operationalLog[] = [
-                'type'    => $type,
-                'title'   => $title,
-                'message' => $n['message'],
-                'time'    => $n['created_at']
+                'type'    => 'order_created',
+                'title'   => 'ÄÆ¡n sá»‰ má»›i nháº­n',
+                'message' => "ÄÆ¡n <strong>{$ro['order_code']}</strong> tá»« <strong>{$ro['customer_name']}</strong> - " . number_format((float)$ro['total_amount'], 0, ',', '.') . "Ä‘ - {$statusLabel}",
+                'time'    => $ro['created_at']
             ];
         }
+
+        // 5b. Stock out-of-stock notifications
+        $notifTable = $connection->getTableName('tmdt_seller_notifications');
+        $tableExists = $connection->fetchOne(
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = '{$notifTable}'"
+        );
+        if ($tableExists) {
+            $notifications = $connection->fetchAll("
+                SELECT sku, message, created_at FROM {$notifTable}
+                WHERE seller_customer_id = :seller_id
+                ORDER BY created_at DESC
+                LIMIT 4
+            ", ['seller_id' => $sellerId]);
+            foreach ($notifications as $n) {
+                $operationalLog[] = [
+                    'type'    => 'out_of_stock',
+                    'title'   => 'Cáº£nh bÃ¡o háº¿t hÃ ng',
+                    'message' => $n['message'],
+                    'time'    => $n['created_at']
+                ];
+            }
+        }
+
+        // Sort by time desc
+        usort($operationalLog, fn($a, $b) => strcmp($b['time'], $a['time']));
+        $operationalLog = array_slice($operationalLog, 0, 8);
 
         return [
             'success'        => true,
@@ -913,7 +1050,7 @@ class ProductManagement implements ProductManagementInterface
      */
     public function getSellerOrders(): array
     {
-        $sellerId = (int)$this->getSellerIdFromSession();
+        $sellerId = (int) $this->resolveCompanySellerId($this->getCurrentCustomerId());
         $connection = $this->resourceConnection->getConnection();
         $limit = max(1, min(50, (int) ($this->request->getParam('limit') ?: 20)));
         $statusFilter = strtolower(trim((string) ($this->request->getParam('status') ?: 'all')));
@@ -989,7 +1126,7 @@ class ProductManagement implements ProductManagementInterface
                 $item['quantity'] = (float)$item['quantity'];
                 $item['unit_price'] = (float)$item['unit_price'];
                 $item['row_total'] = (float)$item['row_total'];
-                $item['category'] = 'Mặt hàng sỉ'; // fallback
+                $item['category'] = 'Máº·t hÃ ng sá»‰'; // fallback
                 $item['image'] = $item['image'] ? '/media/catalog/product/' . ltrim((string)$item['image'], '/') : '';
             }
 
@@ -1133,7 +1270,7 @@ class ProductManagement implements ProductManagementInterface
     {
         $connection = $this->resourceConnection->getConnection();
 
-        // ── Resolve customer identity ─────────────────────────────────────────
+        // â”€â”€ Resolve customer identity â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         $customerId    = 0;
         $customerEmail = '';
 
@@ -1143,12 +1280,15 @@ class ProductManagement implements ProductManagementInterface
             $customerEmail = (string)$this->customerSession->getCustomer()->getEmail();
         }
 
-        // 2. Magento REST UserContext – the framework resolves Bearer token automatically
-        if ($customerId === 0 && $this->userContext->getUserType() === UserContextInterface::USER_TYPE_CUSTOMER) {
-            $customerId = (int)$this->userContext->getUserId();
+        // 2. Magento REST UserContext â€“ the framework resolves Bearer token automatically
+        if ($customerId === 0) {
+            $userCtx = $this->getUserContext();
+            if ($userCtx->getUserType() === UserContextInterface::USER_TYPE_CUSTOMER) {
+                $customerId = (int)$userCtx->getUserId();
+            }
         }
 
-        // 3. Legacy fallback: manual Bearer → oauth_token lookup (handles long-lived tokens)
+        // 3. Legacy fallback: manual Bearer â†’ oauth_token lookup (handles long-lived tokens)
         if ($customerId === 0) {
             $token = '';
             $authHeader = $this->request->getHeader('Authorization');
@@ -1184,10 +1324,10 @@ class ProductManagement implements ProductManagementInterface
         }
 
         if ($customerEmail === '') {
-            throw new LocalizedException(__('Phiên làm việc hết hạn. Vui lòng đăng nhập lại.'));
+            throw new LocalizedException(__('PhiÃªn lÃ m viá»‡c háº¿t háº¡n. Vui lÃ²ng Ä‘Äƒng nháº­p láº¡i.'));
         }
 
-        // ── Query parameters ─────────────────────────────────────────────────
+        // â”€â”€ Query parameters â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         $limit        = max(1, min(100, (int)($this->request->getParam('limit') ?: 30)));
         $statusFilter = strtolower(trim((string)($this->request->getParam('status') ?: 'all')));
         $searchQuery  = strtolower(trim((string)($this->request->getParam('q') ?: '')));
@@ -1195,7 +1335,7 @@ class ProductManagement implements ProductManagementInterface
         $oTable  = $connection->getTableName('tmdt_orders');
         $oiTable = $connection->getTableName('tmdt_order_items');
 
-        // ── Build base SELECT ─────────────────────────────────────────────────
+        // â”€â”€ Build base SELECT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         $select = $connection->select()
             ->from(['o' => $oTable], [
                 'history_id'       => 'o.id',
@@ -1251,7 +1391,7 @@ class ProductManagement implements ProductManagementInterface
                 $item['quantity']   = (float)$item['quantity'];
                 $item['unit_price'] = (float)$item['unit_price'];
                 $item['row_total']  = (float)$item['row_total'];
-                $item['category']   = 'Mặt hàng sỉ';
+                $item['category']   = 'Máº·t hÃ ng sá»‰';
                 $item['image']      = $item['image']
                     ? '/media/catalog/product/' . ltrim((string)$item['image'], '/')
                     : '';
@@ -1312,12 +1452,12 @@ class ProductManagement implements ProductManagementInterface
     private function getOrderStatusLabel(string $status): string
     {
         return match (strtolower($status)) {
-            'paid' => 'Đã thanh toán',
-            'processing' => 'Đang xử lý',
-            'cancelled', 'canceled' => 'Đã hủy',
-            'expired' => 'Hết hạn',
-            'pending' => 'Chờ thanh toán',
-            default => $status !== '' ? ucfirst($status) : 'Chờ thanh toán',
+            'paid' => 'ÄÃ£ thanh toÃ¡n',
+            'processing' => 'Äang xá»­ lÃ½',
+            'cancelled', 'canceled' => 'ÄÃ£ há»§y',
+            'expired' => 'Háº¿t háº¡n',
+            'pending' => 'Chá» thanh toÃ¡n',
+            default => $status !== '' ? ucfirst($status) : 'Chá» thanh toÃ¡n',
         };
     }
 }

@@ -23,7 +23,7 @@ export function UserDashboardPage() {
     const isOwner = readStorageValue('freso_is_owner');
     const isSuperAdmin = readStorageValue('freso_is_super_admin');
     const role = readStorageValue('freso_role').trim().toLowerCase();
-    return role !== 'branch' && (parseBoolFlag(isOwner) || parseBoolFlag(isSuperAdmin) || role === '' || role === 'manager' || role === 'seller');
+    return role === 'seller' && (parseBoolFlag(isOwner) || parseBoolFlag(isSuperAdmin));
   };
 
   const [canManageBranches, setCanManageBranches] = useState(getStoredCanManageBranches());
@@ -50,12 +50,12 @@ export function UserDashboardPage() {
         const roleAttr = customAttributes.find((attr) => attr?.attribute_code === 'tmdt_role');
 
         if (ownerAttr || superAdminAttr) {
-          const nextValue =
-            parseBoolFlag(String(ownerAttr?.value ?? '')) || parseBoolFlag(String(superAdminAttr?.value ?? ''));
-          window.localStorage.setItem('freso_is_owner', nextValue ? '1' : '0');
-          window.sessionStorage.setItem('freso_is_owner', nextValue ? '1' : '0');
-          window.localStorage.setItem('freso_is_super_admin', nextValue ? '1' : '0');
-          window.sessionStorage.setItem('freso_is_super_admin', nextValue ? '1' : '0');
+          const nextOwner = parseBoolFlag(String(ownerAttr?.value ?? ''));
+          const nextSuperAdmin = parseBoolFlag(String(superAdminAttr?.value ?? ''));
+          window.localStorage.setItem('freso_is_owner', nextOwner ? '1' : '0');
+          window.sessionStorage.setItem('freso_is_owner', nextOwner ? '1' : '0');
+          window.localStorage.setItem('freso_is_super_admin', nextSuperAdmin ? '1' : '0');
+          window.sessionStorage.setItem('freso_is_super_admin', nextSuperAdmin ? '1' : '0');
         }
         const nextRole = roleAttr ? String(roleAttr.value ?? '').trim().toLowerCase() : readStorageValue('freso_role').trim().toLowerCase();
         if (roleAttr) {
@@ -64,7 +64,7 @@ export function UserDashboardPage() {
         }
         const hasPrivilege =
           parseBoolFlag(String(ownerAttr?.value ?? '')) || parseBoolFlag(String(superAdminAttr?.value ?? ''));
-        setCanManageBranches(nextRole !== 'branch' && (hasPrivilege || nextRole === '' || nextRole === 'manager' || nextRole === 'seller'));
+        setCanManageBranches(nextRole === 'seller' && hasPrivilege);
       })
       .catch(() => {
         // ignore permission fetch failures

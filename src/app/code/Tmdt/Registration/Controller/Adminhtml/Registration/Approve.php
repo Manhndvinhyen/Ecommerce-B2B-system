@@ -4,8 +4,10 @@ namespace Tmdt\Registration\Controller\Adminhtml\Registration;
 
 use Magento\Backend\App\Action;
 use Magento\Backend\App\Action\Context;
+use Magento\Customer\Api\CustomerRepositoryInterface;
 use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\Controller\Result\Redirect;
+use Magento\Framework\App\ObjectManager;
 
 class Approve extends Action
 {
@@ -28,12 +30,30 @@ class Approve extends Action
 
         $connection = $this->resourceConnection->getConnection();
         $tableName = $this->resourceConnection->getTableName('tmdt_customer_registration');
-        $roleExpression = new \Zend_Db_Expr("CASE WHEN role IS NULL OR role = '' THEN 'seller' ELSE role END");
+        $row = $connection->fetchRow(
+            $connection->select()
+                ->from($tableName, ['customer_id', 'role'])
+                ->where('registration_id = ?', $registrationId)
+                ->limit(1)
+        );
+
+        if (!is_array($row)) {
+            $this->messageManager->addErrorMessage(__('Khong tim thay dang ky can duyet.'));
+            return $this->resultRedirectFactory->create()->setPath('*/*/index');
+        }
+
+        $role = strtolower(trim((string) ($row['role'] ?? '')));
+        if ($role === '') {
+            $role = 'seller';
+        }
+
         $updated = $connection->update(
             $tableName,
-            ['status' => 'approved', 'role' => $roleExpression, 'notes' => null],
+            ['status' => 'approved', 'role' => $role, 'notes' => null],
             ['registration_id = ?' => $registrationId]
         );
+
+        $this->approveCustomer((int) ($row['customer_id'] ?? 0), $role);
 
         if ($updated > 0) {
             $this->messageManager->addSuccessMessage(__('Da duyet tai khoan kinh doanh.'));
@@ -42,5 +62,22 @@ class Approve extends Action
         }
 
         return $this->resultRedirectFactory->create()->setPath('*/*/index');
+    }
+
+    private function approveCustomer(int $customerId, string $role): void
+    {
+        if ($customerId <= 0 || $role !== 'seller') {
+            return;
+        }
+
+        try {
+            $customerRepository = ObjectManager::getInstance()->get(CustomerRepositoryInterface::class);
+            $customer = $customerRepository->getById($customerId);
+            $customer->setCustomAttribute('tmdt_role', 'seller');
+            $customer->setCustomAttribute('is_owner', '1');
+            $customer->setCustomAttribute('is_super_admin', '0');
+            $customerRepository->save($customer);
+        } catch (\Throwable) {
+        }
     }
 }

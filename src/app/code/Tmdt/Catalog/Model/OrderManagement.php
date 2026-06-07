@@ -412,6 +412,51 @@ class OrderManagement implements OrderManagementInterface
     /**
      * @inheritDoc
      */
+    public function confirmDirectPayment(string $orderCode): bool
+    {
+        $orderCode = trim($orderCode);
+        if ($orderCode === '') {
+            throw new \Magento\Framework\Exception\LocalizedException(__('Order code is required.'));
+        }
+
+        $connection = $this->resourceConnection->getConnection();
+        $table = $connection->getTableName(self::TABLE);
+
+        $order = $connection->fetchRow(
+            "SELECT id, order_code, status, payment_method FROM {$table} WHERE order_code = ? LIMIT 1",
+            [$orderCode]
+        );
+
+        if (!$order) {
+            throw new \Magento\Framework\Exception\LocalizedException(__('Order not found.'));
+        }
+
+        if (($order['payment_method'] ?? '') !== 'direct_payment') {
+            throw new \Magento\Framework\Exception\LocalizedException(__('This order is not a direct payment order.'));
+        }
+
+        $status = strtolower(trim((string)$order['status']));
+        if (in_array($status, ['processing', 'paid', 'preparing', 'shipping', 'delivered'], true)) {
+            return true;
+        }
+
+        if (in_array($status, ['expired', 'cancelled', 'refunded'], true)) {
+            throw new \Magento\Framework\Exception\LocalizedException(
+                __('Order cannot be confirmed from status "%1".', $status)
+            );
+        }
+
+        return $this->orderProcessor->confirmOrder(
+            $orderCode,
+            'COD-' . $orderCode,
+            'processing',
+            'Direct payment order has been confirmed and is now processing.'
+        );
+    }
+
+    /**
+     * @inheritDoc
+     */
     public function updateOrderFulfillment(string $orderCode, string $status): bool
     {
         $sellerId = (int)$this->getSellerIdFromSession();

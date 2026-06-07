@@ -85,6 +85,59 @@
         </index>
     </table>
 
+    <table name="tmdt_rfq_request" resource="default" engine="innodb" comment="Tmdt RFQ Requests">
+        <column xsi:type="int" name="request_id" padding="10" unsigned="true" nullable="false" identity="true" comment="RFQ Request ID"/>
+        <column xsi:type="int" name="buyer_id" padding="10" unsigned="true" nullable="false" comment="Buyer Customer ID"/>
+        <column xsi:type="varchar" name="buyer_name" length="255" nullable="true" comment="Buyer Name"/>
+        <column xsi:type="varchar" name="buyer_email" length="255" nullable="true" comment="Buyer Email"/>
+        <column xsi:type="varchar" name="product_name" length="255" nullable="false" comment="Requested Product Name"/>
+        <column xsi:type="varchar" name="category" length="128" nullable="true" comment="Requested Category"/>
+        <column xsi:type="decimal" name="quantity" scale="4" precision="12" nullable="false" default="1.0000" comment="Requested Quantity"/>
+        <column xsi:type="varchar" name="unit" length="32" nullable="true" comment="Unit"/>
+        <column xsi:type="varchar" name="delivery_region" length="255" nullable="true" comment="Delivery Region"/>
+        <column xsi:type="date" name="needed_by" nullable="true" comment="Needed By Date"/>
+        <column xsi:type="decimal" name="target_price" scale="2" precision="14" nullable="true" comment="Target Price"/>
+        <column xsi:type="text" name="description" nullable="true" comment="Buyer Requirement Description"/>
+        <column xsi:type="text" name="image_url" nullable="true" comment="Reference Image URL"/>
+        <column xsi:type="varchar" name="status" length="32" nullable="false" default="open" comment="open|quoted|closed|cancelled"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
+        <column xsi:type="timestamp" name="updated_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Updated At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="request_id"/>
+        </constraint>
+        <index referenceId="TMDT_RFQ_REQUEST_BUYER_ID" indexType="btree">
+            <column name="buyer_id"/>
+        </index>
+        <index referenceId="TMDT_RFQ_REQUEST_STATUS" indexType="btree">
+            <column name="status"/>
+        </index>
+    </table>
+
+    <table name="tmdt_rfq_quote" resource="default" engine="innodb" comment="Tmdt RFQ Seller Quotes">
+        <column xsi:type="int" name="quote_id" padding="10" unsigned="true" nullable="false" identity="true" comment="RFQ Quote ID"/>
+        <column xsi:type="int" name="request_id" padding="10" unsigned="true" nullable="false" comment="RFQ Request ID"/>
+        <column xsi:type="int" name="seller_id" padding="10" unsigned="true" nullable="false" comment="Seller Customer ID"/>
+        <column xsi:type="varchar" name="seller_name" length="255" nullable="true" comment="Seller Name"/>
+        <column xsi:type="decimal" name="unit_price" scale="2" precision="14" nullable="false" comment="Quoted Unit Price"/>
+        <column xsi:type="decimal" name="available_quantity" scale="4" precision="12" nullable="true" comment="Available Quantity"/>
+        <column xsi:type="varchar" name="delivery_time" length="128" nullable="true" comment="Delivery Time"/>
+        <column xsi:type="varchar" name="quality_grade" length="128" nullable="true" comment="Quality Grade"/>
+        <column xsi:type="text" name="description" nullable="true" comment="Seller Quote Description"/>
+        <column xsi:type="text" name="image_url" nullable="true" comment="Seller Product Image URL"/>
+        <column xsi:type="varchar" name="status" length="32" nullable="false" default="submitted" comment="submitted|accepted|rejected"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
+        <column xsi:type="timestamp" name="updated_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Updated At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="quote_id"/>
+        </constraint>
+        <index referenceId="TMDT_RFQ_QUOTE_REQUEST_ID" indexType="btree">
+            <column name="request_id"/>
+        </index>
+        <index referenceId="TMDT_RFQ_QUOTE_SELLER_ID" indexType="btree">
+            <column name="seller_id"/>
+        </index>
+    </table>
+
     <table name="tmdt_recurring_schedules" resource="default" engine="innodb" comment="Tmdt Recurring Order Subscriptions">
         <column xsi:type="int" name="id" padding="10" unsigned="true" nullable="false" identity="true" comment="Subscription ID"/>
         <column xsi:type="varchar" name="customer_email" length="255" nullable="false" comment="Customer Email"/>
@@ -110,5 +163,4 @@
         </index>
     </table>
 </schema>
-
 

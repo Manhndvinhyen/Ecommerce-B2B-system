@@ -22,8 +22,8 @@ jobs:
             bin/docker-compose --prod exec -T -u root phpfpm sh -c "mkdir -p /var/www/html/var /var/www/html/generated /var/www/html/pub/static /var/www/html/pub/media/tmdt_registration/licenses /var/www/html/app/design/frontend/Magento/luma && chown -R app:app /var/www/html/var /var/www/html/generated /var/www/html/pub/static /var/www/html/pub/media /var/www/html/app/etc /var/www/html/app/design && chmod -R u+rwX,g+rwX /var/www/html/var /var/www/html/generated /var/www/html/pub/static /var/www/html/pub/media /var/www/html/app/etc /var/www/html/app/design" || true
             export GOOGLE_OAUTH_CLIENT_ID='${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}'
             bin/docker-compose --prod exec -T phpfpm bin/magento setup:upgrade --no-interaction
-            bin/docker-compose --prod exec -T phpfpm bin/magento setup:static-content:deploy en_US -f
-            bin/docker-compose --prod exec -T phpfpm bin/magento cache:flush
             bin/deploy-react
+            bin/docker-compose --prod exec -T phpfpm bin/magento setup:static-content:deploy vi_VN en_US -f
+            bin/docker-compose --prod exec -T phpfpm bin/magento cache:flush
             bin/docker-compose --prod exec -T -u root phpfpm sh -c "mkdir -p /var/www/html/pub/media/tmdt_registration/licenses && chown -R app:app /var/www/html/var /var/www/html/generated /var/www/html/pub/static /var/www/html/pub/media /var/www/html/app/etc && chmod -R u+rwX,g+rwX /var/www/html/var /var/www/html/generated /var/www/html/pub/static /var/www/html/pub/media /var/www/html/app/etc" || true
-          command_timeout: 10m
+          command_timeout: 20m

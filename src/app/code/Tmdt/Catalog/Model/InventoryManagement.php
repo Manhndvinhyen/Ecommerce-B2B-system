@@ -9,6 +9,7 @@ use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Framework\App\ResourceConnection;
 use Magento\Catalog\Api\ProductRepositoryInterface;
 use Magento\Framework\Exception\LocalizedException;
+use Magento\Authorization\Model\UserContextInterface;
 
 class InventoryManagement implements InventoryManagementInterface
 {
@@ -16,7 +17,8 @@ class InventoryManagement implements InventoryManagementInterface
         private readonly StockRegistryInterface $stockRegistry,
         private readonly CustomerSession $customerSession,
         private readonly ResourceConnection $resourceConnection,
-        private readonly ProductRepositoryInterface $productRepository
+        private readonly ProductRepositoryInterface $productRepository,
+        private readonly UserContextInterface $userContext
     ) {
     }
 
@@ -25,7 +27,7 @@ class InventoryManagement implements InventoryManagementInterface
      */
     public function adjustStock($adjustmentData): string
     {
-        $sellerId = $this->getSellerIdFromSession();
+        $sellerId = $this->resolveCompanySellerId($this->getCurrentCustomerId());
         $data = (array) $adjustmentData;
 
         if (empty($data['sku']) || !isset($data['qty_change']) || empty($data['action_type'])) {
@@ -75,6 +77,8 @@ class InventoryManagement implements InventoryManagementInterface
                 'sku' => $sku,
                 'qty_after' => $qtyAfter
             ]);
+        } catch (LocalizedException $e) {
+            throw $e;
         } catch (\Exception $e) {
             throw new LocalizedException(__($e->getMessage()));
         }
@@ -85,7 +89,7 @@ class InventoryManagement implements InventoryManagementInterface
      */
     public function getAdjustmentLogs()
     {
-        $sellerId = $this->getSellerIdFromSession();
+        $sellerId = $this->resolveCompanySellerId($this->getCurrentCustomerId());
         $connection = $this->resourceConnection->getConnection();
         
         // Fetch logs only for products belonging to the logged-in seller
@@ -110,12 +114,93 @@ class InventoryManagement implements InventoryManagementInterface
     /**
      * Get Seller ID from session
      */
-    private function getSellerIdFromSession(): string
+    private function getCurrentCustomerId(): string
     {
+        $userId = (int) $this->userContext->getUserId();
+        if ($userId > 0) {
+            return (string) $userId;
+        }
+
         if (!$this->customerSession->isLoggedIn()) {
             throw new LocalizedException(__('Phiên làm việc hết hạn. Vui lòng đăng nhập lại.'));
         }
         return (string) $this->customerSession->getCustomerId();
+    }
+
+    private function resolveCompanySellerId(string $customerId): string
+    {
+        $connection = $this->resourceConnection->getConnection();
+        $registrationTable = $connection->getTableName('tmdt_customer_registration');
+        $row = $connection->fetchRow(
+            $connection->select()
+                ->from($registrationTable, ['login_code'])
+                ->where('customer_id = ?', (int) $customerId)
+                ->limit(1)
+        );
+
+        $loginCode = is_array($row) ? trim((string) ($row['login_code'] ?? '')) : '';
+        if ($loginCode === '') {
+            return $customerId;
+        }
+
+        $ownerIds = $connection->fetchCol(
+            $connection->select()
+                ->from($registrationTable, ['customer_id'])
+                ->where('login_code = ?', $loginCode)
+                ->where('role = ?', 'seller')
+        );
+
+        foreach ($ownerIds as $ownerId) {
+            if ($this->customerHasOwnerPrivilege((int) $ownerId)) {
+                return (string) $ownerId;
+            }
+        }
+
+        return $customerId;
+    }
+
+    private function customerHasOwnerPrivilege(int $customerId): bool
+    {
+        if ($customerId <= 0) {
+            return false;
+        }
+
+        try {
+            $connection = $this->resourceConnection->getConnection();
+            $entityTypeId = (int) $connection->fetchOne(
+                "SELECT entity_type_id FROM eav_entity_type WHERE entity_type_code = 'customer' LIMIT 1"
+            );
+            if ($entityTypeId <= 0) {
+                return false;
+            }
+
+            $attrs = $connection->fetchPairs(
+                $connection->select()
+                    ->from($connection->getTableName('eav_attribute'), ['attribute_code', 'attribute_id'])
+                    ->where('entity_type_id = ?', $entityTypeId)
+                    ->where('attribute_code IN (?)', ['is_owner', 'is_super_admin'])
+            );
+            if (!$attrs) {
+                return false;
+            }
+
+            $values = $connection->fetchPairs(
+                $connection->select()
+                    ->from($connection->getTableName('customer_entity_int'), ['attribute_id', 'value'])
+                    ->where('entity_id = ?', $customerId)
+                    ->where('attribute_id IN (?)', array_values($attrs))
+            );
+
+            foreach ($attrs as $attributeId) {
+                if (!empty($values[(int) $attributeId])) {
+                    return true;
+                }
+            }
+        } catch (\Throwable) {
+            return false;
+        }
+
+        return false;
     }
 
     /**

@@ -126,6 +126,9 @@ export function SellerHeader() {
       if (item.id === 'nhan-vien') {
         return canManageBranches;
       }
+      if (item.id === 'quan-ly-san-pham') {
+        return canManageBranches;
+      }
       return sellerMenuItemIds.has(item.id);
     });
   }, [canManageBranches]);
@@ -162,8 +165,7 @@ export function SellerHeader() {
       setCustomerName(name);
       setUserRole(role);
       setCanManageBranches(
-        normalizedRole !== 'branch' &&
-          normalizedRole !== 'customer' &&
+        normalizedRole === 'seller' &&
           (parseStoredBoolFlag(isOwner) || parseStoredBoolFlag(isSuperAdmin))
       );
       if (branch.trim()) {
@@ -221,17 +223,15 @@ export function SellerHeader() {
         if (ownerAttr || superAdminAttr) {
           const isOwner = ownerAttr ? parseBoolFlag(String(ownerAttr.value ?? '')) : false;
           const isSuper = superAdminAttr ? parseBoolFlag(String(superAdminAttr.value ?? '')) : false;
-          const hasPrivilege = isOwner || isSuper;
-          window.localStorage.setItem('freso_is_owner', hasPrivilege ? '1' : '0');
-          window.sessionStorage.setItem('freso_is_owner', hasPrivilege ? '1' : '0');
-          window.localStorage.setItem('freso_is_super_admin', hasPrivilege ? '1' : '0');
-          window.sessionStorage.setItem('freso_is_super_admin', hasPrivilege ? '1' : '0');
+          window.localStorage.setItem('freso_is_owner', isOwner ? '1' : '0');
+          window.sessionStorage.setItem('freso_is_owner', isOwner ? '1' : '0');
+          window.localStorage.setItem('freso_is_super_admin', isSuper ? '1' : '0');
+          window.sessionStorage.setItem('freso_is_super_admin', isSuper ? '1' : '0');
         }
 
         const nextRole = roleAttr ? String(roleAttr.value ?? '').trim().toLowerCase() : userRole;
         const hasBranchManagementPrivilege =
-          nextRole !== 'branch' &&
-          nextRole !== 'customer' &&
+          nextRole === 'seller' &&
           (parseBoolFlag(String(ownerAttr?.value ?? '')) || parseBoolFlag(String(superAdminAttr?.value ?? '')));
         setCanManageBranches(hasBranchManagementPrivilege);
 

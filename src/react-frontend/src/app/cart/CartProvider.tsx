@@ -68,13 +68,25 @@ type CartContextValue = {
 
 const CartContext = createContext<CartContextValue | null>(null);
 
+const toFiniteCurrencyNumber = (value: unknown): number => {
+  const parsed =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string'
+        ? Number(value.replace(/[^\d.-]/g, ''))
+        : 0;
+
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 const formatCurrency = (value: number) => {
+  const safeValue = toFiniteCurrencyNumber(value);
   if (typeof window === 'undefined') {
-    return `${new Intl.NumberFormat('vi-VN').format(Math.round(value))}đ`;
+    return `${new Intl.NumberFormat('vi-VN').format(Math.round(safeValue))}đ`;
   }
   const target = window.localStorage.getItem('freso_selected_currency') || 'VND';
   if (target === 'VND') {
-    return `${new Intl.NumberFormat('vi-VN').format(Math.round(value))}đ`;
+    return `${new Intl.NumberFormat('vi-VN').format(Math.round(safeValue))}đ`;
   }
 
   const ratesRaw = window.localStorage.getItem('freso_currency_rates');
@@ -90,7 +102,7 @@ const formatCurrency = (value: number) => {
   if (rates && rates[target]) {
     const rateInfo = rates[target];
     const rate = rateInfo.sell || rateInfo.transfer || 1;
-    const converted = rate > 0 ? value / rate : value;
+    const converted = rate > 0 ? safeValue / rate : safeValue;
     try {
       return new Intl.NumberFormat('en-US', {
         style: 'currency',
@@ -103,7 +115,7 @@ const formatCurrency = (value: number) => {
     }
   }
 
-  return `${new Intl.NumberFormat('vi-VN').format(Math.round(value))}đ`;
+  return `${new Intl.NumberFormat('vi-VN').format(Math.round(safeValue))}đ`;
 };
 
 const clampQuantity = (value: number) => Math.max(1, Math.floor(value));
@@ -251,13 +263,13 @@ const applyWholesaleDiscountToLocalItem = (item: CartLineItem, newQuantity: numb
     return { ...item, quantity: newQuantity };
   }
   
-  const originalPrice = Number(matchingProduct.price);
+  const originalPrice = toFiniteCurrencyNumber(matchingProduct.price);
   const tiers = matchingProduct.wholesale_tiers || [];
   const activeTier = tiers
     .filter((t: any) => newQuantity >= t.qty)
     .sort((a: any, b: any) => b.qty - a.qty)[0];
 
-  const discountPercent = activeTier ? activeTier.discount : 0;
+  const discountPercent = toFiniteCurrencyNumber(activeTier?.discount);
   const unitPrice = originalPrice * (1 - discountPercent / 100);
   
   return {
@@ -1271,7 +1283,7 @@ export function toCurrencyTextFromLooseValue(value: string | number) {
 
 export function toUnitPriceFromLooseValue(value: string | number) {
   if (typeof value === 'number') {
-    return value;
+    return toFiniteCurrencyNumber(value);
   }
 
   if (typeof value === 'string' && value.includes('-')) {

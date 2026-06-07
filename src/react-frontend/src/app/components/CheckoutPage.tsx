@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
-import { Calendar, Clock, FileText, MapPin, PackageCheck, Phone, ShoppingBag, User, Wind, Thermometer, AlertTriangle, Truck, Store } from 'lucide-react';
+import { Banknote, Calendar, Clock, CreditCard, FileText, MapPin, PackageCheck, Phone, ShoppingBag, User, Wind, Thermometer, AlertTriangle, Truck, Store } from 'lucide-react';
 import { formatCartSupplierLabel, toCurrencyTextFromNumber, useCart } from '../cart/CartProvider';
 import { inferCategoryFromSku } from '../data/categories';
 
@@ -289,6 +289,8 @@ type CheckoutPayload = {
   supplier: string;
 };
 
+type PaymentMethod = 'bank_transfer' | 'cod';
+
 type ShippingInfo = {
   branch: string;
   address: string;
@@ -335,6 +337,17 @@ const getCustomerName = () =>
   window.localStorage.getItem('freso_customer_name') || window.sessionStorage.getItem('freso_customer_name') || '';
 const getAuthToken = () =>
   window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
+
+const toFiniteMoney = (value: unknown): number => {
+  const parsed =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string'
+        ? Number(value.replace(/[^\d.-]/g, ''))
+        : 0;
+
+  return Number.isFinite(parsed) ? parsed : 0;
+};
 
 const isValidPhone = (value: string) => /^(\+?84|0)\d{9,10}$/.test(value.replace(/\s/g, ''));
 const getRegionFromBranch = (branch: string) => {
@@ -434,13 +447,15 @@ const mapMagentoCartItems = (items: MagentoCartItem[] = []): CheckoutItem[] => {
     const sku = (product.sku ?? '').trim().toLowerCase();
     const matchingProduct = customLocalProducts.find(p => (p.sku ?? '').trim().toLowerCase() === sku);
 
-    const originalPrice = matchingProduct ? Number(matchingProduct.price) : Number(product.price_range?.minimum_price?.final_price?.value ?? 0);
+    const originalPrice = matchingProduct
+      ? toFiniteMoney(matchingProduct.price)
+      : toFiniteMoney(product.price_range?.minimum_price?.final_price?.value ?? 0);
     const tiers = matchingProduct?.wholesale_tiers || [];
     const activeTier = tiers
       .filter((t: any) => qty >= t.qty)
       .sort((a: any, b: any) => b.qty - a.qty)[0];
 
-    const discountPercent = activeTier ? activeTier.discount : 0;
+    const discountPercent = toFiniteMoney(activeTier?.discount);
     const unitPrice = originalPrice * (1 - discountPercent / 100);
     const category = product.categories?.find((cat) => cat?.name)?.name ?? matchingProduct?.categoryLabel ?? (inferCategoryFromSku(product.sku ?? '')?.category || 'Rau củ quả');
     const unit = matchingProduct?.unit || 'kg';
@@ -570,6 +585,7 @@ export function CheckoutPage() {
   const [isReady, setIsReady] = useState(false);
   const [deliveryDate, setDeliveryDate] = useState('');
   const [deliveryTime, setDeliveryTime] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('bank_transfer');
   const [shippingInfo, setShippingInfo] = useState<ShippingInfo>({
     branch: '',
     address: '',
@@ -697,7 +713,7 @@ export function CheckoutPage() {
   useEffect(() => () => stopPolling(), [stopPolling]);
 
   const subtotal = useMemo(
-    () => checkoutItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
+    () => checkoutItems.reduce((sum, item) => sum + toFiniteMoney(item.quantity) * toFiniteMoney(item.unitPrice), 0),
     [checkoutItems]
   );
 
@@ -711,7 +727,7 @@ export function CheckoutPage() {
       groups[supplierLabel].push(item);
     });
     return Object.entries(groups).map(([supplierLabel, items]) => {
-      const groupSubtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+      const groupSubtotal = items.reduce((sum, item) => sum + toFiniteMoney(item.quantity) * toFiniteMoney(item.unitPrice), 0);
       return {
         supplierLabel,
         items,
@@ -724,18 +740,18 @@ export function CheckoutPage() {
     return Object.entries(estimations).reduce((sum, [label, est]) => {
       const carrierCode = selectedCarriers[label] || 'ghtk';
       const rate = est.carrierRates?.find(r => r.code === carrierCode);
-      return sum + (rate ? rate.fee : (est.shippingFee || 0));
+      return sum + toFiniteMoney(rate ? rate.fee : (est.shippingFee || 0));
     }, 0);
   }, [estimations, selectedCarriers]);
 
   const weatherSurcharge = useMemo(() => {
-    return Object.values(estimations).reduce((sum, est) => sum + (est.surcharge || 0), 0);
+    return Object.values(estimations).reduce((sum, est) => sum + toFiniteMoney(est.surcharge || 0), 0);
   }, [estimations]);
 
   const shippingDiscount = 0;
 
   const totalAmount = useMemo(() => {
-    return subtotal + shippingFee - shippingDiscount + weatherSurcharge;
+    return toFiniteMoney(subtotal) + toFiniteMoney(shippingFee) - toFiniteMoney(shippingDiscount) + toFiniteMoney(weatherSurcharge);
   }, [subtotal, shippingFee, shippingDiscount, weatherSurcharge]);
 
 
@@ -1372,6 +1388,7 @@ export function CheckoutPage() {
       deliveryTime,
       shippingAddress: shippingInfo.branch ? `${shippingInfo.branch} - ${shippingInfo.address}` : shippingInfo.address,
       note: shippingInfo.note,
+      paymentMethod,
       invoiceInfo
     };
     const purchaseHistoryPayload = {
@@ -1394,6 +1411,7 @@ export function CheckoutPage() {
       deliveryTime,
       shippingAddress: shippingInfo.branch ? `${shippingInfo.branch} - ${shippingInfo.address}` : shippingInfo.address,
       note: shippingInfo.note,
+      paymentMethod,
       invoiceInfo
     };
 
@@ -1444,6 +1462,7 @@ export function CheckoutPage() {
             note: shippingInfo.note,
             deliveryDate,
             deliveryTime,
+            paymentMethod,
             suppliers: suppliersShippingMap
           })
         })
@@ -1505,6 +1524,7 @@ export function CheckoutPage() {
               deliveryTime,
               shippingAddress: shippingInfo.branch ? `${shippingInfo.branch} - ${shippingInfo.address}` : shippingInfo.address,
               note: shippingInfo.note,
+              paymentMethod,
               invoiceInfo
             })
           }).catch(() => {/* ignore */ });
@@ -1546,13 +1566,29 @@ export function CheckoutPage() {
                 address: shippingInfo.address,
                 receiver: shippingInfo.receiver,
                 phone: shippingInfo.phone,
-                note: shippingInfo.note
+                note: shippingInfo.note,
+                paymentMethod
               })
             })
           });
         } catch (subErr) {
           console.error('Failed to create recurring subscription', subErr);
         }
+      }
+
+      if (paymentMethod === 'cod') {
+        window.localStorage.setItem(
+          `freso_order_payment_${orderCode}`,
+          JSON.stringify({ method: 'cod', label: 'Thanh toán khi nhận hàng', totalAmount })
+        );
+        window.sessionStorage.removeItem(checkoutPayloadKey);
+        window.localStorage.removeItem(checkoutPayloadKey);
+        window.localStorage.removeItem('freso_local_cart_items');
+        showToast('Đã tạo đơn hàng COD. Bạn sẽ thanh toán khi nhận hàng.');
+        window.setTimeout(() => {
+          window.location.href = `${reactHomePath}?view=thank-you&orderId=${orderCode}&payment=cod`;
+        }, 700);
+        return;
       }
 
       // Step 3: Show VietQR modal
@@ -2152,6 +2188,51 @@ export function CheckoutPage() {
                 Thanh toán
               </div>
 
+              <div className="space-y-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Phương thức thanh toán</p>
+                <div className="grid gap-2">
+                  {[
+                    {
+                      value: 'bank_transfer' as PaymentMethod,
+                      label: 'Chuyển khoản ngân hàng',
+                      description: 'Quét VietQR và hệ thống tự xác nhận khi nhận tiền.',
+                      icon: CreditCard
+                    },
+                    {
+                      value: 'cod' as PaymentMethod,
+                      label: 'Thanh toán khi nhận hàng',
+                      description: 'Tạo đơn ngay, thanh toán tiền mặt hoặc chuyển khoản cho nhân viên giao hàng.',
+                      icon: Banknote
+                    }
+                  ].map((method) => {
+                    const Icon = method.icon;
+                    const isSelected = paymentMethod === method.value;
+                    return (
+                      <button
+                        key={method.value}
+                        type="button"
+                        onClick={() => setPaymentMethod(method.value)}
+                        className={`flex w-full items-start gap-3 rounded-2xl border p-3 text-left transition ${
+                          isSelected
+                            ? 'border-green-500 bg-green-50 text-green-800'
+                            : 'border-gray-200 bg-white text-gray-600 hover:border-green-200 hover:bg-green-50/40'
+                        }`}
+                      >
+                        <span className={`mt-0.5 flex size-9 items-center justify-center rounded-xl ${
+                          isSelected ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-500'
+                        }`}>
+                          <Icon className="size-4" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-bold">{method.label}</span>
+                          <span className="mt-0.5 block text-xs leading-relaxed opacity-80">{method.description}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div className="space-y-3 text-sm text-gray-600">
                 <div className="flex items-center justify-between">
                   <span>Tổng tiền hàng</span>
@@ -2195,7 +2276,11 @@ export function CheckoutPage() {
                 disabled={isSubmitting}
                 className="w-full rounded-full bg-green-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isSubmitting ? 'Đang tạo đơn hàng...' : 'Đặt hàng & Thanh toán'}
+                {isSubmitting
+                  ? 'Đang tạo đơn hàng...'
+                  : paymentMethod === 'cod'
+                    ? 'Đặt hàng COD'
+                    : 'Đặt hàng & Thanh toán'}
               </button>
               <p className="text-xs text-gray-400">* Giá sẽ được hệ thống xác nhận lại trước khi tạo đơn chính thức.</p>
             </div>

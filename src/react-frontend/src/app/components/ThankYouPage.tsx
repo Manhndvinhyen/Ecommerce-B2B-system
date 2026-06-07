@@ -6,12 +6,14 @@ const reactHomePath = '/react/index.html';
 export function ThankYouPage() {
   const params = new URLSearchParams(window.location.search);
   const orderId = params.get('orderId') || '';
+  const paymentParam = params.get('payment') || '';
   const [orderInfo, setOrderInfo] = useState<{
     orderCode: string;
     totalAmount: number;
     status: string;
     paidAt: string;
   } | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState(paymentParam);
 
   useEffect(() => {
     if (!orderId) return;
@@ -30,8 +32,22 @@ export function ThankYouPage() {
       .catch(() => {});
   }, [orderId]);
 
+  useEffect(() => {
+    if (!orderId || paymentParam) return;
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(`freso_order_payment_${orderId}`) || '{}');
+      if (saved?.method) {
+        setPaymentMethod(String(saved.method));
+      }
+    } catch {
+      // ignore
+    }
+  }, [orderId, paymentParam]);
+
   const formatCurrency = (value: number) =>
-    `${new Intl.NumberFormat('vi-VN').format(Math.round(value))}đ`;
+    `${new Intl.NumberFormat('vi-VN').format(Math.round(Number.isFinite(value) ? value : 0))}đ`;
+
+  const isCod = paymentMethod === 'cod';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 flex items-center justify-center p-4">
@@ -45,8 +61,10 @@ export function ThankYouPage() {
                 <CheckCircle2 className="h-10 w-10 text-white" />
               </div>
             </div>
-            <h1 className="text-3xl font-bold mb-1">Thanh toán thành công!</h1>
-            <p className="text-green-100 text-sm">Đơn hàng của bạn đã được xác nhận</p>
+            <h1 className="text-3xl font-bold mb-1">{isCod ? 'Đặt hàng thành công!' : 'Thanh toán thành công!'}</h1>
+            <p className="text-green-100 text-sm">
+              {isCod ? 'Đơn hàng COD của bạn đã được ghi nhận' : 'Đơn hàng của bạn đã được xác nhận'}
+            </p>
           </div>
 
           {/* Order Info */}
@@ -82,7 +100,7 @@ export function ThankYouPage() {
                   <span className="text-gray-500">Trạng thái</span>
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-0.5 text-xs font-semibold text-green-700">
                     <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                    Đã thanh toán
+                    {isCod ? 'Chờ thanh toán khi nhận hàng' : 'Đã thanh toán'}
                   </span>
                 </div>
               </div>

@@ -11,6 +11,7 @@ use Magento\CatalogInventory\Api\StockRegistryInterface;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\Webapi\Rest\Request as RestRequest;
+use Magento\Authorization\Model\UserContextInterface;
 
 class ProductManagement implements ProductManagementInterface
 {
@@ -23,7 +24,8 @@ class ProductManagement implements ProductManagementInterface
         private readonly RestRequest $request,
         private readonly \Magento\Store\Model\StoreManagerInterface $storeManager,
         private readonly \Magento\Framework\Indexer\IndexerRegistry $indexerRegistry,
-        private readonly \Magento\Framework\App\Cache\TypeListInterface $cacheTypeList
+        private readonly \Magento\Framework\App\Cache\TypeListInterface $cacheTypeList,
+        private readonly UserContextInterface $userContext
     ) {
     }
 
@@ -32,7 +34,9 @@ class ProductManagement implements ProductManagementInterface
      */
     public function createProduct(string $productData): string
     {
-        $sellerId = $this->getSellerIdFromSession();
+        $currentCustomerId = $this->getCurrentCustomerId();
+        $this->assertCanManageProductCatalog($currentCustomerId);
+        $sellerId = $this->resolveCompanySellerId($currentCustomerId);
         $data = json_decode($productData, true);
         if (!is_array($data)) {
             $data = [];
@@ -166,6 +170,7 @@ class ProductManagement implements ProductManagementInterface
     public function updateProduct(string $sku, string $productData): string
     {
         try {
+            $this->assertCanManageProductCatalog($this->getCurrentCustomerId());
             $this->verifyProductOwnership($sku);
             $data = json_decode($productData, true);
             if (!is_array($data)) {
@@ -276,6 +281,7 @@ class ProductManagement implements ProductManagementInterface
      */
     public function deleteProduct(string $sku): string
     {
+        $this->assertCanManageProductCatalog($this->getCurrentCustomerId());
         $this->verifyProductOwnership($sku);
 
         try {
@@ -306,7 +312,7 @@ class ProductManagement implements ProductManagementInterface
      */
     public function getSellerProducts()
     {
-        $sellerId = $this->getSellerIdFromSession();
+        $sellerId = $this->resolveCompanySellerId($this->getCurrentCustomerId());
         $connection = $this->resourceConnection->getConnection();
         $storeId = (int)$this->storeManager->getStore()->getId();
         
@@ -527,12 +533,100 @@ class ProductManagement implements ProductManagementInterface
     /**
      * Get Seller ID from Customer Session.
      */
-    private function getSellerIdFromSession(): string
+    private function getCurrentCustomerId(): string
     {
+        $userId = (int) $this->userContext->getUserId();
+        if ($userId > 0) {
+            return (string) $userId;
+        }
+
         if (!$this->customerSession->isLoggedIn()) {
             throw new LocalizedException(__('Phiên làm việc hết hạn. Vui lòng đăng nhập lại.'));
         }
         return (string) $this->customerSession->getCustomerId();
+    }
+
+    private function resolveCompanySellerId(string $customerId): string
+    {
+        $connection = $this->resourceConnection->getConnection();
+        $registrationTable = $connection->getTableName('tmdt_customer_registration');
+        $row = $connection->fetchRow(
+            $connection->select()
+                ->from($registrationTable, ['login_code'])
+                ->where('customer_id = ?', (int) $customerId)
+                ->limit(1)
+        );
+
+        $loginCode = is_array($row) ? trim((string) ($row['login_code'] ?? '')) : '';
+        if ($loginCode === '') {
+            return $customerId;
+        }
+
+        $ownerIds = $connection->fetchCol(
+            $connection->select()
+                ->from($registrationTable, ['customer_id'])
+                ->where('login_code = ?', $loginCode)
+                ->where('role = ?', 'seller')
+        );
+
+        foreach ($ownerIds as $ownerId) {
+            if ($this->customerHasOwnerPrivilege((int) $ownerId)) {
+                return (string) $ownerId;
+            }
+        }
+
+        return $customerId;
+    }
+
+    private function assertCanManageProductCatalog(string $customerId): void
+    {
+        if (!$this->customerHasOwnerPrivilege((int) $customerId)) {
+            throw new LocalizedException(__('Chi chu doanh nghiep moi co quyen quan ly san pham. Co so/chi nhanh chi duoc quan ly kho hang.'));
+        }
+    }
+
+    private function customerHasOwnerPrivilege(int $customerId): bool
+    {
+        if ($customerId <= 0) {
+            return false;
+        }
+
+        try {
+            $connection = $this->resourceConnection->getConnection();
+            $entityTypeId = (int) $connection->fetchOne(
+                "SELECT entity_type_id FROM eav_entity_type WHERE entity_type_code = 'customer' LIMIT 1"
+            );
+            if ($entityTypeId <= 0) {
+                return false;
+            }
+
+            $attrs = $connection->fetchPairs(
+                $connection->select()
+                    ->from($connection->getTableName('eav_attribute'), ['attribute_code', 'attribute_id'])
+                    ->where('entity_type_id = ?', $entityTypeId)
+                    ->where('attribute_code IN (?)', ['is_owner', 'is_super_admin'])
+            );
+            if (!$attrs) {
+                return false;
+            }
+
+            $values = $connection->fetchPairs(
+                $connection->select()
+                    ->from($connection->getTableName('customer_entity_int'), ['attribute_id', 'value'])
+                    ->where('entity_id = ?', $customerId)
+                    ->where('attribute_id IN (?)', array_values($attrs))
+            );
+
+            foreach ($attrs as $attributeId) {
+                if (!empty($values[(int) $attributeId])) {
+                    return true;
+                }
+            }
+        } catch (\Throwable) {
+            return false;
+        }
+
+        return false;
     }
 
     /**
@@ -540,7 +634,7 @@ class ProductManagement implements ProductManagementInterface
      */
     private function verifyProductOwnership(string $sku): void
     {
-        $sellerId = $this->getSellerIdFromSession();
+        $sellerId = $this->resolveCompanySellerId($this->getCurrentCustomerId());
         try {
             $product = $this->productRepository->get($sku);
             $prodSellerId = $product->getCustomAttribute('tmdt_seller_id') 
@@ -699,7 +793,7 @@ class ProductManagement implements ProductManagementInterface
      */
     public function getSellerNotifications(): array
     {
-        $sellerId = $this->getSellerIdFromSession();
+        $sellerId = $this->resolveCompanySellerId($this->getCurrentCustomerId());
         $connection = $this->resourceConnection->getConnection();
         
         $select = $connection->select()
@@ -715,7 +809,7 @@ class ProductManagement implements ProductManagementInterface
      */
     public function markNotificationsAsRead(): bool
     {
-        $sellerId = $this->getSellerIdFromSession();
+        $sellerId = $this->resolveCompanySellerId($this->getCurrentCustomerId());
         $connection = $this->resourceConnection->getConnection();
         
         $connection->update(
@@ -732,7 +826,7 @@ class ProductManagement implements ProductManagementInterface
      */
     public function getSellerRevenueStats(): array
     {
-        $sellerId = $this->getSellerIdFromSession();
+        $sellerId = $this->resolveCompanySellerId($this->getCurrentCustomerId());
         $connection = $this->resourceConnection->getConnection();
         
         $storeId = 0;
@@ -988,7 +1082,7 @@ class ProductManagement implements ProductManagementInterface
      */
     public function getSellerOrders(): array
     {
-        $sellerId = $this->getSellerIdFromSession();
+        $sellerId = $this->resolveCompanySellerId($this->getCurrentCustomerId());
         $connection = $this->resourceConnection->getConnection();
         $limit = max(1, min(50, (int) ($this->request->getParam('limit') ?: 20)));
         $statusFilter = strtolower(trim((string) ($this->request->getParam('status') ?: 'all')));

@@ -108,6 +108,50 @@ class OrderManagement implements OrderManagementInterface
     }
 
     /**
+     * Create order notifications in tmdt_seller_notifications for the child order
+     */
+    private function createOrderNotifications(int $orderId, string $orderCode, $connection): void
+    {
+        try {
+            $orderItemsTable = $connection->getTableName('tmdt_order_items');
+            $items = $connection->fetchAll(
+                "SELECT name, sku, quantity, row_total, seller_id FROM {$orderItemsTable} WHERE order_id = ?",
+                [$orderId]
+            );
+
+            $sellerRevenues = [];
+            $sellerItems = [];
+
+            foreach ($items as $item) {
+                $sellerId = $item['seller_id'] !== null ? (int)$item['seller_id'] : null;
+                if ($sellerId !== null) {
+                    $sellerRevenues[$sellerId] = ($sellerRevenues[$sellerId] ?? 0.0) + (float)$item['row_total'];
+                    $sellerItems[$sellerId][] = ($item['name'] ?: $item['sku']) . ' (x' . (float)$item['quantity'] . ')';
+                }
+            }
+
+            foreach ($sellerRevenues as $sellerId => $amount) {
+                $itemsList = implode(', ', $sellerItems[$sellerId]);
+                $formattedAmount = number_format($amount, 0, ',', '.') . 'đ';
+                
+                $connection->insert(
+                    $connection->getTableName('tmdt_seller_notifications'),
+                    [
+                        'seller_id'          => (string)$sellerId,
+                        'seller_customer_id' => $sellerId,
+                        'sku'                => $orderCode,
+                        'message'            => "Bạn có đơn hàng mới {$orderCode}. Sản phẩm: {$itemsList}. Tổng doanh thu: {$formattedAmount}.",
+                        'is_read'            => 0,
+                        'created_at'         => date('Y-m-d H:i:s')
+                    ]
+                );
+            }
+        } catch (\Throwable $e) {
+            // Silently catch to prevent order creation from failing
+        }
+    }
+
+    /**
      * POST /V1/tmdt-orders/create
      */
     public function createOrder(
@@ -118,6 +162,11 @@ class OrderManagement implements OrderManagementInterface
         string $shippingJson,
         string $paymentMethod = 'bank_transfer'
     ): array {
+        $paymentMethod = trim(strtolower($paymentMethod));
+        if ($paymentMethod === 'cod') {
+            $paymentMethod = 'direct_payment';
+        }
+
         if ($totalAmount <= 0) {
             return ['success' => false, 'message' => 'Tổng tiền đơn hàng không hợp lệ.'];
         }
@@ -217,6 +266,9 @@ class OrderManagement implements OrderManagementInterface
                 // Save normalized items
                 $this->saveOrderItems($childId, $groupItems, $connection);
 
+                // Create notifications for this child order
+                $this->createOrderNotifications($childId, $childCode, $connection);
+
                 $childOrdersData[] = [
                     'orderCode' => $childCode,
                     'supplier' => $supplierKey,
@@ -298,6 +350,9 @@ class OrderManagement implements OrderManagementInterface
 
             // Save items
             $this->saveOrderItems($orderId, $items, $connection);
+
+            // Create notifications for this order
+            $this->createOrderNotifications($orderId, $orderCode, $connection);
 
             $supplierKey = key($groups) ?: 'Tổng kho sỉ Thực phẩm B2B · Hà Nội';
             $subtotal = 0.0;
@@ -406,6 +461,40 @@ class OrderManagement implements OrderManagementInterface
         $connection = $this->resourceConnection->getConnection();
         $table = $connection->getTableName('inventory_source');
 
+        // Ensure "Kho Bắc Giang" exists
+        $bgExists = $connection->fetchOne("SELECT source_code FROM {$table} WHERE source_code = 'bac-giang'");
+        if (!$bgExists) {
+            $connection->insert($table, [
+                'source_code' => 'bac-giang',
+                'name' => 'Kho Bắc Giang',
+                'enabled' => 1,
+                'description' => 'Kho hàng tại Bắc Giang',
+                'latitude' => 21.2730,
+                'longitude' => 106.1946,
+                'country_id' => 'VN',
+                'postcode' => '230000',
+                'use_default_carrier_config' => 1,
+                'is_pickup_location_active' => 0
+            ]);
+        }
+
+        // Ensure "Kho Bình Dương" exists
+        $bdExists = $connection->fetchOne("SELECT source_code FROM {$table} WHERE source_code = 'binh-duong'");
+        if (!$bdExists) {
+            $connection->insert($table, [
+                'source_code' => 'binh-duong',
+                'name' => 'Kho Bình Dương',
+                'enabled' => 1,
+                'description' => 'Kho hàng tại Bình Dương',
+                'latitude' => 10.9805,
+                'longitude' => 106.6517,
+                'country_id' => 'VN',
+                'postcode' => '820000',
+                'use_default_carrier_config' => 1,
+                'is_pickup_location_active' => 0
+            ]);
+        }
+
         $rows = $connection->fetchAll(
             "SELECT name, latitude, longitude FROM {$table} WHERE enabled = 1 AND latitude IS NOT NULL AND longitude IS NOT NULL"
         );
@@ -450,7 +539,7 @@ class OrderManagement implements OrderManagementInterface
         }
 
         $status = strtolower(trim((string)$order['status']));
-        if (in_array($status, ['paid', 'preparing', 'shipping', 'delivered'], true)) {
+        if (in_array($status, ['paid', 'delivered'], true)) {
             return true;
         }
 
@@ -472,10 +561,15 @@ class OrderManagement implements OrderManagementInterface
             );
         }
 
+        $targetStatus = 'paid';
+        if (in_array($status, ['preparing', 'shipping'], true)) {
+            $targetStatus = 'delivered';
+        }
+
         return $this->orderProcessor->confirmOrder(
             $orderCode,
             'COD-' . $orderCode,
-            'paid',
+            $targetStatus,
             'Direct payment has been collected by the seller.'
         );
     }
@@ -491,10 +585,10 @@ class OrderManagement implements OrderManagementInterface
         $oiTable = $connection->getTableName('tmdt_order_items');
 
         // Validate target status
-        $allowedStatuses = ['preparing', 'shipping', 'delivered'];
+        $allowedStatuses = ['preparing', 'handed_over', 'shipping', 'delivered'];
         if (!in_array($status, $allowedStatuses, true)) {
             throw new \Magento\Framework\Exception\LocalizedException(
-                __('Trạng thái "%1" không hợp lệ. Chỉ chấp nhận: preparing, shipping, delivered.', $status)
+                __('Trạng thái "%1" không hợp lệ. Chỉ chấp nhận: preparing, handed_over, shipping, delivered.', $status)
             );
         }
 
@@ -525,18 +619,20 @@ class OrderManagement implements OrderManagementInterface
         // Validate status transition
         $currentStatus = strtolower(trim((string)$order['status']));
         $validTransitions = [
-            'preparing' => ['paid', 'processing'],
-            'shipping'  => ['preparing'],
-            'delivered' => ['shipping'],
+            'preparing'   => ['paid', 'processing'],
+            'handed_over' => ['preparing'],
+            'shipping'    => ['handed_over'],
+            'delivered'   => ['shipping'],
         ];
 
         if (!in_array($currentStatus, $validTransitions[$status] ?? [], true)) {
             $statusLabels = [
-                'paid' => 'Đã thanh toán',
-                'processing' => 'Đang xử lý',
-                'preparing' => 'Đang chuẩn bị',
-                'shipping' => 'Đang giao hàng',
-                'delivered' => 'Đã giao hàng',
+                'paid'        => 'Đã thanh toán',
+                'processing'  => 'Đang xử lý',
+                'preparing'   => 'Đang chuẩn bị',
+                'handed_over' => 'Đã bàn giao cho ĐVVC',
+                'shipping'    => 'Đang giao hàng',
+                'delivered'   => 'Đã giao hàng',
             ];
             throw new \Magento\Framework\Exception\LocalizedException(
                 __('Không thể chuyển từ trạng thái "%1" sang "%2".', $statusLabels[$currentStatus] ?? $currentStatus, $statusLabels[$status] ?? $status)
@@ -545,9 +641,10 @@ class OrderManagement implements OrderManagementInterface
 
         // Status label for log comments
         $commentMap = [
-            'preparing' => 'Người bán đã xác nhận chuẩn bị đơn hàng.',
-            'shipping'  => 'Đơn hàng đang được giao đến khách hàng.',
-            'delivered' => 'Đơn hàng đã được giao thành công.',
+            'preparing'   => 'Người bán đã xác nhận chuẩn bị đơn hàng.',
+            'handed_over' => 'Người bán đã bàn giao hàng cho đơn vị vận chuyển.',
+            'shipping'    => 'Đơn vị vận chuyển đã nhận hàng và đang tiến hành vận chuyển.',
+            'delivered'   => 'Đơn hàng đã được giao thành công.',
         ];
         $comment = $commentMap[$status] ?? "Đơn hàng chuyển sang trạng thái {$status}";
 
@@ -712,6 +809,58 @@ class OrderManagement implements OrderManagementInterface
         }
 
         return false;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function confirmReceiptByCustomer(string $orderCode): bool
+    {
+        $orderCode = trim($orderCode);
+        if ($orderCode === '') {
+            throw new \Magento\Framework\Exception\LocalizedException(__('Mã đơn hàng không hợp lệ.'));
+        }
+
+        $customerId = (int)$this->getSellerIdFromSession();
+
+        $connection = $this->resourceConnection->getConnection();
+        $table = $connection->getTableName(self::TABLE);
+
+        $order = $connection->fetchRow(
+            "SELECT id, status, customer_id FROM {$table} WHERE order_code = ? LIMIT 1",
+            [$orderCode]
+        );
+
+        if (!$order) {
+            throw new \Magento\Framework\Exception\LocalizedException(__('Không tìm thấy đơn hàng.'));
+        }
+
+        // Verify that this order belongs to the logged in customer
+        if ((int)$order['customer_id'] !== $customerId) {
+            throw new \Magento\Framework\Exception\LocalizedException(
+                __('Bạn không có quyền xác nhận đã nhận hàng cho đơn hàng này.')
+            );
+        }
+
+        $currentStatus = strtolower(trim((string)$order['status']));
+        if ($currentStatus === 'delivered') {
+            return true;
+        }
+
+        // Only allow confirming receipt if the order is in 'shipping' status
+        if ($currentStatus !== 'shipping') {
+            throw new \Magento\Framework\Exception\LocalizedException(
+                __('Đơn hàng phải ở trạng thái đang giao hàng mới có thể xác nhận đã nhận.')
+            );
+        }
+
+        // Transition order status to 'delivered' using orderProcessor
+        return $this->orderProcessor->confirmOrder(
+            $orderCode,
+            '',
+            'delivered',
+            'Khách hàng xác nhận đã nhận được hàng.'
+        );
     }
 }
 

@@ -86,6 +86,7 @@
         </resources>
     </route>
     <!-- RFQ Marketplace -->
+    <!--
     <route url="/V1/tmdt-rfq/request" method="POST">
         <service class="Tmdt\Catalog\Api\RfqManagementInterface" method="createRequest"/>
         <resources>
@@ -104,6 +105,7 @@
             <resource ref="self"/>
         </resources>
     </route>
+    -->
     <route url="/V1/tmdt-rfq/quote" method="POST">
         <service class="Tmdt\Catalog\Api\RfqManagementInterface" method="submitQuote"/>
         <resources>
@@ -151,6 +153,20 @@
     <!-- COD payment confirmation REST route for authenticated B2B sellers -->
     <route url="/V1/tmdt-orders/confirm-payment" method="POST">
         <service class="Tmdt\Catalog\Api\OrderManagementInterface" method="confirmDirectPayment"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+    <!-- Order fulfillment update REST route for authenticated B2B sellers -->
+    <route url="/V1/tmdt-orders/update-fulfillment" method="POST">
+        <service class="Tmdt\Catalog\Api\OrderManagementInterface" method="updateOrderFulfillment"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+    <!-- Customer order receipt confirmation REST route -->
+    <route url="/V1/tmdt-orders/confirm-receipt" method="POST">
+        <service class="Tmdt\Catalog\Api\OrderManagementInterface" method="confirmReceiptByCustomer"/>
         <resources>
             <resource ref="self"/>
         </resources>

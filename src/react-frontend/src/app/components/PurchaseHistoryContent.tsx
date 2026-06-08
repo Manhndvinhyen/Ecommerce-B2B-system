@@ -12,6 +12,7 @@ import {
   LoaderCircle,
   ShoppingBag,
   Store,
+  CheckSquare,
 } from 'lucide-react';
 import { toCurrencyTextFromNumber } from '../cart/CartProvider';
 import { OrderTrackingMap } from './OrderTrackingMap';
@@ -78,6 +79,18 @@ const getStatusMeta = (status?: string) => {
   if (normalized === 'processing') {
     return { label: 'Đang xử lý', className: 'bg-blue-50 text-blue-700 border-blue-100/80', dot: 'bg-blue-500' };
   }
+  if (normalized === 'preparing') {
+    return { label: 'Đang chuẩn bị hàng', className: 'bg-indigo-50 text-indigo-700 border-indigo-100/80', dot: 'bg-indigo-500' };
+  }
+  if (normalized === 'handed_over') {
+    return { label: 'Đã bàn giao cho ĐVVC', className: 'bg-cyan-50 text-cyan-700 border-cyan-100/80', dot: 'bg-cyan-500' };
+  }
+  if (normalized === 'shipping') {
+    return { label: 'Đang giao hàng', className: 'bg-orange-50 text-orange-700 border-orange-100/80', dot: 'bg-orange-500' };
+  }
+  if (normalized === 'delivered') {
+    return { label: 'Đã giao hàng', className: 'bg-teal-50 text-teal-700 border-teal-100/80', dot: 'bg-teal-500' };
+  }
   if (normalized === 'expired') {
     return { label: 'Hết hạn', className: 'bg-rose-50 text-rose-700 border-rose-100/80', dot: 'bg-rose-500' };
   }
@@ -100,6 +113,46 @@ export function PurchaseHistoryContent({
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
+  const [isConfirming, setIsConfirming] = useState<Record<string, boolean>>({});
+
+  const handleConfirmReceipt = async (orderCode: string) => {
+    if (!window.confirm(`Bạn xác nhận đã nhận được đầy đủ hàng cho đơn hàng #${orderCode}?`)) {
+      return;
+    }
+
+    const token = getAuthToken();
+    if (!token) {
+      alert('Vui lòng đăng nhập lại để thực hiện thao tác.');
+      return;
+    }
+
+    setIsConfirming((prev) => ({ ...prev, [orderCode]: true }));
+
+    try {
+      const response = await fetch('/rest/V1/tmdt-orders/confirm-receipt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ orderCode }),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || `HTTP ${response.status}`);
+      }
+
+      // Refresh list
+      void fetchOrders(true);
+      alert('Xác nhận nhận hàng thành công!');
+    } catch (err: any) {
+      alert(err.message || 'Có lỗi xảy ra khi xác nhận nhận hàng.');
+    } finally {
+      setIsConfirming((prev) => ({ ...prev, [orderCode]: false }));
+    }
+  };
+
 
   const summary = useMemo(() => {
     const totalPurchased = orders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
@@ -455,7 +508,7 @@ export function PurchaseHistoryContent({
                             <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-emerald-700">Tiền hàng & ship</p>
                             <p className="text-base font-black text-emerald-800 lg:mt-0.5">{toCurrencyTextFromNumber(order.total_amount)}</p>
                           </div>
-                          <div className="flex gap-2 mt-3 justify-end">
+                          <div className="flex flex-wrap gap-2 mt-3 justify-end items-center">
                             <a
                               href={buildTrackingHref(order)}
                               className="inline-flex items-center justify-center gap-1 rounded-full border border-emerald-200 bg-white px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-emerald-700 transition-colors hover:bg-emerald-50"
@@ -463,6 +516,17 @@ export function PurchaseHistoryContent({
                               <Truck className="size-3" />
                               Tracking
                             </a>
+                            {(order.status || '').toLowerCase() === 'shipping' && (
+                              <button
+                                type="button"
+                                disabled={!!isConfirming[order.order_reference]}
+                                onClick={() => void handleConfirmReceipt(order.order_reference)}
+                                className="inline-flex items-center justify-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-orange-700 transition-all hover:bg-orange-100 active:scale-95 disabled:opacity-50 cursor-pointer"
+                              >
+                                <CheckSquare className="size-3" />
+                                {isConfirming[order.order_reference] ? 'Đang xử lý...' : 'Đã nhận hàng'}
+                              </button>
+                            )}
                             {order.transaction_id && (
                               <div className="inline-flex items-center justify-center rounded-full border border-emerald-100 bg-white px-2 py-0.5 text-[9px] font-semibold text-emerald-700">
                                 GD: {order.transaction_id}

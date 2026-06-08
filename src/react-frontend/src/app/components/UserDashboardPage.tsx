@@ -70,9 +70,14 @@ export function UserDashboardPage() {
         window.sessionStorage.setItem('freso_is_super_admin', nextSuperAdmin ? '1' : '0');
 
         if (sellerAccess || ((nextRole === 'seller' || nextRole === 'branch') && (status === 'approved' || status === 'active'))) {
-          console.info('[FresoUserDashboard] Approved seller/branch detected, redirecting to seller dashboard.');
-          window.location.replace('/react/index.html?view=seller-dashboard');
-          return;
+          const params = new URLSearchParams(window.location.search);
+          if (params.has('tab')) {
+            console.info('[FresoUserDashboard] Approved seller/branch detected, but tab parameter exists. Bypassing redirect.');
+          } else {
+            console.info('[FresoUserDashboard] Approved seller/branch detected, redirecting to seller dashboard.');
+            window.location.replace('/react/index.html?view=seller-dashboard');
+            return;
+          }
         }
 
         const hasPrivilege =

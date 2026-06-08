@@ -146,9 +146,11 @@ class ProfileUpdateManagement implements ProfileUpdateInterface
         if (array_key_exists('role', $payload)) {
             $role = trim((string) $payload['role']);
             if ($role === 'seller') {
-                $this->setCustomAttribute($customer, 'tmdt_role', 'seller');
+                $this->setCustomAttribute($customer, 'tmdt_role', 'customer');
+                $this->setCustomAttribute($customer, 'is_owner', '0');
+                $this->setCustomAttribute($customer, 'is_super_admin', '0');
                 $tableUpdate['role'] = 'seller';
-                $tableUpdate['status'] = 'approved';
+                $tableUpdate['status'] = 'pending';
                 $hasUpdate = true;
             }
         }

@@ -186,3 +186,49 @@ Can tiep tuc:
 [ ] Them filter admin grid theo status/role.
 [ ] Them dashboard admin tong he thong: tong seller, pending seller, rejected seller, tong order, doanh thu.
 [ ] Kiem tra lai cac tai khoan seller cu dang status approved/pending de migrate du lieu neu can.
+
+10. Checkpoint sua logic actor dang ky/dang nhap
+
+Loi can sua:
+- Tai khoan thuong khong can admin duyet va khong duoc co quyen quan ly co so.
+- Tai khoan thuong truoc do bi gan is_super_admin/is_owner qua rong, lam lo menu quan ly co so.
+- Tai khoan seller/chu doanh nghiep chi duoc tao co so sau khi admin duyet ho so kinh doanh.
+- Tai khoan co so la role branch: dang nhap/mua/ban theo pham vi co so, khong duoc tao co so con.
+
+Da trien khai:
+[x] RegisterManagement: customer thuong tao xong status approved, role customer, is_owner=0, is_super_admin=0.
+[x] RegisterManagement: seller moi dang ky status pending, chua cap quyen owner.
+[x] ProfileUpdateManagement: nang cap customer thanh seller se ve pending, khong tu approved.
+[x] Approve admin action: khi admin duyet seller thi set customer tmdt_role=seller, is_owner=1, is_super_admin=0.
+[x] AddUsersManagement: chi seller approved va co is_owner/is_super_admin moi duoc tao co so.
+[x] UserDashboardPage/SellerDashboardPage/SellerHeader: menu quan ly co so chi hien voi role seller co owner/super flag.
+
+Can thiet ke tiep:
+[ ] Tach ro seller owner va branch seller trong cac API san pham/kho/don hang.
+[ ] Bo sung parent_customer_id/owner_customer_id cho tai khoan co so de loc kho va don hang chinh xac hon login_code.
+[ ] Doi module "Quan ly gio hang" thanh luong "Dam phan gia" neu chot nghiep vu: buyer gui yeu cau chiet khau -> seller/branch phan hoi -> buyer chap nhan -> tao cart/order voi gia da chot.
+[ ] Thiet ke luong nhap/xuat kho theo co so: nhap kho thu cong, nhap tu don mua hang, xuat kho khi ban hang thanh cong.
+
+11. Checkpoint RFQ Marketplace / Yeu cau bao gia
+
+Quyet dinh nghiep vu:
+- Bo huong dam phan gia theo tung product detail vi se tao qua nhieu request nho le cho chu cua hang.
+- Chuyen sang mo hinh RFQ marketplace: buyer dang nhu cau mua hang, nhieu seller xem va gui bao gia kem chat luong/hinh anh/thoi gian giao.
+
+Da trien khai MVP:
+[x] Them bang tmdt_rfq_request de luu yeu cau bao gia cua buyer.
+[x] Them bang tmdt_rfq_quote de luu bao gia cua seller.
+[x] Them API buyer tao yeu cau: POST /rest/V1/tmdt-rfq/request.
+[x] Them API buyer xem yeu cau cua minh: GET /rest/V1/tmdt-rfq/buyer/requests.
+[x] Them API seller xem RFQ: GET /rest/V1/tmdt-rfq/seller/requests.
+[x] Them API seller gui/cap nhat bao gia: POST /rest/V1/tmdt-rfq/quote.
+[x] Doi man seller "Quan ly gio hang" thanh "Yeu cau bao gia", khong dung mock cart nua.
+[x] Them form tao yeu cau bao gia tren trang gio hang/mua hang, co the lay nhanh tu san pham da chon.
+
+Can tiep tuc:
+[ ] Tao man buyer xem cac bao gia da nhan theo tung RFQ.
+[ ] Them hanh dong buyer chap nhan/tu choi bao gia.
+[ ] Khi buyer chap nhan, tao cart/order tu quote da chot.
+[ ] Them notification cho seller khi co RFQ moi va buyer khi co bao gia moi.
+[ ] Them upload file/anh that thay vi chi nhap image URL.
+[ ] Them filter/category matching de seller chi thay RFQ lien quan den danh muc/san pham minh ban.

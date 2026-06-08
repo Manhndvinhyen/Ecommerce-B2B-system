@@ -76,6 +76,12 @@ class AddUsersManagement implements AddUsersInterface
             throw new InputException(__('Khong tim thay thong tin nha hang.'));
         }
 
+        $ownerRole = strtolower(trim((string) ($ownerRegistration['role'] ?? '')));
+        $ownerStatus = strtolower(trim((string) ($ownerRegistration['status'] ?? '')));
+        if ($ownerRole !== 'seller' || $ownerStatus !== 'approved') {
+            throw new AuthorizationException(__('Chi chu doanh nghiep da duyet moi co quyen tao co so.'));
+        }
+
         $loginCode = trim((string) ($ownerRegistration['login_code'] ?? ''));
         if ($loginCode === '') {
             throw new InputException(__('Khong tim thay ma nha hang.'));
@@ -250,7 +256,7 @@ class AddUsersManagement implements AddUsersInterface
         $isOwner = $isOwnerAttr ? $this->normalizeBool($isOwnerAttr->getValue()) : false;
         $isSuper = $isSuperAttr ? $this->normalizeBool($isSuperAttr->getValue()) : false;
         $role = $roleAttr ? strtolower(trim((string) $roleAttr->getValue())) : '';
-        return $role !== 'branch' && ($isOwner || $isSuper || $role === '' || $role === 'manager' || $role === 'seller');
+        return $role === 'seller' && ($isOwner || $isSuper);
     }
 
     private function normalizeBool(mixed $value): bool

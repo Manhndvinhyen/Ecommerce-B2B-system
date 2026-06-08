@@ -38,6 +38,14 @@ echo "🔨 Building React frontend..."
 bin/deploy-react
 
 echo ""
+echo "Deploying Magento static content for admin/storefront locales..."
+bin/docker-compose --prod exec -T phpfpm bin/magento setup:static-content:deploy vi_VN en_US -f
+
+echo ""
+echo "Flushing cache after static content deployment..."
+bin/docker-compose --prod exec -T phpfpm bin/magento cache:flush
+
+echo ""
 echo "Re-applying writable directory permissions..."
 bin/docker-compose --prod exec -T -u root phpfpm sh -c "mkdir -p /var/www/html/pub/media/tmdt_registration/licenses && chown -R app:app /var/www/html/var /var/www/html/generated /var/www/html/pub/static /var/www/html/pub/media /var/www/html/app/etc && chmod -R u+rwX,g+rwX /var/www/html/var /var/www/html/generated /var/www/html/pub/static /var/www/html/pub/media /var/www/html/app/etc" || true
 

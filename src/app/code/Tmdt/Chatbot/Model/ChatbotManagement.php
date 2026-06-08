@@ -23,6 +23,26 @@ class ChatbotManagement implements ChatbotInterface
     private const PRODUCT_LIMIT = 3;
     private const KEYWORD_LIMIT = 12;
     private const SEARCH_ATTRIBUTE = 'tmdt_search_keywords';
+    private const MIN_PRODUCT_SCORE = 40;
+
+    private const STOPWORDS = [
+        'toi', 'tui', 'minh', 'em', 'anh', 'chi', 'ban', 'khach',
+        'muon', 'can', 'mua', 'tim', 'kiem', 'goi', 'y', 'tu', 'van',
+        'san', 'pham', 'hang', 'mat', 'loai', 'cho', 'xin', 'hay', 'giup',
+        'voi', 'nhe', 'nha', 'a', 'la', 'co', 'khong', 'duoc', 'nao',
+    ];
+
+    private const VEGETABLE_TERMS = [
+        'rau', 'rau xanh', 'vegetable', 'cai', 'cai xanh', 'cai ngot', 'cai thao',
+        'xa lach', 'lettuce', 'salad', 'su su', 'dua leo', 'dua chuot', 'ca chua',
+        'carrot', 'ca rot', 'khoai tay', 'nam', 'cu qua', 'cu', 'qua tuoi',
+    ];
+
+    private const NON_VEGETABLE_TERMS = [
+        'thit', 'heo', 'lon', 'pork', 'bo', 'beef', 'ga', 'chicken', 'vit', 'duck',
+        'trung', 'egg', 'ca hoi', 'ca phi le', 'ca tuoi', 'fish', 'tom', 'shrimp', 'muc', 'squid', 'cua',
+        'hai san', 'seafood', 'xuc xich', 'sausage', 'ca vien', 'bo vien',
+    ];
 
     private string $deepSeekModel = 'deepseek-chat';
 
@@ -75,8 +95,8 @@ class ChatbotManagement implements ChatbotInterface
         $terms = [$message, $normalized];
 
         foreach (preg_split('/\s+/', $normalized) ?: [] as $part) {
-            $part = trim((string) $part);
-            if (mb_strlen($part) >= 3) {
+            $part = $this->normalizeKeyword((string) $part);
+            if ($this->isUsefulKeyword($part)) {
                 $terms[] = $part;
             }
         }
@@ -130,9 +150,13 @@ class ChatbotManagement implements ChatbotInterface
         $collection->setPageSize(30);
 
         $scored = [];
+        $intent = $this->detectIntent($keywords);
         foreach ($collection as $product) {
+            if (!$this->matchesIntent($product, $intent)) {
+                continue;
+            }
             $score = $this->scoreProduct($product, $keywords);
-            if ($score <= 0) {
+            if ($score < self::MIN_PRODUCT_SCORE) {
                 continue;
             }
             $scored[] = [
@@ -159,8 +183,8 @@ class ChatbotManagement implements ChatbotInterface
 
         $score = 0;
         foreach ($keywords as $keyword) {
-            $needle = $this->searchDictionary->normalize((string) $keyword);
-            if ($needle === '') {
+            $needle = $this->normalizeKeyword((string) $keyword);
+            if (!$this->isUsefulKeyword($needle)) {
                 continue;
             }
             if ($name === $needle) {
@@ -177,6 +201,68 @@ class ChatbotManagement implements ChatbotInterface
         }
 
         return $score;
+    }
+
+    private function normalizeKeyword(string $keyword): string
+    {
+        return $this->searchDictionary->normalize($keyword);
+    }
+
+    private function isUsefulKeyword(string $keyword): bool
+    {
+        return $keyword !== ''
+            && mb_strlen($keyword, 'UTF-8') >= 3
+            && !in_array($keyword, self::STOPWORDS, true);
+    }
+
+    private function detectIntent(array $keywords): string
+    {
+        $haystack = ' ' . implode(' ', array_map(
+            fn (string $term): string => $this->normalizeKeyword($term),
+            $keywords
+        )) . ' ';
+
+        foreach (self::VEGETABLE_TERMS as $term) {
+            $needle = ' ' . $this->normalizeKeyword($term) . ' ';
+            if (str_contains($haystack, $needle)) {
+                return 'vegetable';
+            }
+        }
+
+        return '';
+    }
+
+    private function matchesIntent(object $product, string $intent): bool
+    {
+        if ($intent === '') {
+            return true;
+        }
+
+        $haystack = ' '
+            . $this->normalizeKeyword((string) $product->getName()) . ' '
+            . $this->normalizeKeyword((string) $product->getSku()) . ' '
+            . $this->normalizeKeyword((string) $product->getData(self::SEARCH_ATTRIBUTE))
+            . ' ';
+
+        if ($intent === 'vegetable') {
+            foreach (self::NON_VEGETABLE_TERMS as $term) {
+                $needle = ' ' . $this->normalizeKeyword($term) . ' ';
+                if (str_contains($haystack, $needle)) {
+                    return false;
+                }
+            }
+
+            foreach (self::VEGETABLE_TERMS as $term) {
+                $needle = ' ' . $this->normalizeKeyword($term) . ' ';
+                if (str_contains($haystack, $needle)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        return true;
     }
 
     private function formatProduct(object $product): array

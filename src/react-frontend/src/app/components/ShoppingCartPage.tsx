@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Heart, Minus, Plus, Search, ShoppingBag, Store } from 'lucide-react';
+import { FileText, Heart, Minus, Plus, Search, Send, ShoppingBag, Store } from 'lucide-react';
 import { formatCartSupplierLabel, toCurrencyTextFromNumber, useCart, parsePrice } from '../cart/CartProvider';
 
 export function ShoppingCartPage() {
@@ -13,6 +13,19 @@ export function ShoppingCartPage() {
   } = useCart();
   const [searchTerm, setSearchTerm] = useState('');
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
+  const [rfqForm, setRfqForm] = useState({
+    productName: '',
+    category: '',
+    quantity: '',
+    unit: 'kg',
+    deliveryRegion: '',
+    neededBy: '',
+    targetPrice: '',
+    imageUrl: '',
+    description: '',
+  });
+  const [isRfqSubmitting, setIsRfqSubmitting] = useState(false);
+  const [rfqMessage, setRfqMessage] = useState('');
   const isEmbeddedInIframe = (() => {
     try {
       return window.self !== window.top;
@@ -76,6 +89,81 @@ export function ShoppingCartPage() {
     window.localStorage.setItem(checkoutPayloadKey, serializedPayload);
     const checkoutUrl = `${reactHomeUrl}?view=checkout`;
     safeNavigate(checkoutUrl);
+  };
+
+  const prefillRfqFromSelectedItems = () => {
+    if (selectedItems.length === 0) return;
+    const first = selectedItems[0];
+    setRfqForm((prev) => ({
+      ...prev,
+      productName: selectedItems.length === 1 ? first.name : `${selectedItems.length} mat hang thuc pham`,
+      category: first.category || prev.category,
+      quantity: selectedItems.reduce((sum, item) => sum + item.quantity, 0).toString(),
+      unit: first.unit || prev.unit,
+      targetPrice: first.unitPrice ? String(Math.round(first.unitPrice)) : prev.targetPrice,
+      imageUrl: first.image || prev.imageUrl,
+      description:
+        selectedItems.length === 1
+          ? `Can bao gia cho ${first.name}, so luong ${first.quantity} ${first.unit || ''}.`
+          : `Can bao gia cho cac mat hang: ${selectedItems.map((item) => `${item.name} x ${item.quantity}`).join(', ')}.`,
+    }));
+  };
+
+  const submitRfqRequest = async () => {
+    const token = window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
+    if (!token) {
+      setRfqMessage('Ban can dang nhap de gui yeu cau bao gia.');
+      return;
+    }
+    if (!rfqForm.productName.trim() || !rfqForm.quantity.trim()) {
+      setRfqMessage('Vui long nhap ten san pham va so luong can mua.');
+      return;
+    }
+
+    setIsRfqSubmitting(true);
+    setRfqMessage('');
+    try {
+      const response = await fetch(`${window.location.origin}/rest/V1/tmdt-rfq/request`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          payload: {
+            productName: rfqForm.productName,
+            category: rfqForm.category,
+            quantity: Number(rfqForm.quantity),
+            unit: rfqForm.unit,
+            deliveryRegion: rfqForm.deliveryRegion,
+            neededBy: rfqForm.neededBy,
+            targetPrice: rfqForm.targetPrice ? Number(rfqForm.targetPrice) : null,
+            imageUrl: rfqForm.imageUrl,
+            description: rfqForm.description,
+          },
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as { success?: boolean; message?: string; request_id?: number };
+      if (!response.ok || data.success === false) {
+        throw new Error(data.message || 'Khong the gui yeu cau bao gia.');
+      }
+      setRfqMessage(`Da gui yeu cau bao gia RFQ-${data.request_id || ''}.`);
+      setRfqForm({
+        productName: '',
+        category: '',
+        quantity: '',
+        unit: 'kg',
+        deliveryRegion: '',
+        neededBy: '',
+        targetPrice: '',
+        imageUrl: '',
+        description: '',
+      });
+    } catch (error) {
+      setRfqMessage(error instanceof Error ? error.message : 'Khong the gui yeu cau bao gia.');
+    } finally {
+      setIsRfqSubmitting(false);
+    }
   };
 
   const handleTopLevelNavigation = (event: React.MouseEvent<HTMLElement>) => {
@@ -170,6 +258,106 @@ export function ShoppingCartPage() {
             >
               <Heart className="size-4" />
               Thêm sản phẩm từ danh sách yêu thích
+            </button>
+          </div>
+        </section>
+
+        <section className="mb-5 rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="flex items-center gap-2 text-base font-bold text-gray-900">
+                <FileText className="size-5 text-emerald-600" />
+                Yeu cau bao gia
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Dang nhu cau mua hang de nhieu nha ban hang gui bao gia, hinh anh va chat luong de ban so sanh.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={prefillRfqFromSelectedItems}
+              disabled={selectedCount === 0}
+              className="rounded-xl border border-emerald-200 px-4 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Lay tu san pham da chon
+            </button>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-4">
+            <input
+              value={rfqForm.productName}
+              onChange={(event) => setRfqForm((prev) => ({ ...prev, productName: event.target.value }))}
+              placeholder="Ten san pham can mua"
+              className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-emerald-500 md:col-span-2"
+            />
+            <input
+              value={rfqForm.category}
+              onChange={(event) => setRfqForm((prev) => ({ ...prev, category: event.target.value }))}
+              placeholder="Danh muc"
+              className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-emerald-500"
+            />
+            <input
+              value={rfqForm.deliveryRegion}
+              onChange={(event) => setRfqForm((prev) => ({ ...prev, deliveryRegion: event.target.value }))}
+              placeholder="Khu vuc giao hang"
+              className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-emerald-500"
+            />
+            <input
+              type="number"
+              min="0"
+              value={rfqForm.quantity}
+              onChange={(event) => setRfqForm((prev) => ({ ...prev, quantity: event.target.value }))}
+              placeholder="So luong"
+              className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-emerald-500"
+            />
+            <input
+              value={rfqForm.unit}
+              onChange={(event) => setRfqForm((prev) => ({ ...prev, unit: event.target.value }))}
+              placeholder="Don vi"
+              className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-emerald-500"
+            />
+            <input
+              type="date"
+              value={rfqForm.neededBy}
+              onChange={(event) => setRfqForm((prev) => ({ ...prev, neededBy: event.target.value }))}
+              className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-emerald-500"
+            />
+            <input
+              type="number"
+              min="0"
+              value={rfqForm.targetPrice}
+              onChange={(event) => setRfqForm((prev) => ({ ...prev, targetPrice: event.target.value }))}
+              placeholder="Gia ky vong / don vi"
+              className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-emerald-500"
+            />
+            <input
+              type="url"
+              value={rfqForm.imageUrl}
+              onChange={(event) => setRfqForm((prev) => ({ ...prev, imageUrl: event.target.value }))}
+              placeholder="Anh tham khao (URL)"
+              className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-emerald-500 md:col-span-2"
+            />
+            <textarea
+              rows={3}
+              value={rfqForm.description}
+              onChange={(event) => setRfqForm((prev) => ({ ...prev, description: event.target.value }))}
+              placeholder="Mo ta yeu cau: quy cach, chat luong, dong goi, dieu kien giao nhan..."
+              className="resize-none rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-emerald-500 md:col-span-2"
+            />
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <p className={`text-sm font-semibold ${rfqMessage.includes('Da gui') ? 'text-emerald-700' : 'text-rose-600'}`}>
+              {rfqMessage}
+            </p>
+            <button
+              type="button"
+              onClick={submitRfqRequest}
+              disabled={isRfqSubmitting}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:bg-emerald-300"
+            >
+              <Send className="size-4" />
+              {isRfqSubmitting ? 'Dang gui...' : 'Gui yeu cau bao gia'}
             </button>
           </div>
         </section>

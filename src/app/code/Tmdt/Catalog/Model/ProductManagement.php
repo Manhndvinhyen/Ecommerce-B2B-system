@@ -956,7 +956,7 @@ class ProductManagement implements ProductManagementInterface
             FROM {$oTable} o
             INNER JOIN {$oiTable} oi ON o.id = oi.order_id
             WHERE oi.seller_id = :seller_id
-              AND o.status IN ('paid', 'processing', 'preparing', 'shipping', 'delivered', 'pending')
+              AND o.status IN ('paid', 'processing', 'preparing', 'handed_over', 'shipping', 'delivered', 'pending')
               AND COALESCE(o.parent_code, '') != 'parent'
         ", ['seller_id' => $sellerId]);
 
@@ -984,7 +984,7 @@ class ProductManagement implements ProductManagementInterface
             FROM {$oTable} o
             INNER JOIN {$oiTable} oi ON o.id = oi.order_id
             WHERE oi.seller_id = :seller_id
-              AND o.status IN ('paid', 'processing', 'preparing', 'shipping', 'delivered', 'pending')
+              AND o.status IN ('paid', 'processing', 'preparing', 'handed_over', 'shipping', 'delivered', 'pending')
               AND COALESCE(o.parent_code, '') != 'parent'
             GROUP BY month_key
         ", ['seller_id' => $sellerId]);
@@ -1010,7 +1010,7 @@ class ProductManagement implements ProductManagementInterface
             LEFT JOIN " . $connection->getTableName('catalog_category_entity_varchar') . " ccev ON ccp.category_id = ccev.entity_id
                 AND ccev.attribute_id = (SELECT attribute_id FROM " . $connection->getTableName('eav_attribute') . " WHERE attribute_code = 'name' AND entity_type_id = 3 LIMIT 1)
             WHERE oi.seller_id = :seller_id
-              AND o.status IN ('paid', 'processing', 'preparing', 'shipping', 'delivered', 'pending')
+              AND o.status IN ('paid', 'processing', 'preparing', 'handed_over', 'shipping', 'delivered', 'pending')
               AND COALESCE(o.parent_code, '') != 'parent'
             GROUP BY name
             ORDER BY value DESC
@@ -1033,7 +1033,7 @@ class ProductManagement implements ProductManagementInterface
             FROM {$oTable} o
             INNER JOIN {$oiTable} oi ON o.id = oi.order_id
             WHERE oi.seller_id = :seller_id
-              AND o.status IN ('paid', 'processing', 'preparing', 'shipping', 'delivered', 'pending')
+              AND o.status IN ('paid', 'processing', 'preparing', 'handed_over', 'shipping', 'delivered', 'pending')
               AND COALESCE(o.parent_code, '') != 'parent'
             GROUP BY oi.product_id, oi.sku, oi.name, oi.unit, oi.image
             ORDER BY revenue DESC
@@ -1242,8 +1242,8 @@ class ProductManagement implements ProductManagementInterface
 
             // Summary calculations
             $summary['total_orders'] += 1;
-            // Count revenue for all active statuses: paid, processing, preparing, shipping, delivered, pending
-            if (in_array($orderStatus, ['paid', 'processing', 'preparing', 'shipping', 'delivered', 'pending'], true)) {
+            // Count revenue for all active statuses: paid, processing, preparing, handed_over, shipping, delivered, pending
+            if (in_array($orderStatus, ['paid', 'processing', 'preparing', 'handed_over', 'shipping', 'delivered', 'pending'], true)) {
                 $summary['total_revenue'] += $sellerSubtotal;
             }
 
@@ -1438,7 +1438,7 @@ class ProductManagement implements ProductManagementInterface
 
         if ($statusFilter !== 'all' && $statusFilter !== '') {
             if ($statusFilter === 'paid') {
-                $select->where('o.status IN (?)', ['paid', 'processing', 'preparing', 'shipping', 'delivered']);
+                $select->where('o.status IN (?)', ['paid', 'processing', 'preparing', 'handed_over', 'shipping', 'delivered']);
             } elseif ($statusFilter === 'cancelled') {
                 $select->where('o.status IN (?)', ['cancelled', 'canceled']);
             } else {
@@ -1541,6 +1541,7 @@ class ProductManagement implements ProductManagementInterface
             'paid' => 'Đã thanh toán',
             'processing' => 'Đang xử lý',
             'preparing' => 'Đang chuẩn bị hàng',
+            'handed_over' => 'Đã bàn giao cho ĐVVC',
             'shipping' => 'Đang giao hàng',
             'delivered' => 'Đã giao hàng',
             'cancelled', 'canceled' => 'Đã hủy',

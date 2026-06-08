@@ -108,6 +108,50 @@ class OrderManagement implements OrderManagementInterface
     }
 
     /**
+     * Create order notifications in tmdt_seller_notifications for the child order
+     */
+    private function createOrderNotifications(int $orderId, string $orderCode, $connection): void
+    {
+        try {
+            $orderItemsTable = $connection->getTableName('tmdt_order_items');
+            $items = $connection->fetchAll(
+                "SELECT name, sku, quantity, row_total, seller_id FROM {$orderItemsTable} WHERE order_id = ?",
+                [$orderId]
+            );
+
+            $sellerRevenues = [];
+            $sellerItems = [];
+
+            foreach ($items as $item) {
+                $sellerId = $item['seller_id'] !== null ? (int)$item['seller_id'] : null;
+                if ($sellerId !== null) {
+                    $sellerRevenues[$sellerId] = ($sellerRevenues[$sellerId] ?? 0.0) + (float)$item['row_total'];
+                    $sellerItems[$sellerId][] = ($item['name'] ?: $item['sku']) . ' (x' . (float)$item['quantity'] . ')';
+                }
+            }
+
+            foreach ($sellerRevenues as $sellerId => $amount) {
+                $itemsList = implode(', ', $sellerItems[$sellerId]);
+                $formattedAmount = number_format($amount, 0, ',', '.') . 'đ';
+                
+                $connection->insert(
+                    $connection->getTableName('tmdt_seller_notifications'),
+                    [
+                        'seller_id'          => (string)$sellerId,
+                        'seller_customer_id' => $sellerId,
+                        'sku'                => $orderCode,
+                        'message'            => "Bạn có đơn hàng mới {$orderCode}. Sản phẩm: {$itemsList}. Tổng doanh thu: {$formattedAmount}.",
+                        'is_read'            => 0,
+                        'created_at'         => date('Y-m-d H:i:s')
+                    ]
+                );
+            }
+        } catch (\Throwable $e) {
+            // Silently catch to prevent order creation from failing
+        }
+    }
+
+    /**
      * POST /V1/tmdt-orders/create
      */
     public function createOrder(
@@ -222,6 +266,9 @@ class OrderManagement implements OrderManagementInterface
                 // Save normalized items
                 $this->saveOrderItems($childId, $groupItems, $connection);
 
+                // Create notifications for this child order
+                $this->createOrderNotifications($childId, $childCode, $connection);
+
                 $childOrdersData[] = [
                     'orderCode' => $childCode,
                     'supplier' => $supplierKey,
@@ -303,6 +350,9 @@ class OrderManagement implements OrderManagementInterface
 
             // Save items
             $this->saveOrderItems($orderId, $items, $connection);
+
+            // Create notifications for this order
+            $this->createOrderNotifications($orderId, $orderCode, $connection);
 
             $supplierKey = key($groups) ?: 'Tổng kho sỉ Thực phẩm B2B · Hà Nội';
             $subtotal = 0.0;
@@ -535,10 +585,10 @@ class OrderManagement implements OrderManagementInterface
         $oiTable = $connection->getTableName('tmdt_order_items');
 
         // Validate target status
-        $allowedStatuses = ['preparing', 'shipping', 'delivered'];
+        $allowedStatuses = ['preparing', 'handed_over', 'shipping', 'delivered'];
         if (!in_array($status, $allowedStatuses, true)) {
             throw new \Magento\Framework\Exception\LocalizedException(
-                __('Trạng thái "%1" không hợp lệ. Chỉ chấp nhận: preparing, shipping, delivered.', $status)
+                __('Trạng thái "%1" không hợp lệ. Chỉ chấp nhận: preparing, handed_over, shipping, delivered.', $status)
             );
         }
 
@@ -569,18 +619,20 @@ class OrderManagement implements OrderManagementInterface
         // Validate status transition
         $currentStatus = strtolower(trim((string)$order['status']));
         $validTransitions = [
-            'preparing' => ['paid', 'processing'],
-            'shipping'  => ['preparing'],
-            'delivered' => ['shipping'],
+            'preparing'   => ['paid', 'processing'],
+            'handed_over' => ['preparing'],
+            'shipping'    => ['handed_over'],
+            'delivered'   => ['shipping'],
         ];
 
         if (!in_array($currentStatus, $validTransitions[$status] ?? [], true)) {
             $statusLabels = [
-                'paid' => 'Đã thanh toán',
-                'processing' => 'Đang xử lý',
-                'preparing' => 'Đang chuẩn bị',
-                'shipping' => 'Đang giao hàng',
-                'delivered' => 'Đã giao hàng',
+                'paid'        => 'Đã thanh toán',
+                'processing'  => 'Đang xử lý',
+                'preparing'   => 'Đang chuẩn bị',
+                'handed_over' => 'Đã bàn giao cho ĐVVC',
+                'shipping'    => 'Đang giao hàng',
+                'delivered'   => 'Đã giao hàng',
             ];
             throw new \Magento\Framework\Exception\LocalizedException(
                 __('Không thể chuyển từ trạng thái "%1" sang "%2".', $statusLabels[$currentStatus] ?? $currentStatus, $statusLabels[$status] ?? $status)
@@ -589,9 +641,10 @@ class OrderManagement implements OrderManagementInterface
 
         // Status label for log comments
         $commentMap = [
-            'preparing' => 'Người bán đã xác nhận chuẩn bị đơn hàng.',
-            'shipping'  => 'Đơn hàng đang được giao đến khách hàng.',
-            'delivered' => 'Đơn hàng đã được giao thành công.',
+            'preparing'   => 'Người bán đã xác nhận chuẩn bị đơn hàng.',
+            'handed_over' => 'Người bán đã bàn giao hàng cho đơn vị vận chuyển.',
+            'shipping'    => 'Đơn vị vận chuyển đã nhận hàng và đang tiến hành vận chuyển.',
+            'delivered'   => 'Đơn hàng đã được giao thành công.',
         ];
         $comment = $commentMap[$status] ?? "Đơn hàng chuyển sang trạng thái {$status}";
 

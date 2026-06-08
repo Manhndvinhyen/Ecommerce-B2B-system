@@ -82,6 +82,9 @@ const getStatusMeta = (status?: string) => {
   if (normalized === 'preparing') {
     return { label: 'Đang chuẩn bị hàng', className: 'bg-indigo-50 text-indigo-700 border-indigo-100/80', dot: 'bg-indigo-500' };
   }
+  if (normalized === 'handed_over') {
+    return { label: 'Đã bàn giao cho ĐVVC', className: 'bg-cyan-50 text-cyan-700 border-cyan-100/80', dot: 'bg-cyan-500' };
+  }
   if (normalized === 'shipping') {
     return { label: 'Đang giao hàng', className: 'bg-orange-50 text-orange-700 border-orange-100/80', dot: 'bg-orange-500' };
   }

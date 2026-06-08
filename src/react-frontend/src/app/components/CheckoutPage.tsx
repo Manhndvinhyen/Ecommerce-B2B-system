@@ -12,8 +12,8 @@ declare global {
 
 // Warehouse coordinates definition for routing from closest location
 const warehouses = [
-  { name: 'Kho Báº¯c Giang', lat: 21.2730, lon: 106.1946 },
-  { name: 'Kho BÃ¬nh DÆ°Æ¡ng', lat: 10.9805, lon: 106.6517 }
+  { name: 'Kho Bắc Giang', lat: 21.2730, lon: 106.1946 },
+  { name: 'Kho Bình Dương', lat: 10.9805, lon: 106.6517 }
 ];
 
 // Distance calculator (Haversine formula in km)
@@ -49,15 +49,15 @@ function findNearestWarehouse(lat: number, lon: number) {
 
 // Determine warehouse dynamically based on supplier region and database warehouses list
 const getWarehouseForSupplier = (supplierLabel: string, dbList: any[] = []) => {
-  const parts = supplierLabel.split('Â·').map(p => p.trim());
+  const parts = supplierLabel.split('·').map(p => p.trim());
   const supplierRegion = parts[1] || parts[0] || '';
   const normalizedRegion = supplierRegion.toLowerCase();
 
-  let nameKeyword = 'BÃ¬nh DÆ°Æ¡ng';
-  if (normalizedRegion.includes('hÃ  ná»™i') || normalizedRegion.includes('ha noi') || normalizedRegion.includes('báº¯c giang') || normalizedRegion.includes('bac giang') || normalizedRegion.includes('báº¯c') || normalizedRegion.includes('bac')) {
-    nameKeyword = 'Báº¯c Giang';
-  } else if (normalizedRegion.includes('Ä‘Ã  láº¡t') || normalizedRegion.includes('da lat')) {
-    nameKeyword = 'Báº¯c Giang';
+  let nameKeyword = 'Bình Dương';
+  if (normalizedRegion.includes('hà nội') || normalizedRegion.includes('ha noi') || normalizedRegion.includes('bắc giang') || normalizedRegion.includes('bac giang') || normalizedRegion.includes('bắc') || normalizedRegion.includes('bac')) {
+    nameKeyword = 'Bắc Giang';
+  } else if (normalizedRegion.includes('đà lạt') || normalizedRegion.includes('da lat')) {
+    nameKeyword = 'Bắc Giang';
   }
 
   const found = dbList.find(w => w.name && w.name.includes(nameKeyword));
@@ -66,10 +66,10 @@ const getWarehouseForSupplier = (supplierLabel: string, dbList: any[] = []) => {
   }
 
   // Fallback to static coordinates if API not loaded/fails
-  if (nameKeyword === 'Báº¯c Giang') {
-    return { name: 'Kho Báº¯c Giang', lat: 21.2730, lon: 106.1946, lng: 106.1946 };
+  if (nameKeyword === 'Bắc Giang') {
+    return { name: 'Kho Bắc Giang', lat: 21.2730, lon: 106.1946, lng: 106.1946 };
   }
-  return { name: 'Kho BÃ¬nh DÆ°Æ¡ng', lat: 10.9805, lon: 106.6517, lng: 106.6517 };
+  return { name: 'Kho Bình Dương', lat: 10.9805, lon: 106.6517, lng: 106.6517 };
 };
 
 // Calculate agricultural item weight based on unit type and quantity
@@ -77,10 +77,10 @@ function calculateItemWeight(unit: string, quantity: number): number {
   const normalizedUnit = String(unit || '').toLowerCase().trim();
   if (normalizedUnit === 'kg') return quantity;
   if (normalizedUnit === 'bao') return quantity * 30; // 30kg per bag
-  if (normalizedUnit === 'yáº¿n' || normalizedUnit === 'yen') return quantity * 10;
-  if (normalizedUnit === 'táº¡' || normalizedUnit === 'ta') return quantity * 100;
-  if (normalizedUnit === 'thÃ¹ng' || normalizedUnit === 'thung') return quantity * 10;
-  if (normalizedUnit === 'khay' || normalizedUnit === 'há»™p' || normalizedUnit === 'hop') return quantity * 0.5;
+  if (normalizedUnit === 'yến' || normalizedUnit === 'yen') return quantity * 10;
+  if (normalizedUnit === 'tạ' || normalizedUnit === 'ta') return quantity * 100;
+  if (normalizedUnit === 'thùng' || normalizedUnit === 'thung') return quantity * 10;
+  if (normalizedUnit === 'khay' || normalizedUnit === 'hộp' || normalizedUnit === 'hop') return quantity * 0.5;
   return quantity * 1.0; // default 1kg
 }
 
@@ -93,67 +93,67 @@ interface CarrierRate {
 
 // Calculate dynamic rates for GHN and GHTK based on distance and weight
 function calculateCarrierRates(distance: number, totalWeight: number): CarrierRate[] {
-  // Giao HÃ ng Nhanh (GHN)
+  // Giao Hàng Nhanh (GHN)
   let ghnBase = 22000;
   let ghnOverweight = 3000;
   let ghnDistFactor = 0;
-  let ghnEta = '1 ngÃ y';
+  let ghnEta = '1 ngày';
 
   if (distance <= 20) {
     ghnBase = 22000;
     ghnOverweight = 3000;
-    ghnEta = 'Trong ngÃ y';
+    ghnEta = 'Trong ngày';
   } else if (distance <= 100) {
     ghnBase = 35000;
     ghnOverweight = 5000;
-    ghnEta = '1-2 ngÃ y';
+    ghnEta = '1-2 ngày';
   } else {
     ghnBase = 50000;
     ghnOverweight = 10000;
     ghnDistFactor = (distance - 100) * 500;
-    ghnEta = '2-3 ngÃ y';
+    ghnEta = '2-3 ngày';
   }
 
   const ghnExtraWeight = Math.max(0, totalWeight - 2);
   const ghnFee = Math.round((ghnBase + ghnExtraWeight * ghnOverweight + ghnDistFactor) / 1000) * 1000;
 
-  // Giao HÃ ng Tiáº¿t Kiá»‡m (GHTK)
+  // Giao Hàng Tiết Kiệm (GHTK)
   let ghtkBase = 16500;
   let ghtkOverweight = 2500;
   let ghtkDistFactor = 0;
-  let ghtkEta = '1-2 ngÃ y';
+  let ghtkEta = '1-2 ngày';
 
   if (distance <= 20) {
     ghtkBase = 16500;
     ghtkOverweight = 2500;
-    ghtkEta = '1-2 ngÃ y';
+    ghtkEta = '1-2 ngày';
   } else if (distance <= 100) {
     ghtkBase = 28000;
     ghtkOverweight = 4000;
-    ghtkEta = '2-3 ngÃ y';
+    ghtkEta = '2-3 ngày';
   } else {
     ghtkBase = 42000;
     ghtkOverweight = 8000;
     ghtkDistFactor = (distance - 100) * 400;
-    ghtkEta = '3-5 ngÃ y';
+    ghtkEta = '3-5 ngày';
   }
 
   const ghtkExtraWeight = Math.max(0, totalWeight - 2);
   const ghtkFee = Math.round((ghtkBase + ghtkExtraWeight * ghtkOverweight + ghtkDistFactor) / 1000) * 1000;
 
   return [
-    { code: 'ghn', name: 'Giao HÃ ng Nhanh (GHN)', fee: ghnFee, eta: ghnEta },
-    { code: 'ghtk', name: 'Giao HÃ ng Tiáº¿t Kiá»‡m (GHTK)', fee: ghtkFee, eta: ghtkEta }
+    { code: 'ghn', name: 'Giao Hàng Nhanh (GHN)', fee: ghnFee, eta: ghnEta },
+    { code: 'ghtk', name: 'Giao Hàng Tiết Kiệm (GHTK)', fee: ghtkFee, eta: ghtkEta }
   ];
 }
 
 
-// Format duration to human readable format (e.g. 1 giá» 52 phÃºt)
+// Format duration to human readable format (e.g. 1 giờ 52 phút)
 function formatDuration(minutes: number): string {
-  if (minutes < 60) return `${minutes} phÃºt`;
+  if (minutes < 60) return `${minutes} phút`;
   const hrs = Math.floor(minutes / 60);
   const mins = minutes % 60;
-  return mins > 0 ? `${hrs} giá» ${mins} phÃºt` : `${hrs} giá»`;
+  return mins > 0 ? `${hrs} giờ ${mins} phút` : `${hrs} giờ`;
 }
 
 interface WeatherEstimation {
@@ -185,10 +185,10 @@ const mapWmoToCondition = (code: number, windSpeed: number) => {
   if (windSpeed > 40) {
     return {
       condition: 'Storm',
-      conditionVi: 'BÃ£o / GiÃ³ giáº­t',
-      emoji: 'ðŸŒªï¸',
+      conditionVi: 'Bão / Gió giật',
+      emoji: '🌪️',
       factor: 3.0,
-      notice: 'âš ï¸ Thá»i tiáº¿t bÃ£o nguy hiá»ƒm, Ä‘Æ¡n hÃ ng cÃ³ thá»ƒ giao cháº­m trá»… Ä‘Ã¡ng ká»ƒ.'
+      notice: '⚠️ Thời tiết bão nguy hiểm, đơn hàng có thể giao chậm trễ đáng kể.'
     };
   }
 
@@ -196,8 +196,8 @@ const mapWmoToCondition = (code: number, windSpeed: number) => {
   if (code === 0) {
     return {
       condition: 'Clear',
-      conditionVi: 'Trá»i Ä‘áº¹p',
-      emoji: 'â˜€ï¸',
+      conditionVi: 'Trời đẹp',
+      emoji: '☀️',
       factor: 1.0,
       notice: ''
     };
@@ -206,8 +206,8 @@ const mapWmoToCondition = (code: number, windSpeed: number) => {
   if ([1, 2, 3].includes(code)) {
     return {
       condition: 'Clouds',
-      conditionVi: 'Nhiá»u mÃ¢y',
-      emoji: 'â›…',
+      conditionVi: 'Nhiều mây',
+      emoji: '⛅',
       factor: 1.0,
       notice: ''
     };
@@ -216,47 +216,47 @@ const mapWmoToCondition = (code: number, windSpeed: number) => {
   if ([45, 48, 51, 53, 55, 56, 57].includes(code)) {
     return {
       condition: 'Drizzle',
-      conditionVi: 'MÆ°a nháº¹',
-      emoji: 'ðŸŒ§ï¸',
+      conditionVi: 'Mưa nhẹ',
+      emoji: '🌧️',
       factor: 1.2,
-      notice: 'âš ï¸ CÃ³ mÆ°a phÃ¹n nháº¹, thá»i gian giao hÃ ng cÃ³ thá»ƒ cháº­m 5-10 phÃºt.'
+      notice: '⚠️ Có mưa phùn nhẹ, thời gian giao hàng có thể chậm 5-10 phút.'
     };
   }
   // Rain
   if ([61, 80].includes(code)) {
     return {
       condition: 'Rain',
-      conditionVi: 'MÆ°a vá»«a',
-      emoji: 'ðŸŒ§ï¸',
+      conditionVi: 'Mưa vừa',
+      emoji: '🌧️',
       factor: 1.5,
-      notice: 'âš ï¸ Do thá»i tiáº¿t mÆ°a, Ä‘Æ¡n hÃ ng cÃ³ thá»ƒ giao cháº­m hÆ¡n bÃ¬nh thÆ°á»ng.'
+      notice: '⚠️ Do thời tiết mưa, đơn hàng có thể giao chậm hơn bình thường.'
     };
   }
   // Heavy Rain / Thunderstorm
   if ([63, 65, 81, 82, 95, 96, 99].includes(code)) {
     return {
       condition: 'Heavy Rain',
-      conditionVi: 'MÆ°a lá»›n / DÃ´ng',
-      emoji: 'â›ˆï¸',
+      conditionVi: 'Mưa lớn / Dông',
+      emoji: '⛈️',
       factor: 2.0,
-      notice: 'âš ï¸ MÆ°a lá»›n dá»¯ dá»™i, thá»i gian giao hÃ ng cÃ³ thá»ƒ kÃ©o dÃ i gáº¥p Ä‘Ã´i.'
+      notice: '⚠️ Mưa lớn dữ dội, thời gian giao hàng có thể kéo dài gấp đôi.'
     };
   }
   // Snow
   if ([71, 73, 75, 77, 85, 86].includes(code)) {
     return {
       condition: 'Snow',
-      conditionVi: 'Tuyáº¿t rÆ¡i',
-      emoji: 'â„ï¸',
+      conditionVi: 'Tuyết rơi',
+      emoji: '❄️',
       factor: 2.0,
-      notice: 'âš ï¸ Tuyáº¿t rÆ¡i dÃ y áº£nh hÆ°á»Ÿng Ä‘áº¿n giao hÃ ng.'
+      notice: '⚠️ Tuyết rơi dày ảnh hưởng đến giao hàng.'
     };
   }
 
   return {
     condition: 'Clear',
-    conditionVi: 'Trá»i Ä‘áº¹p',
-    emoji: 'â˜€ï¸',
+    conditionVi: 'Trời đẹp',
+    emoji: '☀️',
     factor: 1.0,
     notice: ''
   };
@@ -311,14 +311,14 @@ const deliveryTimeOptions = ['07:00 - 09:00', '09:00 - 11:30', '13:00 - 15:30', 
 const cartSupplierMapStorageKey = 'freso_cart_supplier_map';
 
 const branchCoordinates: Record<string, { lat: number; lng: number; cityName: string }> = {
-  'Chi nhÃ¡nh Quáº­n 1': { lat: 10.776, lng: 106.700, cityName: 'Quáº­n 1, TP. Há»“ ChÃ­ Minh' },
-  'Chi nhÃ¡nh Quáº­n 7': { lat: 10.732, lng: 106.721, cityName: 'Quáº­n 7, TP. Há»“ ChÃ­ Minh' },
-  'Chi nhÃ¡nh Thá»§ Äá»©c': { lat: 10.849, lng: 106.772, cityName: 'Thá»§ Äá»©c, TP. Há»“ ChÃ­ Minh' },
-  'Chi nhÃ¡nh BÃ¬nh Tháº¡nh': { lat: 10.801, lng: 106.699, cityName: 'BÃ¬nh Tháº¡nh, TP. Há»“ ChÃ­ Minh' }
+  'Chi nhánh Quận 1': { lat: 10.776, lng: 106.700, cityName: 'Quận 1, TP. Hồ Chí Minh' },
+  'Chi nhánh Quận 7': { lat: 10.732, lng: 106.721, cityName: 'Quận 7, TP. Hồ Chí Minh' },
+  'Chi nhánh Thủ Đức': { lat: 10.849, lng: 106.772, cityName: 'Thủ Đức, TP. Hồ Chí Minh' },
+  'Chi nhánh Bình Thạnh': { lat: 10.801, lng: 106.699, cityName: 'Bình Thạnh, TP. Hồ Chí Minh' }
 };
 
 const findClosestBranch = (lat: number, lng: number): string => {
-  let closestBranch = 'Chi nhÃ¡nh Quáº­n 1';
+  let closestBranch = 'Chi nhánh Quận 1';
   let minDistance = Infinity;
 
   Object.entries(branchCoordinates).forEach(([branchName, coords]) => {
@@ -353,7 +353,7 @@ const toFiniteMoney = (value: unknown): number => {
 const isValidPhone = (value: string) => /^(\+?84|0)\d{9,10}$/.test(value.replace(/\s/g, ''));
 const getRegionFromBranch = (branch: string) => {
   if (!branch) return '';
-  return branch.replace(/^Chi nhÃ¡nh\s+/i, '').trim();
+  return branch.replace(/^Chi nhánh\s+/i, '').trim();
 };
 
 const getMagentoMediaImageUrl = (file?: string | null) => {
@@ -417,13 +417,13 @@ const buildCheckoutPayload = (items: CheckoutItem[]): CheckoutPayload => {
 
 const parseSupplierLabel = (label?: string) => {
   const parts = String(label || '')
-    .split('Â·')
+    .split('·')
     .map((part) => part.trim())
     .filter(Boolean);
 
   return {
     supplierName: parts[0] || undefined,
-    supplierRegion: parts.slice(1).join(' Â· ') || undefined
+    supplierRegion: parts.slice(1).join(' · ') || undefined
   };
 };
 
@@ -466,7 +466,7 @@ const mapMagentoCartItems = (items: MagentoCartItem[] = []): CheckoutItem[] => {
 
     const discountPercent = toFiniteMoney(activeTier?.discount);
     const unitPrice = originalPrice * (1 - discountPercent / 100);
-    const category = product.categories?.find((cat) => cat?.name)?.name ?? matchingProduct?.categoryLabel ?? (inferCategoryFromSku(product.sku ?? '')?.category || 'Rau cá»§ quáº£');
+    const category = product.categories?.find((cat) => cat?.name)?.name ?? matchingProduct?.categoryLabel ?? (inferCategoryFromSku(product.sku ?? '')?.category || 'Rau củ quả');
     const unit = matchingProduct?.unit || 'kg';
     const supplier = parseSupplierLabel(matchingProduct?.store_name);
     const storedSupplier = storedSupplierMap[sku] || {};
@@ -504,7 +504,7 @@ const mapMagentoCartItems = (items: MagentoCartItem[] = []): CheckoutItem[] => {
     return {
       id: String(item.id),
       sku: product.sku ?? '',
-      name: product.name ?? (matchingProduct?.name || 'Sáº£n pháº©m'),
+      name: product.name ?? (matchingProduct?.name || 'Sản phẩm'),
       quantity: qty,
       unitPrice,
       unit,
@@ -653,8 +653,8 @@ export function CheckoutPage() {
   const [availableVouchers, setAvailableVouchers] = useState<any[]>([
     {
       id: 4,
-      title: 'Voucher KhÃ¡ch HÃ ng Má»›i',
-      description: 'Giáº£m 100.000Ä‘ cho Ä‘Æ¡n hÃ ng sá»‰ Ä‘áº§u tiÃªn tá»« 1.000.000Ä‘.',
+      title: 'Voucher Khách Hàng Mới',
+      description: 'Giảm 100.000đ cho đơn hàng sỉ đầu tiên từ 1.000.000đ.',
       type: 'voucher',
       discount_code: 'FRESO100',
       discount_value: 100000,
@@ -662,8 +662,8 @@ export function CheckoutPage() {
     },
     {
       id: 5,
-      title: 'Miá»…n PhÃ­ Váº­n Chuyá»ƒn Sá»‰',
-      description: 'Freeship tá»‘i Ä‘a 200.000Ä‘ cho Ä‘Æ¡n hÃ ng sá»‰ tá»« 3.000.000Ä‘.',
+      title: 'Miễn Phí Vận Chuyển Sỉ',
+      description: 'Freeship tối đa 200.000đ cho đơn hàng sỉ từ 3.000.000đ.',
       type: 'voucher',
       discount_code: 'FREESHIP200',
       discount_value: 200000,
@@ -864,7 +864,7 @@ export function CheckoutPage() {
   useEffect(() => {
     if (appliedVoucher && subtotal < (appliedVoucher.min_order_amount || 0)) {
       setAppliedVoucher(null);
-      setVoucherError(`ÄÆ¡n hÃ ng chÆ°a Ä‘áº¡t giÃ¡ trá»‹ tá»‘i thiá»ƒu ${toCurrencyTextFromNumber(appliedVoucher.min_order_amount)}`);
+      setVoucherError(`Đơn hàng chưa đạt giá trị tối thiểu ${toCurrencyTextFromNumber(appliedVoucher.min_order_amount)}`);
     }
   }, [subtotal, appliedVoucher]);
 
@@ -1056,7 +1056,7 @@ export function CheckoutPage() {
   const calculateWeatherAndEta = async (address: string, branch: string) => {
     setEstLoading(true);
     try {
-      const branchCoords = (branch && branchCoordinates[branch]) || { lat: 10.776, lng: 106.700, cityName: 'TP. Há»“ ChÃ­ Minh' };
+      const branchCoords = (branch && branchCoordinates[branch]) || { lat: 10.776, lng: 106.700, cityName: 'TP. Hồ Chí Minh' };
       let lat = branchCoords.lat;
       let lng = branchCoords.lng;
       let cityName = branchCoords.cityName;
@@ -1079,7 +1079,7 @@ export function CheckoutPage() {
             if (geoData && geoData.length > 0) {
               lat = parseFloat(geoData[0].lat);
               lng = parseFloat(geoData[0].lon);
-              cityName = geoData[0].display_name.split(',')[0] || 'Vá»‹ trÃ­ nháº­n hÃ ng';
+              cityName = geoData[0].display_name.split(',')[0] || 'Vị trí nhận hàng';
               resolved = true;
               setCoordinates({ lat, lng, cityName });
             }
@@ -1091,8 +1091,8 @@ export function CheckoutPage() {
         // Step 2: Fallback to branch-scoped search in HCMC if raw geocoding yielded no results
         if (!resolved) {
           try {
-            const cleanBranch = branch.replace(/^Chi nhÃ¡nh\s+/i, '');
-            const queryAddress = `${address}, ${cleanBranch}, Há»“ ChÃ­ Minh, Viá»‡t Nam`.trim();
+            const cleanBranch = branch.replace(/^Chi nhánh\s+/i, '');
+            const queryAddress = `${address}, ${cleanBranch}, Hồ Chí Minh, Việt Nam`.trim();
             const geoRes = await fetch(
               `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(queryAddress)}&format=json&limit=1`,
               { headers: { 'User-Agent': 'FresoWeatherEstimation/1.0' } }
@@ -1102,7 +1102,7 @@ export function CheckoutPage() {
               if (geoData && geoData.length > 0) {
                 lat = parseFloat(geoData[0].lat);
                 lng = parseFloat(geoData[0].lon);
-                cityName = geoData[0].display_name.split(',')[0] || 'Vá»‹ trÃ­ nháº­n hÃ ng';
+                cityName = geoData[0].display_name.split(',')[0] || 'Vị trí nhận hàng';
                 setCoordinates({ lat, lng, cityName });
               }
             }
@@ -1118,7 +1118,7 @@ export function CheckoutPage() {
         { cache: 'no-store' }
       );
       if (!weatherRes.ok) {
-        throw new Error('KhÃ´ng thá»ƒ táº£i dá»¯ liá»‡u thá»i tiáº¿t.');
+        throw new Error('Không thể tải dữ liệu thời tiết.');
       }
       const weatherData = await weatherRes.json();
       const temperature = Math.round(weatherData.current.temperature_2m);
@@ -1147,16 +1147,16 @@ export function CheckoutPage() {
       let temperatureNotice = '';
       if (temperature > 38) {
         surcharge = 10000;
-        temperatureNotice = 'âš ï¸ Náº¯ng nÃ³ng gay gáº¯t. Má»™t sá»‘ máº·t hÃ ng dá»… hÆ° há»ng cÃ³ thá»ƒ bá»‹ háº¡n cháº¿ giao xa. Sáº£n pháº©m sáº½ Ä‘Æ°á»£c Æ°u tiÃªn váº­n chuyá»ƒn báº±ng xe láº¡nh.';
+        temperatureNotice = '⚠️ Nắng nóng gay gắt. Một số mặt hàng dễ hư hỏng có thể bị hạn chế giao xa. Sản phẩm sẽ được ưu tiên vận chuyển bằng xe lạnh.';
       } else if (temperature > 35) {
         surcharge = 10000;
-        temperatureNotice = 'âš ï¸ Nhiá»‡t Ä‘á»™ cao. Sáº£n pháº©m sáº½ Ä‘Æ°á»£c Æ°u tiÃªn váº­n chuyá»ƒn báº±ng xe láº¡nh.';
+        temperatureNotice = '⚠️ Nhiệt độ cao. Sản phẩm sẽ được ưu tiên vận chuyển bằng xe lạnh.';
       }
 
-      // GiÃ³ máº¡nh
+      // Gió mạnh
       let windNotice = '';
       if (windSpeed > 40) {
-        windNotice = 'âš ï¸ GiÃ³ máº¡nh. Thá»i gian giao hÃ ng cÃ³ thá»ƒ kÃ©o dÃ i.';
+        windNotice = '⚠️ Gió mạnh. Thời gian giao hàng có thể kéo dài.';
       }
 
       const nextEstimations: Record<string, WeatherEstimation> = {};
@@ -1310,7 +1310,7 @@ export function CheckoutPage() {
             const parts = data.display_name.split(',');
             const cleanAddr = parts.slice(0, 4).map((p: string) => p.trim()).join(', ');
             isMapActionRef.current = true;
-            setCoordinates({ lat, lng, cityName: parts[0]?.trim() || 'Vá»‹ trÃ­ nháº­n hÃ ng' });
+            setCoordinates({ lat, lng, cityName: parts[0]?.trim() || 'Vị trí nhận hàng' });
             setShippingInfo((prev) => ({ ...prev, address: cleanAddr }));
             setMapSearchQuery(cleanAddr);
           }
@@ -1402,7 +1402,7 @@ export function CheckoutPage() {
           setShippingInfo((prev) => ({ ...prev, address: cleanAddr }));
           setMapSearchQuery(cleanAddr);
         } else {
-          alert('KhÃ´ng tÃ¬m tháº¥y Ä‘á»‹a chá»‰ nÃ y trÃªn báº£n Ä‘á»“.');
+          alert('Không tìm thấy địa chỉ này trên bản đồ.');
         }
       }
     } catch (err) {
@@ -1412,7 +1412,7 @@ export function CheckoutPage() {
 
   const handleGpsMapLocate = () => {
     if (!navigator.geolocation) {
-      alert('TrÃ¬nh duyá»‡t cá»§a báº¡n khÃ´ng há»— trá»£ Ä‘á»‹nh vá»‹ GPS.');
+      alert('Trình duyệt của bạn không hỗ trợ định vị GPS.');
       return;
     }
 
@@ -1441,7 +1441,7 @@ export function CheckoutPage() {
               const parts = data.display_name.split(',');
               const cleanAddr = parts.slice(0, 4).map((p: string) => p.trim()).join(', ');
               isMapActionRef.current = true;
-              setCoordinates({ lat, lng, cityName: parts[0]?.trim() || 'Vá»‹ trÃ­ hiá»‡n táº¡i' });
+              setCoordinates({ lat, lng, cityName: parts[0]?.trim() || 'Vị trí hiện tại' });
               setShippingInfo((prev) => ({ ...prev, address: cleanAddr }));
               setMapSearchQuery(cleanAddr);
             }
@@ -1454,7 +1454,7 @@ export function CheckoutPage() {
       },
       (err) => {
         console.warn('GPS location retrieval failed', err);
-        alert('KhÃ´ng thá»ƒ truy cáº­p vá»‹ trÃ­ thiáº¿t bá»‹. Vui lÃ²ng cáº¥p quyá»n trong cÃ i Ä‘áº·t trÃ¬nh duyá»‡t.');
+        alert('Không thể truy cập vị trí thiết bị. Vui lòng cấp quyền trong cài đặt trình duyệt.');
         setMapGpsLoading(false);
       },
       { timeout: 8000, enableHighAccuracy: true }
@@ -1478,23 +1478,23 @@ export function CheckoutPage() {
 
   const validateField = (field: keyof ShippingInfo, value: string) => {
     if (field === 'note' || field === 'branch') return '';
-    if (!value.trim()) return 'Vui lÃ²ng nháº­p thÃ´ng tin nÃ y.';
-    if (field === 'phone' && !isValidPhone(value)) return 'Sá»‘ Ä‘iá»‡n thoáº¡i chÆ°a há»£p lá»‡.';
+    if (!value.trim()) return 'Vui lòng nhập thông tin này.';
+    if (field === 'phone' && !isValidPhone(value)) return 'Số điện thoại chưa hợp lệ.';
     return '';
   };
 
   const validateInvoiceField = (field: keyof InvoiceInfo, value: string) => {
     if (!invoiceEditable) return '';
-    if (!value.trim()) return 'Vui lÃ²ng nháº­p thÃ´ng tin nÃ y.';
-    if (field === 'email' && !/.+@.+\..+/.test(value.trim())) return 'Email chÆ°a há»£p lá»‡.';
+    if (!value.trim()) return 'Vui lòng nhập thông tin này.';
+    if (field === 'email' && !/.+@.+\..+/.test(value.trim())) return 'Email chưa hợp lệ.';
     return '';
   };
 
   const validateForm = () => {
     const nextErrors: Record<string, string> = {};
 
-    if (!deliveryDate) nextErrors.deliveryDate = 'Vui lÃ²ng chá»n ngÃ y giao hÃ ng.';
-    if (!deliveryTime) nextErrors.deliveryTime = 'Vui lÃ²ng chá»n khung giá» giao.';
+    if (!deliveryDate) nextErrors.deliveryDate = 'Vui lòng chọn ngày giao hàng.';
+    if (!deliveryTime) nextErrors.deliveryTime = 'Vui lòng chọn khung giờ giao.';
 
     (Object.keys(shippingInfo) as Array<keyof ShippingInfo>).forEach((key) => {
       const message = validateField(key, shippingInfo[key]);
@@ -1522,12 +1522,12 @@ export function CheckoutPage() {
       items: checkoutItems
     };
     window.localStorage.setItem(checkoutDraftKey, JSON.stringify(draft));
-    showToast('ÄÃ£ lÆ°u Ä‘Æ¡n chá» thanh toÃ¡n.');
+    showToast('Đã lưu đơn chờ thanh toán.');
   };
 
   const handleSubmit = async () => {
     if (!validateForm()) {
-      showToast('Vui lÃ²ng kiá»ƒm tra láº¡i thÃ´ng tin trÆ°á»›c khi thanh toÃ¡n.');
+      showToast('Vui lòng kiểm tra lại thông tin trước khi thanh toán.');
       return;
     }
 
@@ -1596,7 +1596,7 @@ export function CheckoutPage() {
           shippingFee: rate ? rate.fee : est.shippingFee,
           surcharge: est.surcharge,
           eta: rate ? rate.eta : formatDuration(est.finalDurationMinutes),
-          carrier: rate ? rate.name : 'Giao HÃ ng Tiáº¿t Kiá»‡m (GHTK)',
+          carrier: rate ? rate.name : 'Giao Hàng Tiết Kiệm (GHTK)',
           weight: est.weightKg
         };
       });
@@ -1691,7 +1691,7 @@ export function CheckoutPage() {
         childOrdersList = [
           {
             orderCode,
-            supplier: supplier || 'Tá»•ng kho sá»‰ Thá»±c pháº©m B2B Â· HÃ  Ná»™i',
+            supplier: supplier || 'Tổng kho sỉ Thực phẩm B2B · Hà Nội',
             subtotal: subtotal - voucherDiscount,
             totalAmount,
             items: discountedItems
@@ -1717,7 +1717,7 @@ export function CheckoutPage() {
                 return {
                   sku: item.sku,
                   name: item.name,
-                  category: match?.category || 'Rau cá»§ quáº£',
+                  category: match?.category || 'Rau củ quả',
                   quantity: item.quantity,
                   unitPrice: item.unitPrice,
                   unit: item.unit || 'kg',
@@ -1786,12 +1786,12 @@ export function CheckoutPage() {
       if (paymentMethod === 'cod') {
         window.localStorage.setItem(
           `freso_order_payment_${orderCode}`,
-          JSON.stringify({ method: 'cod', label: 'Thanh toÃ¡n khi nháº­n hÃ ng', totalAmount })
+          JSON.stringify({ method: 'cod', label: 'Thanh toán khi nhận hàng', totalAmount })
         );
         window.sessionStorage.removeItem(checkoutPayloadKey);
         window.localStorage.removeItem(checkoutPayloadKey);
         window.localStorage.removeItem('freso_local_cart_items');
-        showToast('ÄÃ£ táº¡o Ä‘Æ¡n hÃ ng COD. Báº¡n sáº½ thanh toÃ¡n khi nháº­n hÃ ng.');
+        showToast('Đã tạo đơn hàng COD. Bạn sẽ thanh toán khi nhận hàng.');
         window.setTimeout(() => {
           window.location.href = `${reactHomePath}?view=thank-you&orderId=${orderCode}&payment=cod`;
         }, 700);
@@ -1805,8 +1805,8 @@ export function CheckoutPage() {
       startPolling(orderCode, expiresAt);
 
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'KhÃ´ng thá»ƒ táº¡o Ä‘Æ¡n hÃ ng.';
-      showToast(`Thanh toÃ¡n tháº¥t báº¡i. ${message}`);
+      const message = error instanceof Error ? error.message : 'Không thể tạo đơn hàng.';
+      showToast(`Thanh toán thất bại. ${message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -1817,24 +1817,24 @@ export function CheckoutPage() {
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <nav className="mb-3 text-sm text-gray-400">
           <a href={reactHomePath} className="hover:text-green-600 transition-colors">
-            Trang chá»§
+            Trang chủ
           </a>
           <span className="mx-2">&gt;</span>
           <a href={`${reactHomePath}?view=cart`} className="hover:text-green-600 transition-colors">
-            Giá» hÃ ng
+            Giỏ hàng
           </a>
           <span className="mx-2">&gt;</span>
-          <span>XÃ¡c nháº­n vÃ  thanh toÃ¡n</span>
+          <span>Xác nhận và thanh toán</span>
         </nav>
 
-        <h1 className="mb-6 text-4xl font-bold text-gray-900">XÃ¡c nháº­n vÃ  thanh toÃ¡n</h1>
+        <h1 className="mb-6 text-4xl font-bold text-gray-900">Xác nhận và thanh toán</h1>
 
         <div className="grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
           <div className="space-y-6">
             <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-800">
                 <PackageCheck className="size-5 text-green-600" />
-                TÃ³m táº¯t Ä‘Æ¡n hÃ ng
+                Tóm tắt đơn hàng
               </div>
               <div className="space-y-4">
                 {checkoutGroups.map((group) => {
@@ -1848,7 +1848,7 @@ export function CheckoutPage() {
                           <span>{group.supplierLabel}</span>
                         </div>
                         <span className="text-xs font-semibold text-gray-405 bg-gray-100 px-2 rounded-full">
-                          {group.items.length} sáº£n pháº©m
+                          {group.items.length} sản phẩm
                         </span>
                       </div>
 
@@ -1884,7 +1884,7 @@ export function CheckoutPage() {
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-semibold text-gray-900 truncate">{item.name}</p>
                                 <div className="text-xs text-gray-500 flex flex-wrap items-center gap-1.5 mt-0.5">
-                                  <span>{item.quantity} {item.unit} â€¢</span>
+                                  <span>{item.quantity} {item.unit} •</span>
                                   {hasDiscount ? (
                                     <>
                                       <span className="line-through text-gray-400">
@@ -1917,17 +1917,17 @@ export function CheckoutPage() {
             <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-800">
                 <Calendar className="size-5 text-green-600" />
-                Thá»i gian giao hÃ ng
+                Thời gian giao hàng
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="text-sm font-medium text-gray-700">NgÃ y giao</label>
+                  <label className="text-sm font-medium text-gray-700">Ngày giao</label>
                   <input
                     type="date"
                     value={deliveryDate}
                     onChange={(event) => {
                       setDeliveryDate(event.target.value);
-                      setErrors((prev) => ({ ...prev, deliveryDate: event.target.value ? '' : 'Vui lÃ²ng chá»n ngÃ y giao.' }));
+                      setErrors((prev) => ({ ...prev, deliveryDate: event.target.value ? '' : 'Vui lòng chọn ngày giao.' }));
                     }}
                     className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${errors.deliveryDate ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
                       }`}
@@ -1935,19 +1935,19 @@ export function CheckoutPage() {
                   {errors.deliveryDate && <p className="mt-1 text-xs text-red-500">{errors.deliveryDate}</p>}
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Khung giá» giao</label>
+                  <label className="text-sm font-medium text-gray-700">Khung giờ giao</label>
                   <div className="relative mt-2">
                     <Clock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
                     <select
                       value={deliveryTime}
                       onChange={(event) => {
                         setDeliveryTime(event.target.value);
-                        setErrors((prev) => ({ ...prev, deliveryTime: event.target.value ? '' : 'Vui lÃ²ng chá»n khung giá» giao.' }));
+                        setErrors((prev) => ({ ...prev, deliveryTime: event.target.value ? '' : 'Vui lòng chọn khung giờ giao.' }));
                       }}
                       className={`w-full rounded-xl border bg-white py-2 pl-9 pr-3 text-sm outline-none transition-colors ${errors.deliveryTime ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
                         }`}
                     >
-                      <option value="">Chá»n khung giá» giao</option>
+                      <option value="">Chọn khung giờ giao</option>
                       {deliveryTimeOptions.map((option) => (
                         <option key={option} value={option}>
                           {option}
@@ -1963,15 +1963,15 @@ export function CheckoutPage() {
             <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-800">
                 <MapPin className="size-5 text-green-600" />
-                ThÃ´ng tin nháº­n hÃ ng
+                Thông tin nhận hàng
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="md:col-span-2">
-                  <label className="text-sm font-medium text-gray-700">Äá»‹a chá»‰ giao hÃ ng</label>
+                  <label className="text-sm font-medium text-gray-700">Địa chỉ giao hàng</label>
                   <input
                     value={shippingInfo.address}
                     onChange={(event) => updateShippingField('address', event.target.value)}
-                    placeholder="Sá»‘ nhÃ , Ä‘Æ°á»ng, phÆ°á»ng/xÃ£"
+                    placeholder="Số nhà, đường, phường/xã"
                     className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${errors.shipping_address ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-green-500'
                       }`}
                   />
@@ -1983,7 +1983,7 @@ export function CheckoutPage() {
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-bold text-gray-700 flex items-center gap-1.5">
                       <MapPin className="size-4 text-green-600 animate-bounce" />
-                      Báº£n Ä‘á»“ Ä‘á»‹nh vá»‹ Ä‘á»‹a Ä‘iá»ƒm nháº­n hÃ ng
+                      Bản đồ định vị địa điểm nhận hàng
                     </span>
                     <button
                       type="button"
@@ -1992,7 +1992,7 @@ export function CheckoutPage() {
                       className="px-3.5 py-1.5 bg-green-50 border border-green-200 text-green-700 text-xs font-bold rounded-full hover:bg-green-100 transition-all flex items-center gap-1 disabled:opacity-50 shadow-xs"
                     >
                       <MapPin className="size-3" />
-                      {mapGpsLoading ? 'Äang Ä‘á»‹nh vá»‹...' : 'Sá»­ dá»¥ng vá»‹ trÃ­ hiá»‡n táº¡i'}
+                      {mapGpsLoading ? 'Đang định vị...' : 'Sử dụng vị trí hiện tại'}
                     </button>
                   </div>
                   <div className="relative w-full h-[260px] rounded-2xl border border-gray-200 overflow-hidden shadow-xs hover:shadow-md transition-shadow group">
@@ -2010,7 +2010,7 @@ export function CheckoutPage() {
                             handleMapSearch();
                           }
                         }}
-                        placeholder="Nháº­p Ä‘á»‹a chá»‰ cá»¥ thá»ƒ hoáº·c click chá»n trÃªn báº£n Ä‘á»“..."
+                        placeholder="Nhập địa chỉ cụ thể hoặc click chọn trên bản đồ..."
                         className="flex-1 bg-transparent text-xs outline-none text-gray-800 placeholder-gray-400"
                       />
                       <button
@@ -2018,7 +2018,7 @@ export function CheckoutPage() {
                         onClick={handleMapSearch}
                         className="px-4 py-1.5 bg-[#0d3b66] text-white text-xs font-bold rounded-full hover:bg-[#154675] transition-colors shrink-0"
                       >
-                        TÃ¬m kiáº¿m
+                        Tìm kiếm
                       </button>
                     </div>
 
@@ -2028,7 +2028,7 @@ export function CheckoutPage() {
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                       </span>
-                      Nháº¥p báº£n Ä‘á»“ hoáº·c kÃ©o tháº£ ghim Ä‘á»ƒ chá»n vá»‹ trÃ­ giao
+                      Nhấp bản đồ hoặc kéo thả ghim để chọn vị trí giao
                     </div>
                   </div>
                 </div>
@@ -2037,7 +2037,7 @@ export function CheckoutPage() {
                 {estLoading && (
                   <div className="md:col-span-2 py-4 px-5 bg-gray-50 border border-gray-100 rounded-2xl animate-pulse text-xs text-gray-500 flex items-center gap-2.5">
                     <Clock className="size-4 animate-spin text-green-600" />
-                    Äang tÃ­nh toÃ¡n khoáº£ng cÃ¡ch vÃ  thá»i tiáº¿t khu vá»±c giao hÃ ng...
+                    Đang tính toán khoảng cách và thời tiết khu vực giao hàng...
                   </div>
                 )}
 
@@ -2046,7 +2046,7 @@ export function CheckoutPage() {
                     <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
                       <div className="flex items-center gap-2 font-semibold text-gray-900">
                         <MapPin className="size-4 text-green-600" />
-                        ðŸ“ Vá»‹ trÃ­ nháº­n: <span className="text-green-700">{estimation.cityName}</span>
+                        📍 Vị trí nhận: <span className="text-green-700">{estimation.cityName}</span>
                       </div>
 
                       <div className="flex items-center gap-4 text-xs font-semibold text-gray-600 bg-white px-3 py-1.5 rounded-full shadow-xs border border-green-100/50">
@@ -2055,11 +2055,11 @@ export function CheckoutPage() {
                         </span>
                         <span className="h-3 w-px bg-gray-200" />
                         <span>
-                          <Thermometer className="size-3.5 inline mr-0.5 text-orange-500" /> {estimation.temperature}Â°C
+                          <Thermometer className="size-3.5 inline mr-0.5 text-orange-500" /> {estimation.temperature}°C
                         </span>
                         <span className="h-3 w-px bg-gray-200" />
                         <span>
-                          ðŸ’§ Äá»™ áº©m {estimation.humidity}%
+                          💧 Độ ẩm {estimation.humidity}%
                         </span>
                         <span className="h-3 w-px bg-gray-200" />
                         <span>
@@ -2069,7 +2069,7 @@ export function CheckoutPage() {
                     </div>
 
                     <div className="border-t border-dashed border-green-200/50 pt-3 space-y-3">
-                      <div className="text-xs text-gray-500 font-bold uppercase tracking-wider">ThÃ´ng tin lá»™ trÃ¬nh váº­n chuyá»ƒn theo tá»«ng Shop:</div>
+                      <div className="text-xs text-gray-500 font-bold uppercase tracking-wider">Thông tin lộ trình vận chuyển theo từng Shop:</div>
                       <div className="grid gap-3 sm:grid-cols-2">
                         {Object.entries(estimations).map(([supplierLabel, est]) => (
                           <div key={supplierLabel} className="bg-white border border-green-100 p-3.5 rounded-xl shadow-xs space-y-2">
@@ -2079,17 +2079,17 @@ export function CheckoutPage() {
                             </div>
                             <div className="space-y-2 text-xs text-gray-750">
                               <div className="flex justify-between border-b border-gray-50 pb-1">
-                                <span className="text-gray-500">Trá»ng lÆ°á»£ng Ä‘Æ¡n:</span>
+                                <span className="text-gray-500">Trọng lượng đơn:</span>
                                 <span className="font-bold text-slate-800">{est.weightKg.toFixed(1)} kg</span>
                               </div>
                               <div className="flex justify-between">
-                                <span className="text-gray-500">Váº­n chuyá»ƒn tá»«:</span>
+                                <span className="text-gray-500">Vận chuyển từ:</span>
                                 <span className="font-bold text-gray-900">{est.warehouseName} ({est.distanceKm} km)</span>
                               </div>
 
                               {/* Shipping carrier selector */}
                               <div className="space-y-1.5 mt-2">
-                                <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Chá»n Ä‘Æ¡n vá»‹ váº­n chuyá»ƒn:</div>
+                                <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Chọn đơn vị vận chuyển:</div>
                                 <div className="grid gap-1.5">
                                   {est.carrierRates?.map((rate) => {
                                     const selectedCarrier = selectedCarriers[supplierLabel] || 'ghtk';
@@ -2114,7 +2114,7 @@ export function CheckoutPage() {
                                           />
                                           <div>
                                             <p className="text-xs font-bold text-gray-950">{rate.name}</p>
-                                            <p className="text-[10px] text-gray-500 font-semibold">Nháº­n dá»± kiáº¿n: {rate.eta}</p>
+                                            <p className="text-[10px] text-gray-500 font-semibold">Nhận dự kiến: {rate.eta}</p>
                                           </div>
                                         </div>
                                         <span className="text-xs font-extrabold text-green-700">{toCurrencyTextFromNumber(rate.fee)}</span>
@@ -2126,7 +2126,7 @@ export function CheckoutPage() {
 
                               {est.surcharge > 0 && (
                                 <div className="flex justify-between text-orange-650 font-semibold border-t border-dashed border-gray-100 pt-1.5">
-                                  <span>Phá»¥ phÃ­ xe láº¡nh thá»i tiáº¿t:</span>
+                                  <span>Phụ phí xe lạnh thời tiết:</span>
                                   <span>{toCurrencyTextFromNumber(est.surcharge)}</span>
                                 </div>
                               )}
@@ -2162,7 +2162,7 @@ export function CheckoutPage() {
                   </div>
                 )}
                 <div>
-                  <label className="text-sm font-medium text-gray-700">TÃªn ngÆ°á»i nháº­n</label>
+                  <label className="text-sm font-medium text-gray-700">Tên người nhận</label>
                   <div className="relative mt-2">
                     <User className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
                     <input
@@ -2175,7 +2175,7 @@ export function CheckoutPage() {
                   {errors.shipping_receiver && <p className="mt-1 text-xs text-red-500">{errors.shipping_receiver}</p>}
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Sá»‘ Ä‘iá»‡n thoáº¡i</label>
+                  <label className="text-sm font-medium text-gray-700">Số điện thoại</label>
                   <div className="relative mt-2">
                     <Phone className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
                     <input
@@ -2190,7 +2190,7 @@ export function CheckoutPage() {
                 </div>
               </div>
               <div className="mt-4">
-                <label className="text-sm font-medium text-gray-700">Ghi chÃº (tuá»³ chá»n)</label>
+                <label className="text-sm font-medium text-gray-700">Ghi chú (tuỳ chọn)</label>
                 <textarea
                   value={shippingInfo.note}
                   onChange={(event) => updateShippingField('note', event.target.value)}
@@ -2205,7 +2205,7 @@ export function CheckoutPage() {
                   onChange={(event) => setSaveAddress(event.target.checked)}
                   className="size-4 rounded border-gray-300 text-green-600"
                 />
-                LÆ°u Ä‘á»‹a chá»‰ giao hÃ ng thÆ°á»ng dÃ¹ng
+                Lưu địa chỉ giao hàng thường dùng
               </label>
             </section>
 
@@ -2213,19 +2213,19 @@ export function CheckoutPage() {
               <div className="mb-4 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 text-lg font-semibold text-gray-800">
                   <FileText className="size-5 text-green-600" />
-                  ThÃ´ng tin xuáº¥t hÃ³a Ä‘Æ¡n
+                  Thông tin xuất hóa đơn
                 </div>
                 <button
                   type="button"
                   onClick={() => setInvoiceEditable((prev) => !prev)}
                   className="rounded-full border border-green-600 px-3 py-1 text-xs font-semibold text-green-700 hover:bg-green-50"
                 >
-                  {invoiceEditable ? 'KhoÃ¡ thÃ´ng tin' : 'Thay Ä‘á»•i thÃ´ng tin xuáº¥t hÃ³a Ä‘Æ¡n'}
+                  {invoiceEditable ? 'Khoá thông tin' : 'Thay đổi thông tin xuất hóa đơn'}
                 </button>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="text-sm font-medium text-gray-700">TÃªn cÃ´ng ty</label>
+                  <label className="text-sm font-medium text-gray-700">Tên công ty</label>
                   <input
                     value={invoiceInfo.companyName}
                     onChange={(event) => updateInvoiceField('companyName', event.target.value)}
@@ -2238,7 +2238,7 @@ export function CheckoutPage() {
                   )}
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">MÃ£ sá»‘ thuáº¿</label>
+                  <label className="text-sm font-medium text-gray-700">Mã số thuế</label>
                   <input
                     value={invoiceInfo.taxCode}
                     onChange={(event) => updateInvoiceField('taxCode', event.target.value)}
@@ -2249,7 +2249,7 @@ export function CheckoutPage() {
                   {errors.invoice_taxCode && <p className="mt-1 text-xs text-red-500">{errors.invoice_taxCode}</p>}
                 </div>
                 <div className="md:col-span-2">
-                  <label className="text-sm font-medium text-gray-700">Äá»‹a chá»‰</label>
+                  <label className="text-sm font-medium text-gray-700">Địa chỉ</label>
                   <input
                     value={invoiceInfo.address}
                     onChange={(event) => updateInvoiceField('address', event.target.value)}
@@ -2260,7 +2260,7 @@ export function CheckoutPage() {
                   {errors.invoice_address && <p className="mt-1 text-xs text-red-500">{errors.invoice_address}</p>}
                 </div>
                 <div className="md:col-span-2">
-                  <label className="text-sm font-medium text-gray-700">Email nháº­n hÃ³a Ä‘Æ¡n</label>
+                  <label className="text-sm font-medium text-gray-700">Email nhận hóa đơn</label>
                   <input
                     value={invoiceInfo.email}
                     onChange={(event) => updateInvoiceField('email', event.target.value)}
@@ -2273,12 +2273,12 @@ export function CheckoutPage() {
               </div>
             </section>
 
-            {/* Section 4: ÄÄƒng kÃ½ mua Ä‘á»‹nh ká»³ / Äáº·t hÃ ng tá»± Ä‘á»™ng */}
+            {/* Section 4: Đăng ký mua định kỳ / Đặt hàng tự động */}
             <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
               <div className="flex items-center justify-between border-b border-gray-100 pb-3">
                 <h3 className="flex items-center gap-2 text-lg font-bold text-gray-800">
                   <Calendar className="size-5 text-green-600" />
-                  ÄÄƒng kÃ½ mua Ä‘á»‹nh ká»³ (Subscription)
+                  Đăng ký mua định kỳ (Subscription)
                 </h3>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -2294,12 +2294,12 @@ export function CheckoutPage() {
               {isRecurring ? (
                 <div className="space-y-4 pt-2 text-sm transition-all duration-300">
                   <p className="text-xs text-green-700 bg-green-50 p-3.5 rounded-2xl border border-green-100 font-semibold leading-relaxed">
-                    ðŸ’¡ Há»‡ thá»‘ng sáº½ tá»± Ä‘á»™ng lÃªn Ä‘Æ¡n hÃ ng má»›i cho cÃ¡c sáº£n pháº©m nÃ y (á»Ÿ tráº¡ng thÃ¡i Chá» thanh toÃ¡n) vÃ o cÃ¡c ngÃ y háº¹n dÆ°á»›i Ä‘Ã¢y. Báº¡n chá»‰ cáº§n vÃ o Dashboard thanh toÃ¡n báº±ng QR lÃ  xong.
+                    💡 Hệ thống sẽ tự động lên đơn hàng mới cho các sản phẩm này (ở trạng thái Chờ thanh toán) vào các ngày hẹn dưới đây. Bạn chỉ cần vào Dashboard thanh toán bằng QR là xong.
                   </p>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Táº§n suáº¥t lÃªn Ä‘Æ¡n</label>
+                      <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Tần suất lên đơn</label>
                       <div className="flex gap-2">
                         <button
                           type="button"
@@ -2309,7 +2309,7 @@ export function CheckoutPage() {
                             : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
                             }`}
                         >
-                          HÃ ng tuáº§n
+                          Hàng tuần
                         </button>
                         <button
                           type="button"
@@ -2319,14 +2319,14 @@ export function CheckoutPage() {
                             : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
                             }`}
                         >
-                          HÃ ng thÃ¡ng
+                          Hàng tháng
                         </button>
                       </div>
                     </div>
 
                     {recFrequency === 'weekly' ? (
                       <div>
-                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Chá»n thá»© trong tuáº§n</label>
+                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Chọn thứ trong tuần</label>
                         <div className="flex flex-wrap gap-1.5">
                           {[
                             { value: 1, label: 'T2' },
@@ -2364,7 +2364,7 @@ export function CheckoutPage() {
                       </div>
                     ) : (
                       <div>
-                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Chá»n ngÃ y trong thÃ¡ng</label>
+                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Chọn ngày trong tháng</label>
                         <select
                           value={recMonthDay}
                           onChange={(e) => setRecMonthDay(parseInt(e.target.value, 10))}
@@ -2372,7 +2372,7 @@ export function CheckoutPage() {
                         >
                           {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
                             <option key={d} value={d}>
-                              NgÃ y {d} hÃ ng thÃ¡ng
+                              Ngày {d} hàng tháng
                             </option>
                           ))}
                         </select>
@@ -2382,7 +2382,7 @@ export function CheckoutPage() {
                 </div>
               ) : (
                 <p className="text-xs text-gray-400 pt-1">
-                  Báº­t tÃ¹y chá»n nÃ y Ä‘á»ƒ lÆ°u cÃ¡c sáº£n pháº©m hiá»‡n cÃ³ thÃ nh lá»‹ch Ä‘áº·t hÃ ng tá»± Ä‘á»™ng Ä‘á»‹nh ká»³ cho tÆ°Æ¡ng lai.
+                  Bật tùy chọn này để lưu các sản phẩm hiện có thành lịch đặt hàng tự động định kỳ cho tương lai.
                 </p>
               )}
             </section>
@@ -2392,23 +2392,23 @@ export function CheckoutPage() {
             <div className="space-y-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
               <div className="flex items-center gap-2 text-lg font-semibold text-gray-800">
                 <ShoppingBag className="size-5 text-green-600" />
-                Thanh toÃ¡n
+                Thanh toán
               </div>
 
               <div className="space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-gray-400">PhÆ°Æ¡ng thá»©c thanh toÃ¡n</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Phương thức thanh toán</p>
                 <div className="grid gap-2">
                   {[
                     {
                       value: 'bank_transfer' as PaymentMethod,
-                      label: 'Chuyá»ƒn khoáº£n ngÃ¢n hÃ ng',
-                      description: 'QuÃ©t VietQR vÃ  há»‡ thá»‘ng tá»± xÃ¡c nháº­n khi nháº­n tiá»n.',
+                      label: 'Chuyển khoản ngân hàng',
+                      description: 'Quét VietQR và hệ thống tự xác nhận khi nhận tiền.',
                       icon: CreditCard
                     },
                     {
                       value: 'cod' as PaymentMethod,
-                      label: 'Thanh toÃ¡n khi nháº­n hÃ ng',
-                      description: 'Táº¡o Ä‘Æ¡n ngay, thanh toÃ¡n tiá»n máº·t hoáº·c chuyá»ƒn khoáº£n cho nhÃ¢n viÃªn giao hÃ ng.',
+                      label: 'Thanh toán khi nhận hàng',
+                      description: 'Tạo đơn ngay, thanh toán tiền mặt hoặc chuyển khoản cho nhân viên giao hàng.',
                       icon: Banknote
                     }
                   ].map((method) => {
@@ -2439,20 +2439,20 @@ export function CheckoutPage() {
                   })}
                 </div>
               </div>
-              {/* Voucher sá»‰ selector */}
+              {/* Voucher sỉ selector */}
               <div className="border-b border-gray-100 pb-4">
                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                   <Ticket className="size-4 text-green-600" />
-                  Voucher cá»§a báº¡n
+                  Voucher của bạn
                 </label>
                 {claimedVouchersList.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-gray-200 p-3 bg-gray-50/50 text-center">
-                    <p className="text-xs text-gray-400 mb-1.5">Báº¡n chÆ°a cÃ³ voucher nÃ o Ä‘Æ°á»£c lÆ°u.</p>
+                    <p className="text-xs text-gray-400 mb-1.5">Bạn chưa có voucher nào được lưu.</p>
                     <a
                       href={reactHomePath}
                       className="text-xs font-bold text-green-600 hover:text-green-700 inline-flex items-center gap-1"
                     >
-                      Vá» trang chá»§ nháº­n voucher &rarr;
+                      Về trang chủ nhận voucher &rarr;
                     </a>
                   </div>
                 ) : (
@@ -2469,7 +2469,7 @@ export function CheckoutPage() {
                         const selected = claimedVouchersList.find((v) => v.discount_code === code);
                         if (selected) {
                           if (subtotal < (selected.min_order_amount || 0)) {
-                            setVoucherError(`ÄÆ¡n hÃ ng chÆ°a Ä‘áº¡t giÃ¡ trá»‹ tá»‘i thiá»ƒu ${toCurrencyTextFromNumber(selected.min_order_amount)}`);
+                            setVoucherError(`Đơn hàng chưa đạt giá trị tối thiểu ${toCurrencyTextFromNumber(selected.min_order_amount)}`);
                             setAppliedVoucher(null);
                           } else {
                             setAppliedVoucher(selected);
@@ -2479,12 +2479,12 @@ export function CheckoutPage() {
                       }}
                       className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-green-500 bg-white"
                     >
-                      <option value="">-- Chá»n voucher sá»‰ --</option>
+                      <option value="">-- Chọn voucher sỉ --</option>
                       {claimedVouchersList.map((v) => {
                         const isUnderMin = subtotal < (v.min_order_amount || 0);
                         return (
                           <option key={v.discount_code} value={v.discount_code} disabled={isUnderMin}>
-                            {v.discount_code} - Giáº£m {toCurrencyTextFromNumber(v.discount_value)} {isUnderMin ? '(ChÆ°a Ä‘á»§ Ä‘iá»u kiá»‡n)' : ''}
+                            {v.discount_code} - Giảm {toCurrencyTextFromNumber(v.discount_value)} {isUnderMin ? '(Chưa đủ điều kiện)' : ''}
                           </option>
                         );
                       })}
@@ -2506,7 +2506,7 @@ export function CheckoutPage() {
                           }}
                           className="text-xs font-bold text-red-500 hover:text-red-700 bg-white border border-red-100 rounded-lg px-2 py-1 transition shrink-0"
                         >
-                          Gá»¡ mÃ£
+                          Gỡ mã
                         </button>
                       </div>
                     )}
@@ -2516,22 +2516,22 @@ export function CheckoutPage() {
 
               <div className="space-y-3 text-sm text-gray-600">
                 <div className="flex items-center justify-between">
-                  <span>Tá»•ng tiá»n hÃ ng</span>
+                  <span>Tổng tiền hàng</span>
                   <span className="font-semibold text-gray-900">{toCurrencyTextFromNumber(subtotal)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>PhÃ­ váº­n chuyá»ƒn</span>
+                  <span>Phí vận chuyển</span>
                   <span>{toCurrencyTextFromNumber(shippingFee)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Giáº£m giÃ¡ váº­n chuyá»ƒn</span>
+                  <span>Giảm giá vận chuyển</span>
                   <span>- {toCurrencyTextFromNumber(shippingDiscount)}</span>
                 </div>
                 {voucherDiscount > 0 && (
                   <div className="flex items-center justify-between text-green-700 font-semibold bg-green-50/60 px-3 py-2 rounded-xl border border-green-100">
                     <span className="flex items-center gap-1.5 text-xs">
                       <Percent className="size-4 text-green-600" />
-                      Voucher sá»‰ ({appliedVoucher?.discount_code})
+                      Voucher sỉ ({appliedVoucher?.discount_code})
                     </span>
                     <span className="text-xs">- {toCurrencyTextFromNumber(voucherDiscount)}</span>
                   </div>
@@ -2540,14 +2540,14 @@ export function CheckoutPage() {
                   <div className="flex items-center justify-between text-amber-700 font-semibold bg-amber-50/60 px-3 py-2 rounded-xl border border-amber-100">
                     <span className="flex items-center gap-1.5 text-xs">
                       <Thermometer className="size-4 text-amber-600" />
-                      Phá»¥ phÃ­ xe láº¡nh (Náº¯ng nÃ³ng &gt;35Â°C)
+                      Phụ phí xe lạnh (Nắng nóng &gt;35°C)
                     </span>
                     <span className="text-xs">+ {toCurrencyTextFromNumber(weatherSurcharge)}</span>
                   </div>
                 )}
                 <div className="border-t border-dashed border-gray-200 pt-3 text-base font-semibold text-gray-900">
                   <div className="flex items-center justify-between">
-                    <span>Tá»•ng thanh toÃ¡n</span>
+                    <span>Tổng thanh toán</span>
                     <span>{toCurrencyTextFromNumber(totalAmount)}</span>
                   </div>
                 </div>
@@ -2558,7 +2558,7 @@ export function CheckoutPage() {
                 onClick={handleSaveDraft}
                 className="w-full rounded-full border border-green-600 px-4 py-2.5 text-sm font-semibold text-green-700 hover:bg-green-50"
               >
-                LÆ°u Ä‘Æ¡n chá» thanh toÃ¡n
+                Lưu đơn chờ thanh toán
               </button>
               <button
                 type="button"
@@ -2567,12 +2567,12 @@ export function CheckoutPage() {
                 className="w-full rounded-full bg-green-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSubmitting
-                  ? 'Äang táº¡o Ä‘Æ¡n hÃ ng...'
+                  ? 'Đang tạo đơn hàng...'
                   : paymentMethod === 'cod'
-                    ? 'Äáº·t hÃ ng COD'
-                    : 'Äáº·t hÃ ng & Thanh toÃ¡n'}
+                    ? 'Đặt hàng COD'
+                    : 'Đặt hàng & Thanh toán'}
               </button>
-              <p className="text-xs text-gray-400">* GiÃ¡ sáº½ Ä‘Æ°á»£c há»‡ thá»‘ng xÃ¡c nháº­n láº¡i trÆ°á»›c khi táº¡o Ä‘Æ¡n chÃ­nh thá»©c.</p>
+              <p className="text-xs text-gray-400">* Giá sẽ được hệ thống xác nhận lại trước khi tạo đơn chính thức.</p>
             </div>
           </aside>
         </div>
@@ -2592,11 +2592,11 @@ export function CheckoutPage() {
             <div className="bg-gradient-to-r from-green-600 to-emerald-500 px-6 py-5 text-white">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-medium opacity-80">MÃ£ Ä‘Æ¡n hÃ ng</p>
+                  <p className="text-xs font-medium opacity-80">Mã đơn hàng</p>
                   <p className="text-2xl font-bold tracking-wider">{qrOrder.orderCode}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs font-medium opacity-80">Tá»•ng thanh toÃ¡n</p>
+                  <p className="text-xs font-medium opacity-80">Tổng thanh toán</p>
                   <p className="text-xl font-bold">{toCurrencyTextFromNumber(qrOrder.totalAmount)}</p>
                 </div>
               </div>
@@ -2607,7 +2607,7 @@ export function CheckoutPage() {
                 <>
                   {/* Countdown */}
                   <div className="mb-4 flex items-center justify-between rounded-xl bg-amber-50 border border-amber-200 px-4 py-2">
-                    <span className="text-sm text-amber-700 font-medium">â± Giá»¯ hÃ ng cÃ²n láº¡i</span>
+                    <span className="text-sm text-amber-700 font-medium">⏱ Giữ hàng còn lại</span>
                     <span className={`text-lg font-bold tabular-nums ${countdown < 60 ? 'text-red-600' : 'text-amber-700'
                       }`}>
                       {String(Math.floor(countdown / 60)).padStart(2, '0')}:{String(countdown % 60).padStart(2, '0')}
@@ -2616,7 +2616,7 @@ export function CheckoutPage() {
 
                   {/* QR Code */}
                   <div className="flex flex-col items-center gap-3">
-                    <p className="text-sm text-gray-500 text-center">QuÃ©t mÃ£ QR báº±ng app ngÃ¢n hÃ ng Ä‘á»ƒ thanh toÃ¡n</p>
+                    <p className="text-sm text-gray-500 text-center">Quét mã QR bằng app ngân hàng để thanh toán</p>
                     <div className="rounded-2xl border-4 border-green-100 p-2 shadow-inner">
                       <img
                         src={`https://img.vietqr.io/image/BIDV-96247VUONGTHUYLINH-compact2.png?amount=${Math.round(qrOrder.totalAmount)}&addInfo=THANHTOAN${qrOrder.orderCode}&accountName=VUONG%20THUY%20LINH`}
@@ -2626,10 +2626,10 @@ export function CheckoutPage() {
                       />
                     </div>
                     <div className="w-full rounded-xl bg-gray-50 border border-gray-200 p-3 text-center">
-                      <p className="text-xs text-gray-500 mb-1">Ná»™i dung chuyá»ƒn khoáº£n</p>
+                      <p className="text-xs text-gray-500 mb-1">Nội dung chuyển khoản</p>
                       <p className="text-base font-bold text-green-700 tracking-wider">THANHTOAN {qrOrder.orderCode}</p>
                     </div>
-                    <p className="text-xs text-gray-400 text-center">Há»‡ thá»‘ng tá»± Ä‘á»™ng xÃ¡c nháº­n sau khi nháº­n Ä‘Æ°á»£c tiá»n</p>
+                    <p className="text-xs text-gray-400 text-center">Hệ thống tự động xác nhận sau khi nhận được tiền</p>
                   </div>
 
                   {/* Actions */}
@@ -2649,19 +2649,19 @@ export function CheckoutPage() {
                             window.location.href = `${reactHomePath}?view=thank-you&orderId=${qrOrder.orderCode}`;
                           }, 1200);
                         } else {
-                          showToast('ChÆ°a nháº­n Ä‘Æ°á»£c thanh toÃ¡n. Vui lÃ²ng Ä‘á»£i thÃªm.');
+                          showToast('Chưa nhận được thanh toán. Vui lòng đợi thêm.');
                         }
                       }}
                       className="flex-1 rounded-full bg-green-600 py-2.5 text-sm font-semibold text-white hover:bg-green-700 transition"
                     >
-                      ÄÃ£ chuyá»ƒn khoáº£n
+                      Đã chuyển khoản
                     </button>
                     <button
                       type="button"
                       onClick={() => { stopPolling(); setQrOrder(null); }}
                       className="flex-1 rounded-full border border-gray-300 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition"
                     >
-                      Há»§y
+                      Hủy
                     </button>
                   </div>
                 </>
@@ -2674,8 +2674,8 @@ export function CheckoutPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
-                  <p className="text-xl font-bold text-gray-900">Thanh toÃ¡n thÃ nh cÃ´ng! ðŸŽ‰</p>
-                  <p className="text-sm text-gray-500 text-center">ÄÆ¡n hÃ ng <strong>{qrOrder.orderCode}</strong> Ä‘Ã£ Ä‘Æ°á»£c xÃ¡c nháº­n. Äang chuyá»ƒn trang...</p>
+                  <p className="text-xl font-bold text-gray-900">Thanh toán thành công! 🎉</p>
+                  <p className="text-sm text-gray-500 text-center">Đơn hàng <strong>{qrOrder.orderCode}</strong> đã được xác nhận. Đang chuyển trang...</p>
                 </div>
               )}
 
@@ -2686,14 +2686,14 @@ export function CheckoutPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </div>
-                  <p className="text-lg font-bold text-gray-900">ÄÆ¡n hÃ ng Ä‘Ã£ háº¿t háº¡n</p>
-                  <p className="text-sm text-gray-500 text-center">HÃ ng Ä‘Ã£ Ä‘Æ°á»£c tráº£ vá» kho. Vui lÃ²ng Ä‘áº·t láº¡i Ä‘Æ¡n hÃ ng.</p>
+                  <p className="text-lg font-bold text-gray-900">Đơn hàng đã hết hạn</p>
+                  <p className="text-sm text-gray-500 text-center">Hàng đã được trả về kho. Vui lòng đặt lại đơn hàng.</p>
                   <button
                     type="button"
                     onClick={() => { stopPolling(); setQrOrder(null); }}
                     className="rounded-full bg-gray-900 px-6 py-2.5 text-sm font-semibold text-white hover:bg-gray-700 transition"
                   >
-                    Äáº·t láº¡i Ä‘Æ¡n hÃ ng
+                    Đặt lại đơn hàng
                   </button>
                 </div>
               )}
@@ -2709,9 +2709,9 @@ export function CheckoutPage() {
             <div className="mx-auto my-3 flex h-16 w-16 items-center justify-center rounded-full bg-green-50 animate-pulse">
               <MapPin className="size-8 text-green-600" />
             </div>
-            <h3 className="text-lg font-bold text-gray-900 mb-2">Sá»­ dá»¥ng vá»‹ trÃ­ cá»§a báº¡n?</h3>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Sử dụng vị trí của bạn?</h3>
             <p className="text-xs text-gray-500 mb-6 leading-relaxed">
-              Freso cáº§n vá»‹ trÃ­ cá»§a báº¡n Ä‘á»ƒ tá»± Ä‘á»™ng tÃ¬m chi nhÃ¡nh gáº§n nháº¥t, Ä‘á»‹nh vá»‹ Ä‘á»‹a chá»‰ giao hÃ ng vÃ  tÃ­nh toÃ¡n thá»i tiáº¿t chÃ­nh xÃ¡c cho lá»™ trÃ¬nh báº£o quáº£n láº¡nh.
+              Freso cần vị trí của bạn để tự động tìm chi nhánh gần nhất, định vị địa chỉ giao hàng và tính toán thời tiết chính xác cho lộ trình bảo quản lạnh.
             </p>
             <div className="flex flex-col gap-2">
               <button
@@ -2719,14 +2719,14 @@ export function CheckoutPage() {
                 onClick={handleAllowLocation}
                 className="w-full rounded-full bg-green-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-700 shadow-sm transition-all"
               >
-                Äá»“ng Ã½ chia sáº» vá»‹ trÃ­
+                Đồng ý chia sẻ vị trí
               </button>
               <button
                 type="button"
                 onClick={handleDenyLocation}
                 className="w-full rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all"
               >
-                Bá» qua, dÃ¹ng vá»‹ trÃ­ máº·c Ä‘á»‹nh
+                Bỏ qua, dùng vị trí mặc định
               </button>
             </div>
           </div>

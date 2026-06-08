@@ -259,6 +259,7 @@ class PurchaseHistoryManagement implements PurchaseHistoryInterface
             'paid' => 'Đã thanh toán',
             'processing' => 'Đang xử lý',
             'preparing' => 'Đang chuẩn bị hàng',
+            'handed_over' => 'Đã bàn giao cho ĐVVC',
             'shipping' => 'Đang giao hàng',
             'delivered' => 'Đã giao hàng',
             'cancelled', 'canceled' => 'Đã hủy',

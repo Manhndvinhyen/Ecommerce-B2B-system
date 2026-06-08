@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import * as React from 'react';
+import { useState, useEffect } from 'react';
 import {
   TrendingUp,
   ShoppingBag,
@@ -192,6 +193,15 @@ export function SellerInventoryManager() {
 
   useEffect(() => {
     syncData();
+
+    const handleRefresh = () => {
+      syncData();
+    };
+
+    window.addEventListener('freso:refresh-orders', handleRefresh);
+    return () => {
+      window.removeEventListener('freso:refresh-orders', handleRefresh);
+    };
   }, []);
 
   // Open Stock adjustment Modal

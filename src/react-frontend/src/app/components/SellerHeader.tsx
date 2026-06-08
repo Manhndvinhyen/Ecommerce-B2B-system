@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { User, Bell, HelpCircle } from 'lucide-react';
-import { adminMenuItems } from './SidebarMenu';
+import { useEffect, useRef, useState } from 'react';
+import { Bell, HelpCircle } from 'lucide-react';
 
 export function SellerHeader() {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -25,6 +24,8 @@ export function SellerHeader() {
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const notifMenuRef = useRef<HTMLDivElement | null>(null);
   const notificationPollingDisabledRef = useRef(false);
+  const isFirstLoadRef = useRef(true);
+  const knownNotifIdsRef = useRef<Set<string>>(new Set());
 
   const reactHomePath = '/react/index.html';
   const isEmbeddedInIframe = window.self !== window.top;
@@ -105,33 +106,10 @@ export function SellerHeader() {
   };
 
   const displayedUserName = customerName || customerEmail || 'Tài khoản';
-  const dashboardBase = `${reactHomePath}?view=seller-dashboard`;
-  const getDashboardHref = (tabLabel: string) => `${dashboardBase}&tab=${encodeURIComponent(tabLabel)}`;
-  const activeDashboardTab = new URLSearchParams(window.location.search).get('tab');
   const parseStoredBoolFlag = (value: string) => {
     const normalized = value.trim().toLowerCase();
     return normalized === '1' || normalized === 'true' || normalized === 'yes';
   };
-  const visibleMenuItems = useMemo(() => {
-    const sellerMenuItemIds = new Set([
-      'profile-seller',
-      'nhan-vien',
-      'quan-ly-san-pham',
-      'quan-ly-kho',
-      'don-hang',
-      'bao-gia'
-    ]);
-
-    return adminMenuItems.filter((item) => {
-      if (item.id === 'nhan-vien') {
-        return canManageBranches;
-      }
-      if (item.id === 'quan-ly-san-pham') {
-        return canManageBranches;
-      }
-      return sellerMenuItemIds.has(item.id);
-    });
-  }, [canManageBranches]);
 
   const logoutAndBackHome = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -287,14 +265,34 @@ export function SellerHeader() {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
-          setNotifications(data.map((n: any) => ({
+          const mappedNotifications = data.map((n: any) => ({
             id: String(n.id),
             seller_id: String(n.seller_id),
             sku: String(n.sku),
             message: String(n.message),
             is_read: Number(n.is_read),
             created_at: String(n.created_at)
-          })));
+          }));
+
+          // Detect new unread notifications
+          if (isFirstLoadRef.current) {
+            mappedNotifications.forEach(n => knownNotifIdsRef.current.add(n.id));
+            isFirstLoadRef.current = false;
+          } else {
+            const newUnreadItems = mappedNotifications.filter(
+              n => !knownNotifIdsRef.current.has(n.id) && n.is_read === 0
+            );
+            if (newUnreadItems.length > 0) {
+              newUnreadItems.forEach(item => {
+                knownNotifIdsRef.current.add(item.id);
+                // Dispatch custom event to notify parent layout
+                window.dispatchEvent(new CustomEvent('freso:new-notification', { detail: item }));
+              });
+            }
+            mappedNotifications.forEach(n => knownNotifIdsRef.current.add(n.id));
+          }
+
+          setNotifications(mappedNotifications);
         }
         return;
       }
@@ -328,7 +326,7 @@ export function SellerHeader() {
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 15000); // Poll every 15s
+    const interval = setInterval(fetchNotifications, 6000); // Poll every 6s
 
     // Listen to custom re-fetch event
     const handleRefreshNotifs = () => fetchNotifications();
@@ -515,29 +513,11 @@ export function SellerHeader() {
             </button>
             
             {isUserMenuOpen && (
-              <div className="absolute right-0 mt-3 w-[260px] bg-white border border-gray-200 rounded-2xl shadow-xl p-2 z-50 animate-in fade-in slide-in-from-top-3 duration-200">
-                <div className="px-3 py-2.5 text-[11px] font-extrabold text-gray-400 uppercase tracking-wider border-b border-gray-50 mb-1">
-                  Tài khoản của tôi
+              <div className="absolute right-0 mt-3 w-[200px] bg-white border border-gray-200 rounded-2xl shadow-xl p-3 z-50 animate-in fade-in slide-in-from-top-3 duration-200">
+                <div className="text-sm font-semibold text-gray-900 truncate mb-3 pb-2 border-b border-gray-100">
+                  {displayedUserName}
                 </div>
-                <div className="grid grid-cols-1 gap-0.5 text-sm">
-                  {visibleMenuItems.map((item) => {
-                    const isActive = activeDashboardTab === item.label;
-                    return (
-                      <a
-                        key={item.id}
-                        href={getDashboardHref(item.label)}
-                        className={`w-full rounded-xl px-4 py-2.5 text-[13.5px] font-semibold transition-colors ${
-                          isActive
-                            ? 'bg-green-50 text-[#00b14f] font-bold'
-                            : 'text-gray-700 hover:bg-green-50 hover:text-[#00b14f]'
-                        }`}
-                      >
-                        {item.label}
-                      </a>
-                    );
-                  })}
-                </div>
-                <div className="mt-3 pt-3 border-t border-gray-50 px-2 pb-1">
+                <div>
                   <button
                     type="button"
                     onClick={logoutAndBackHome}

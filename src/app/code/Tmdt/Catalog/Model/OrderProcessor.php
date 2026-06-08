@@ -50,7 +50,7 @@ class OrderProcessor
         if ($row['status'] === $status) {
             return true;
         }
-        if ($status === 'paid' && in_array($row['status'], ['paid', 'preparing', 'shipping', 'delivered'], true)) {
+        if ($status === 'paid' && in_array($row['status'], ['paid', 'preparing', 'handed_over', 'shipping', 'delivered'], true)) {
             return true;
         }
 
@@ -356,6 +356,15 @@ class OrderProcessor
             if ($oldStatus === 'pending') {
                 foreach ($sellerRevenues as $sellerId => $amount) {
                     try {
+                        // Check if notification already exists for this order code (stored in 'sku' column)
+                        $notifExists = (int)$connection->fetchOne(
+                            "SELECT COUNT(*) FROM " . $connection->getTableName('tmdt_seller_notifications') . " WHERE seller_customer_id = ? AND sku = ?",
+                            [$sellerId, $currentOrderCode]
+                        );
+                        if ($notifExists > 0) {
+                            continue;
+                        }
+
                         $itemsList = implode(', ', $sellerItems[$sellerId]);
                         $formattedAmount = number_format($amount, 0, ',', '.') . 'đ';
                         

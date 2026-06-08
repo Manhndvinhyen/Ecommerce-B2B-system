@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import * as React from 'react';
+import { useState, useEffect } from 'react';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -205,10 +206,12 @@ export function SellerOverviewDashboard() {
     };
     window.addEventListener('freso:notifications-read', handleRefresh);
     window.addEventListener('freso:refresh-notifications', handleRefresh);
+    window.addEventListener('freso:refresh-orders', handleRefresh);
     
     return () => {
       window.removeEventListener('freso:notifications-read', handleRefresh);
       window.removeEventListener('freso:refresh-notifications', handleRefresh);
+      window.removeEventListener('freso:refresh-orders', handleRefresh);
     };
   }, []);
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import {
   Clock3,
   FileText,
@@ -74,6 +74,9 @@ const getStatusMeta = (status: string) => {
   if (normalized === 'preparing') {
     return { label: 'Đang chuẩn bị hàng', className: 'bg-indigo-50 text-indigo-700 border-indigo-100', dot: 'bg-indigo-500' };
   }
+  if (normalized === 'handed_over') {
+    return { label: 'Đã bàn giao cho ĐVVC', className: 'bg-cyan-50 text-cyan-700 border-cyan-100', dot: 'bg-cyan-500' };
+  }
   if (normalized === 'shipping') {
     return { label: 'Đang giao hàng', className: 'bg-orange-50 text-orange-700 border-orange-100', dot: 'bg-orange-500' };
   }
@@ -100,7 +103,7 @@ export function SellerOrderManager() {
 
   const summary = useMemo(() => {
     const totalRevenue = orders.reduce((sum, order) => sum + Number(order.seller_subtotal || 0), 0);
-    const paidOrders = orders.filter((order) => ['paid', 'preparing', 'shipping', 'delivered'].includes(order.status.trim().toLowerCase())).length;
+    const paidOrders = orders.filter((order) => ['paid', 'preparing', 'handed_over', 'shipping', 'delivered'].includes(order.status.trim().toLowerCase())).length;
     const pendingOrders = orders.filter((order) => order.status.trim().toLowerCase() === 'pending').length;
     const processingOrders = orders.filter((order) => order.status.trim().toLowerCase() === 'processing').length;
 
@@ -174,8 +177,28 @@ export function SellerOrderManager() {
     }
   };
 
+  const statusFilterRef = useRef(statusFilter);
+  const searchTermRef = useRef(searchTerm);
+
+  useEffect(() => {
+    statusFilterRef.current = statusFilter;
+  }, [statusFilter]);
+
+  useEffect(() => {
+    searchTermRef.current = searchTerm;
+  }, [searchTerm]);
+
   useEffect(() => {
     void fetchOrders(false);
+
+    const handleRefreshOrders = () => {
+      void fetchOrders(true, statusFilterRef.current, searchTermRef.current);
+    };
+
+    window.addEventListener('freso:refresh-orders', handleRefreshOrders);
+    return () => {
+      window.removeEventListener('freso:refresh-orders', handleRefreshOrders);
+    };
   }, []);
 
   const toggleOrderExpand = (orderRef: string) => {
@@ -251,6 +274,7 @@ export function SellerOrderManager() {
     { key: 'processing', label: 'Đang xử lý' },
     { key: 'paid', label: 'Đã thanh toán' },
     { key: 'preparing', label: 'Chuẩn bị hàng' },
+    { key: 'handed_over', label: 'Đã bàn giao' },
     { key: 'shipping', label: 'Đang giao' },
     { key: 'delivered', label: 'Đã giao' },
     { key: 'cancelled', label: 'Đã hủy' },
@@ -493,11 +517,21 @@ export function SellerOrderManager() {
                       {order.status === 'preparing' && (
                         <button
                           type="button"
-                          onClick={() => void handleUpdateFulfillment(order.order_reference, 'shipping', 'Giao hàng')}
-                          className="mt-3 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-full text-xs font-black shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                          onClick={() => void handleUpdateFulfillment(order.order_reference, 'handed_over', 'Bàn giao hàng')}
+                          className="mt-3 px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-full text-xs font-black shadow-md transition-all cursor-pointer flex items-center gap-1.5 animate-in fade-in duration-300"
+                        >
+                          <PackageCheck className="size-3.5" />
+                          Bàn giao hàng
+                        </button>
+                      )}
+                      {order.status === 'handed_over' && (
+                        <button
+                          type="button"
+                          onClick={() => void handleUpdateFulfillment(order.order_reference, 'shipping', 'Đơn vị vận chuyển nhận hàng')}
+                          className="mt-3 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-full text-xs font-black shadow-md transition-all cursor-pointer flex items-center gap-1.5 animate-in fade-in duration-300"
                         >
                           <Truck className="size-3.5" />
-                          Bàn giao giao hàng
+                          Đơn vị vận chuyển nhận hàng
                         </button>
                       )}
                       {order.status === 'shipping' && (

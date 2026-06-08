@@ -1013,7 +1013,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
 
     return getCategoryPageLink(
       category.name,
-      activeSubcategory !== 'Táº¥t cáº£' ? activeSubcategory : undefined
+      activeSubcategory !== 'Tất cả' ? activeSubcategory : undefined
     );
   }, [activeSubcategory, category.name, isSearchMode, searchQuery]);
   const breadcrumbItems = [
@@ -1038,7 +1038,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
 
   useEffect(() => {
     const siteName = getSiteName();
-    const pageLabel = activeSubcategory !== 'Táº¥t cáº£' ? activeSubcategory : category.name;
+    const pageLabel = activeSubcategory !== 'Tất cả' ? activeSubcategory : category.name;
     const title = isSearchMode
       ? `Tìm kiếm ${searchQuery} | ${siteName}`
       : `${pageLabel} B2B | ${siteName}`;
@@ -1244,7 +1244,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
                           toggleWishlistItem(product);
                         }
                       }}
-                      className="absolute top-2 right-2 bg-white rounded-full p-2 hover:bg-red-50 transition-colors shadow-sm"
+                      className="absolute top-2 right-2 bg-white rounded-full p-2 hover:bg-red-50 transition-colors shadow-sm z-10"
                       aria-label={`Yêu thích ${product.name}`}
                     >
                       <Heart

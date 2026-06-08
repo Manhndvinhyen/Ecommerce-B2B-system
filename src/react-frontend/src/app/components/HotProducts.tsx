@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Heart, ChevronRight, ShoppingCart } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { toCurrencyTextFromLooseValue, toUnitPriceFromLooseValue, useCart } from '../cart/CartProvider';
+import { WishlistAddModal, WishlistModalProduct } from './WishlistAddModal';
+import { hasWishlistAuth, getWishlistItemsMap, removeWishlistItem, WishlistItem } from '../utils/wishlistApi';
 
 const categoryAliasMap: Record<string, string[]> = {
   'Rau củ quả': ['Rau gia vị', 'Rau phổ thông', 'Củ quả', 'Rau củ', 'Rau lá'],
@@ -88,6 +90,8 @@ export function HotProducts() {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [products, setProducts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [wishlistProduct, setWishlistProduct] = useState<WishlistModalProduct | null>(null);
+  const [wishlistItemsMap, setWishlistItemsMap] = useState<Record<string, { itemId: string; listId: string }>>({});
 
   useEffect(() => {
     const syncCategoryFromUrl = () => {
@@ -98,6 +102,19 @@ export function HotProducts() {
     syncCategoryFromUrl();
     window.addEventListener('popstate', syncCategoryFromUrl);
     return () => window.removeEventListener('popstate', syncCategoryFromUrl);
+  }, []);
+
+  useEffect(() => {
+    const loadWishlist = async () => {
+      if (!hasWishlistAuth()) return;
+      try {
+        const { itemsMap } = await getWishlistItemsMap();
+        setWishlistItemsMap(itemsMap);
+      } catch (err) {
+        console.error('[HotProducts] Failed to load wishlist:', err);
+      }
+    };
+    void loadWishlist();
   }, []);
 
   useEffect(() => {
@@ -207,7 +224,7 @@ export function HotProducts() {
       }
     };
 
-    loadProducts();
+    void loadProducts();
 
     return () => controller.abort();
   }, []);
@@ -238,6 +255,39 @@ export function HotProducts() {
 
   const handleNext = () => {
     setPage((prev) => (prev + 1) % totalPages);
+  };
+
+  const handleWishlistToggle = async (event: React.MouseEvent, product: any) => {
+    event.stopPropagation();
+    if (!hasWishlistAuth()) {
+      alert('Vui lòng đăng nhập để sử dụng tính năng yêu thích.');
+      return;
+    }
+
+    const existing = wishlistItemsMap[product.sku];
+    if (existing) {
+      try {
+        await removeWishlistItem(existing.itemId);
+        setWishlistItemsMap((prev) => {
+          const next = { ...prev };
+          delete next[product.sku];
+          return next;
+        });
+      } catch (err) {
+        console.error('[HotProducts] Failed to remove wishlist item:', err);
+      }
+      return;
+    }
+
+    setWishlistProduct({
+      sku: product.sku,
+      name: product.name,
+      priceText: toCurrencyTextFromLooseValue(product.price),
+      priceValue: toUnitPriceFromLooseValue(product.price),
+      unit: product.unit,
+      image: product.image,
+      category: product.category
+    });
   };
 
   return (
@@ -329,11 +379,18 @@ export function HotProducts() {
 
                     {/* Favorite Button */}
                     <button
-                      className="absolute top-2 right-2 bg-white rounded-full p-2 hover:bg-red-50 transition-colors shadow-sm"
-                      onClick={(event) => event.stopPropagation()}
+                      type="button"
+                      className="absolute top-2 right-2 bg-white rounded-full p-2 hover:bg-red-50 transition-colors shadow-sm z-10"
+                      onClick={(event) => handleWishlistToggle(event, product)}
                       onKeyDown={(event) => event.stopPropagation()}
                     >
-                      <Heart className="size-4 text-gray-400 hover:text-red-500" />
+                      <Heart
+                        className={`size-4 ${
+                          wishlistItemsMap[product.sku]
+                            ? 'fill-rose-400 text-rose-500'
+                            : 'text-gray-400 hover:text-red-500'
+                        }`}
+                      />
                     </button>
                   </div>
 
@@ -376,6 +433,19 @@ export function HotProducts() {
           </div>
         )}
       </div>
+
+      <WishlistAddModal
+        isOpen={Boolean(wishlistProduct)}
+        product={wishlistProduct}
+        onClose={() => setWishlistProduct(null)}
+        onAdded={(item: WishlistItem, listId: string) => {
+          if (!item.sku) return;
+          setWishlistItemsMap((prev) => ({
+            ...prev,
+            [item.sku]: { itemId: item.id, listId }
+          }));
+        }}
+      />
     </section>
   );
 }

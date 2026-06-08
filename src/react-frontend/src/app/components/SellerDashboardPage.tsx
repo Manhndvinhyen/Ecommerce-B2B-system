@@ -1,11 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import * as React from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { ShoppingBag, AlertCircle, Info } from 'lucide-react';
 import { SellerSidebar } from './SellerSidebar';
 import { adminMenuItems } from './SidebarMenu';
 import { SellerProfile } from './SellerProfile';
 import { SellerOverviewDashboard } from './SellerOverviewDashboard';
 import { SellerProductManager } from './SellerProductManager';
 import { SellerInventoryManager } from './SellerInventoryManager';
-import { SellerCartManager } from './SellerCartManager';
 import { SellerOrderManager } from './SellerOrderManager';
 import { BranchManagementPanel } from './BranchManagementPanel';
 import { SellerHeader } from './SellerHeader';
@@ -15,6 +16,39 @@ import { RfqDashboard } from './RfqDashboard';
 import { parseRegistrationProfilePayload } from '../utils/registrationProfile';
 
 export function SellerDashboardPage() {
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'warning' | 'info' } | null>(null);
+
+  useEffect(() => {
+    const handleNewNotification = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const notif = customEvent.detail;
+      if (!notif) return;
+
+      const isOutOfStock = notif.message.includes('hết hàng') || notif.message.includes('tồn kho');
+      const isOrder = notif.message.includes('đơn hàng mới') || notif.message.includes('DH');
+
+      setToast({
+        message: notif.message,
+        type: isOutOfStock ? 'warning' : isOrder ? 'success' : 'info'
+      });
+
+      // Dispatch refresh events to notify child views
+      window.dispatchEvent(new CustomEvent('freso:refresh-notifications'));
+      window.dispatchEvent(new CustomEvent('freso:refresh-orders'));
+    };
+
+    window.addEventListener('freso:new-notification', handleNewNotification);
+    return () => {
+      window.removeEventListener('freso:new-notification', handleNewNotification);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 5000);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
   const readStorageValue = (key: string) =>
     window.localStorage.getItem(key) || window.sessionStorage.getItem(key) || '';
 
@@ -210,7 +244,6 @@ export function SellerDashboardPage() {
       'profile-seller',
       'nhan-vien',
       'quan-ly-san-pham',
-      'quan-ly-gio-hang',
       'quan-ly-kho',
       'don-hang',
       'bao-gia'
@@ -226,7 +259,6 @@ export function SellerDashboardPage() {
   const profileLabel = adminMenuItems.find((item) => item.id === 'profile-seller')?.label ?? 'Thông tin hồ sơ';
   const branchLabel = adminMenuItems.find((item) => item.id === 'nhan-vien')?.label ?? 'Quản lý cơ sở';
   const productLabel = adminMenuItems.find((item) => item.id === 'quan-ly-san-pham')?.label ?? 'Quản lý sản phẩm';
-  const cartLabel = adminMenuItems.find((item) => item.id === 'quan-ly-gio-hang')?.label ?? 'Yêu cầu báo giá';
   const inventoryLabel = adminMenuItems.find((item) => item.id === 'quan-ly-kho')?.label ?? 'Quản lý kho hàng';
   const orderLabel = adminMenuItems.find((item) => item.id === 'don-hang')?.label ?? 'Quản lý đơn hàng';
   const quoteLabel = adminMenuItems.find((item) => item.id === 'bao-gia')?.label ?? 'Đàm phán giá';
@@ -300,7 +332,6 @@ export function SellerDashboardPage() {
             {activeTab === dashboardLabel && <SellerOverviewDashboard />}
             {activeTab === profileLabel && <SellerProfile />}
             {activeTab === productLabel && canManageBranches && <SellerProductManager />}
-            {activeTab === cartLabel && <SellerCartManager />}
             {activeTab === inventoryLabel && <SellerInventoryManager />}
             {activeTab === branchLabel && (
               <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
@@ -314,7 +345,6 @@ export function SellerDashboardPage() {
             {activeTab !== dashboardLabel &&
               activeTab !== profileLabel &&
               activeTab !== productLabel &&
-              activeTab !== cartLabel &&
               activeTab !== inventoryLabel &&
               activeTab !== branchLabel &&
               activeTab !== orderLabel &&
@@ -325,6 +355,39 @@ export function SellerDashboardPage() {
 
       <AuthPageFooter />
       <ChatbotWidget />
+
+      {/* Premium In-App Toast Notification */}
+      {toast && (
+        <div className={`fixed top-6 right-6 z-[9999] flex items-center gap-4 px-5 py-4 rounded-2xl shadow-2xl border transition-all duration-300 transform scale-100 animate-in fade-in slide-in-from-top-4 select-none min-w-[320px] max-w-[450px] backdrop-blur-md ${
+          toast.type === 'success'
+            ? 'bg-[#E9F8EF]/95 text-[#00b14f] border-[#CDEEDB]'
+            : toast.type === 'warning'
+            ? 'bg-rose-50/95 text-rose-700 border-rose-200'
+            : 'bg-blue-50/95 text-blue-700 border-blue-200'
+        }`}>
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+            toast.type === 'success'
+              ? 'bg-[#E9F8EF] border border-[#CDEEDB] text-[#00b14f]'
+              : toast.type === 'warning'
+              ? 'bg-rose-100/50 border border-rose-200 text-rose-600'
+              : 'bg-blue-100/50 border border-blue-200 text-blue-600'
+          }`}>
+            {toast.type === 'success' ? (
+              <ShoppingBag className="w-5 h-5" />
+            ) : toast.type === 'warning' ? (
+              <AlertCircle className="w-5 h-5" />
+            ) : (
+              <Info className="w-5 h-5" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">
+              {toast.type === 'success' ? 'Đơn hàng sỉ mới' : toast.type === 'warning' ? 'Cảnh báo tồn kho sỉ' : 'Thông báo hệ thống'}
+            </span>
+            <span className="text-xs font-bold leading-snug text-slate-800 break-words">{toast.message}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

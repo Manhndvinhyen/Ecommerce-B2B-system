@@ -59,5 +59,14 @@ interface OrderManagementInterface
      * @throws \Magento\Framework\Exception\LocalizedException
      */
     public function updateOrderFulfillment(string $orderCode, string $status): bool;
+
+    /**
+     * Confirm receipt of goods by the customer.
+     *
+     * @param string $orderCode
+     * @return bool
+     * @throws \Magento\Framework\Exception\LocalizedException
+     */
+    public function confirmReceiptByCustomer(string $orderCode): bool;
 }
 

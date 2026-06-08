@@ -131,6 +131,20 @@
             <resource ref="self"/>
         </resources>
     </route>
+    <!-- Order fulfillment update REST route for authenticated B2B sellers -->
+    <route url="/V1/tmdt-orders/update-fulfillment" method="POST">
+        <service class="Tmdt\Catalog\Api\OrderManagementInterface" method="updateOrderFulfillment"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+    <!-- Customer order receipt confirmation REST route -->
+    <route url="/V1/tmdt-orders/confirm-receipt" method="POST">
+        <service class="Tmdt\Catalog\Api\OrderManagementInterface" method="confirmReceiptByCustomer"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
     <!-- Customer purchase history - authenticated customer token required -->
     <route url="/V1/tmdt-search/purchase-history" method="GET">
         <service class="Tmdt\Catalog\Api\ProductManagementInterface" method="getPurchaseHistory"/>

@@ -159,6 +159,10 @@ class ProductManagement implements ProductManagementInterface
             $stockItem->setQty($qty);
             $this->stockRegistry->updateStockItemBySku($product->getSku(), $stockItem);
 
+            // Sync warehouse source items
+            $connection = $this->resourceConnection->getConnection();
+            $this->syncSourceItems($product->getSku(), $qty, $connection);
+
             // Reindex and clean cache
             $this->reindexAndCleanCache($product);
 
@@ -266,6 +270,10 @@ class ProductManagement implements ProductManagementInterface
                 $stockItem->setIsInStock($qty > 0);
                 $stockItem->setQty($qty);
                 $this->stockRegistry->updateStockItemBySku($sku, $stockItem);
+
+                // Sync warehouse source items
+                $connection = $this->resourceConnection->getConnection();
+                $this->syncSourceItems($sku, $qty, $connection);
             }
 
             // Reindex and clean cache
@@ -535,6 +543,41 @@ class ProductManagement implements ProductManagementInterface
                 "TMDT Image Error: " . $e->getMessage() . "\n" . $e->getTraceAsString()
             );
             throw new LocalizedException(__("Lá»—i xá»­ lÃ½ áº£nh: %1", $e->getMessage()));
+        }
+    }
+
+    /**
+     * Synchronize stock across all B2B warehouses (default, bac-giang, binh-duong)
+     */
+    private function syncSourceItems(string $sku, float $qty, $connection): void
+    {
+        $sourceItemTable = $connection->getTableName('inventory_source_item');
+        $sources = ['default', 'bac-giang', 'binh-duong'];
+        foreach ($sources as $sourceCode) {
+            $exists = $connection->fetchOne(
+                "SELECT source_item_id FROM {$sourceItemTable} WHERE sku = ? AND source_code = ? LIMIT 1",
+                [$sku, $sourceCode]
+            );
+            if ($exists) {
+                $connection->update(
+                    $sourceItemTable,
+                    [
+                        'quantity' => $qty,
+                        'status'   => ($qty > 0) ? 1 : 0
+                    ],
+                    ['source_item_id = ?' => (int)$exists]
+                );
+            } else {
+                $connection->insert(
+                    $sourceItemTable,
+                    [
+                        'source_code' => $sourceCode,
+                        'sku'         => $sku,
+                        'quantity'    => $qty,
+                        'status'      => ($qty > 0) ? 1 : 0
+                    ]
+                );
+            }
         }
     }
 
@@ -908,12 +951,12 @@ class ProductManagement implements ProductManagementInterface
         // 1. Total revenue and total orders
         $totalStats = $connection->fetchRow("
             SELECT 
-                COALESCE(SUM(CASE WHEN o.status = 'paid' THEN oi.row_total ELSE 0 END), 0) AS total_revenue,
+                COALESCE(SUM(oi.row_total), 0) AS total_revenue,
                 COUNT(DISTINCT o.id) AS total_orders
             FROM {$oTable} o
             INNER JOIN {$oiTable} oi ON o.id = oi.order_id
             WHERE oi.seller_id = :seller_id
-              AND o.status IN ('paid', 'processing')
+              AND o.status IN ('paid', 'processing', 'preparing', 'handed_over', 'shipping', 'delivered', 'pending')
               AND COALESCE(o.parent_code, '') != 'parent'
         ", ['seller_id' => $sellerId]);
 
@@ -925,7 +968,7 @@ class ProductManagement implements ProductManagementInterface
         for ($i = 5; $i >= 0; $i--) {
             $monthNum = date('n', strtotime("-{$i} month"));
             $monthYear = date('Y-m', strtotime("-{$i} month"));
-            $monthName = 'ThÃ¡ng ' . $monthNum;
+            $monthName = 'Tháng ' . $monthNum;
             $months[$monthYear] = [
                 'name' => $monthName,
                 'DoanhThu' => 0.0,
@@ -936,12 +979,12 @@ class ProductManagement implements ProductManagementInterface
         $monthlyStats = $connection->fetchAll("
             SELECT 
                 DATE_FORMAT(o.created_at, '%Y-%m') AS month_key,
-                SUM(CASE WHEN o.status = 'paid' THEN oi.row_total ELSE 0 END) AS monthly_revenue,
+                SUM(oi.row_total) AS monthly_revenue,
                 COUNT(DISTINCT o.id) AS monthly_orders
             FROM {$oTable} o
             INNER JOIN {$oiTable} oi ON o.id = oi.order_id
             WHERE oi.seller_id = :seller_id
-              AND o.status IN ('paid', 'processing')
+              AND o.status IN ('paid', 'processing', 'preparing', 'handed_over', 'shipping', 'delivered', 'pending')
               AND COALESCE(o.parent_code, '') != 'parent'
             GROUP BY month_key
         ", ['seller_id' => $sellerId]);
@@ -959,15 +1002,15 @@ class ProductManagement implements ProductManagementInterface
         // 3. Category distribution
         $categoryDataQuery = "
             SELECT 
-                COALESCE(ccev.value, 'KhÃ¡c') AS name,
-                SUM(CASE WHEN o.status = 'paid' THEN oi.row_total ELSE 0 END) AS value
+                COALESCE(ccev.value, 'Khác') AS name,
+                SUM(oi.row_total) AS value
             FROM {$oTable} o
             INNER JOIN {$oiTable} oi ON o.id = oi.order_id
             LEFT JOIN " . $connection->getTableName('catalog_category_product') . " ccp ON oi.product_id = ccp.product_id
             LEFT JOIN " . $connection->getTableName('catalog_category_entity_varchar') . " ccev ON ccp.category_id = ccev.entity_id
                 AND ccev.attribute_id = (SELECT attribute_id FROM " . $connection->getTableName('eav_attribute') . " WHERE attribute_code = 'name' AND entity_type_id = 3 LIMIT 1)
             WHERE oi.seller_id = :seller_id
-              AND o.status IN ('paid', 'processing')
+              AND o.status IN ('paid', 'processing', 'preparing', 'handed_over', 'shipping', 'delivered', 'pending')
               AND COALESCE(o.parent_code, '') != 'parent'
             GROUP BY name
             ORDER BY value DESC
@@ -986,11 +1029,11 @@ class ProductManagement implements ProductManagementInterface
                 oi.unit,
                 oi.image,
                 SUM(oi.quantity) AS sales_volume,
-                SUM(CASE WHEN o.status = 'paid' THEN oi.row_total ELSE 0 END) AS revenue
+                SUM(oi.row_total) AS revenue
             FROM {$oTable} o
             INNER JOIN {$oiTable} oi ON o.id = oi.order_id
             WHERE oi.seller_id = :seller_id
-              AND o.status IN ('paid', 'processing')
+              AND o.status IN ('paid', 'processing', 'preparing', 'handed_over', 'shipping', 'delivered', 'pending')
               AND COALESCE(o.parent_code, '') != 'parent'
             GROUP BY oi.product_id, oi.sku, oi.name, oi.unit, oi.image
             ORDER BY revenue DESC
@@ -1025,16 +1068,16 @@ class ProductManagement implements ProductManagementInterface
         $recentOrders = $connection->fetchAll($recentOrdersQuery, ['seller_id' => $sellerId]);
         foreach ($recentOrders as $ro) {
             $statusLabel = match(strtolower((string)$ro['status'])) {
-                'paid'       => 'Ä‘Ã£ thanh toÃ¡n',
-                'processing' => 'Ä‘ang xá»­ lÃ½ (COD)',
-                'cancelled','canceled' => 'Ä‘Ã£ há»§y',
-                'expired'    => 'háº¿t háº¡n',
-                default      => 'chá» thanh toÃ¡n'
+                'paid'       => 'đã thanh toán',
+                'processing' => 'đang xử lý (COD)',
+                'cancelled','canceled' => 'đã hủy',
+                'expired'    => 'hết hạn',
+                default      => 'chờ thanh toán'
             };
             $operationalLog[] = [
                 'type'    => 'order_created',
-                'title'   => 'ÄÆ¡n sá»‰ má»›i nháº­n',
-                'message' => "ÄÆ¡n <strong>{$ro['order_code']}</strong> tá»« <strong>{$ro['customer_name']}</strong> - " . number_format((float)$ro['total_amount'], 0, ',', '.') . "Ä‘ - {$statusLabel}",
+                'title'   => 'Đơn sỉ mới nhận',
+                'message' => "Đơn <strong>{$ro['order_code']}</strong> từ <strong>{$ro['customer_name']}</strong> - " . number_format((float)$ro['total_amount'], 0, ',', '.') . "đ - {$statusLabel}",
                 'time'    => $ro['created_at']
             ];
         }
@@ -1054,7 +1097,7 @@ class ProductManagement implements ProductManagementInterface
             foreach ($notifications as $n) {
                 $operationalLog[] = [
                     'type'    => 'out_of_stock',
-                    'title'   => 'Cáº£nh bÃ¡o háº¿t hÃ ng',
+                    'title'   => 'Cảnh báo hết hàng',
                     'message' => $n['message'],
                     'time'    => $n['created_at']
                 ];
@@ -1081,6 +1124,7 @@ class ProductManagement implements ProductManagementInterface
      */
     public function getSellerOrders(): array
     {
+        $this->autoCompleteExpiredShippingOrders();
         $sellerId = (int) $this->resolveCompanySellerId($this->getCurrentCustomerId());
         $connection = $this->resourceConnection->getConnection();
         $limit = max(1, min(50, (int) ($this->request->getParam('limit') ?: 20)));
@@ -1117,7 +1161,11 @@ class ProductManagement implements ProductManagementInterface
 
         // Apply status filter
         if ($statusFilter !== 'all' && $statusFilter !== '') {
-            $select->where('o.status = ?', $statusFilter);
+            if ($statusFilter === 'cancelled') {
+                $select->where('o.status IN (?)', ['cancelled', 'canceled']);
+            } else {
+                $select->where('o.status = ?', $statusFilter);
+            }
         }
 
         // Apply search query
@@ -1194,8 +1242,8 @@ class ProductManagement implements ProductManagementInterface
 
             // Summary calculations
             $summary['total_orders'] += 1;
-            // Count revenue only for paid status to keep statistics clean and accurate!
-            if ($orderStatus === 'paid') {
+            // Count revenue for all active statuses: paid, processing, preparing, handed_over, shipping, delivered, pending
+            if (in_array($orderStatus, ['paid', 'processing', 'preparing', 'handed_over', 'shipping', 'delivered', 'pending'], true)) {
                 $summary['total_revenue'] += $sellerSubtotal;
             }
 
@@ -1299,6 +1347,7 @@ class ProductManagement implements ProductManagementInterface
      */
     public function getPurchaseHistory(): array
     {
+        $this->autoCompleteExpiredShippingOrders();
         $connection = $this->resourceConnection->getConnection();
 
         // â”€â”€ Resolve customer identity â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1388,7 +1437,13 @@ class ProductManagement implements ProductManagementInterface
             ->limit($limit);
 
         if ($statusFilter !== 'all' && $statusFilter !== '') {
-            $select->where('o.status = ?', $statusFilter);
+            if ($statusFilter === 'paid') {
+                $select->where('o.status IN (?)', ['paid', 'processing', 'preparing', 'handed_over', 'shipping', 'delivered']);
+            } elseif ($statusFilter === 'cancelled') {
+                $select->where('o.status IN (?)', ['cancelled', 'canceled']);
+            } else {
+                $select->where('o.status = ?', $statusFilter);
+            }
         }
 
         if ($searchQuery !== '') {
@@ -1483,12 +1538,71 @@ class ProductManagement implements ProductManagementInterface
     private function getOrderStatusLabel(string $status): string
     {
         return match (strtolower($status)) {
-            'paid' => 'ÄÃ£ thanh toÃ¡n',
-            'processing' => 'Äang xá»­ lÃ½',
-            'cancelled', 'canceled' => 'ÄÃ£ há»§y',
-            'expired' => 'Háº¿t háº¡n',
-            'pending' => 'Chá» thanh toÃ¡n',
-            default => $status !== '' ? ucfirst($status) : 'Chá» thanh toÃ¡n',
+            'paid' => 'Đã thanh toán',
+            'processing' => 'Đang xử lý',
+            'preparing' => 'Đang chuẩn bị hàng',
+            'handed_over' => 'Đã bàn giao cho ĐVVC',
+            'shipping' => 'Đang giao hàng',
+            'delivered' => 'Đã giao hàng',
+            'cancelled', 'canceled' => 'Đã hủy',
+            'expired' => 'Hết hạn',
+            'pending' => 'Chờ thanh toán',
+            default => $status !== '' ? ucfirst($status) : 'Chờ thanh toán',
         };
+    }
+
+    private function getOrderProcessor(): \Tmdt\Catalog\Model\OrderProcessor
+    {
+        return ObjectManager::getInstance()->get(\Tmdt\Catalog\Model\OrderProcessor::class);
+    }
+
+    /**
+     * Automatically transition orders in 'shipping' status to 'delivered'
+     * if they have been in 'shipping' for more than 3 days.
+     */
+    private function autoCompleteExpiredShippingOrders(): void
+    {
+        try {
+            $connection = $this->resourceConnection->getConnection();
+            $table = $connection->getTableName('tmdt_orders');
+            $historyTable = $connection->getTableName('tmdt_order_status_history');
+
+            // Find all orders currently in 'shipping' status
+            $shippingOrders = $connection->fetchAll(
+                "SELECT id, order_code FROM {$table} WHERE status = 'shipping'"
+            );
+
+            if (empty($shippingOrders)) {
+                return;
+            }
+
+            $orderProcessor = $this->getOrderProcessor();
+            $threeDaysAgo = time() - (3 * 24 * 60 * 60);
+
+            foreach ($shippingOrders as $order) {
+                $orderId = (int)$order['id'];
+                $orderCode = (string)$order['order_code'];
+
+                // Query the time it entered 'shipping' status
+                $shippingTime = $connection->fetchOne(
+                    "SELECT created_at FROM {$historyTable} WHERE order_id = ? AND status = 'shipping' ORDER BY id DESC LIMIT 1",
+                    [$orderId]
+                );
+
+                if ($shippingTime) {
+                    $shippingTimestamp = strtotime($shippingTime);
+                    if ($shippingTimestamp < $threeDaysAgo) {
+                        $orderProcessor->confirmOrder(
+                            $orderCode,
+                            '',
+                            'delivered',
+                            'Hệ thống tự động hoàn thành đơn hàng sau 3 ngày giao hàng.'
+                        );
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // Ignore
+        }
     }
 }

@@ -354,7 +354,7 @@ export function Header() {
   const getDashboardHref = (tabLabel: string) => `${dashboardBase}&tab=${encodeURIComponent(tabLabel)}`;
   const activeDashboardTab = new URLSearchParams(window.location.search).get('tab');
   const visibleMenuItems = useMemo(() => {
-    const customerMenuItemIds = new Set(['profile-seller', 'lich-su-mua-hang', 'don-hang', 'bao-gia', 'dat-hang-dinh-ky']);
+    const customerMenuItemIds = new Set(['profile-seller', 'lich-su-mua-hang', 'bao-gia', 'dat-hang-dinh-ky']);
 
     return adminMenuItems.filter((item) => {
       if (item.id === 'nhan-vien') {

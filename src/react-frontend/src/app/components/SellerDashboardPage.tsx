@@ -5,7 +5,6 @@ import { SellerProfile } from './SellerProfile';
 import { SellerOverviewDashboard } from './SellerOverviewDashboard';
 import { SellerProductManager } from './SellerProductManager';
 import { SellerInventoryManager } from './SellerInventoryManager';
-import { SellerCartManager } from './SellerCartManager';
 import { SellerOrderManager } from './SellerOrderManager';
 import { BranchManagementPanel } from './BranchManagementPanel';
 import { SellerHeader } from './SellerHeader';
@@ -210,7 +209,6 @@ export function SellerDashboardPage() {
       'profile-seller',
       'nhan-vien',
       'quan-ly-san-pham',
-      'quan-ly-gio-hang',
       'quan-ly-kho',
       'don-hang',
       'bao-gia'
@@ -226,7 +224,6 @@ export function SellerDashboardPage() {
   const profileLabel = adminMenuItems.find((item) => item.id === 'profile-seller')?.label ?? 'Thông tin hồ sơ';
   const branchLabel = adminMenuItems.find((item) => item.id === 'nhan-vien')?.label ?? 'Quản lý cơ sở';
   const productLabel = adminMenuItems.find((item) => item.id === 'quan-ly-san-pham')?.label ?? 'Quản lý sản phẩm';
-  const cartLabel = adminMenuItems.find((item) => item.id === 'quan-ly-gio-hang')?.label ?? 'Yêu cầu báo giá';
   const inventoryLabel = adminMenuItems.find((item) => item.id === 'quan-ly-kho')?.label ?? 'Quản lý kho hàng';
   const orderLabel = adminMenuItems.find((item) => item.id === 'don-hang')?.label ?? 'Quản lý đơn hàng';
   const quoteLabel = adminMenuItems.find((item) => item.id === 'bao-gia')?.label ?? 'Đàm phán giá';
@@ -300,7 +297,6 @@ export function SellerDashboardPage() {
             {activeTab === dashboardLabel && <SellerOverviewDashboard />}
             {activeTab === profileLabel && <SellerProfile />}
             {activeTab === productLabel && canManageBranches && <SellerProductManager />}
-            {activeTab === cartLabel && <SellerCartManager />}
             {activeTab === inventoryLabel && <SellerInventoryManager />}
             {activeTab === branchLabel && (
               <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
@@ -314,7 +310,6 @@ export function SellerDashboardPage() {
             {activeTab !== dashboardLabel &&
               activeTab !== profileLabel &&
               activeTab !== productLabel &&
-              activeTab !== cartLabel &&
               activeTab !== inventoryLabel &&
               activeTab !== branchLabel &&
               activeTab !== orderLabel &&

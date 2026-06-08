@@ -38,7 +38,7 @@ class OrderProcessor
         $table = $connection->getTableName(self::TABLE);
 
         $row = $connection->fetchRow(
-            "SELECT id, status, total_amount FROM {$table} WHERE order_code = ?",
+            "SELECT id, status, total_amount, payment_method, transaction_id, paid_at, parent_id FROM {$table} WHERE order_code = ?",
             [$orderCode]
         );
 
@@ -47,20 +47,32 @@ class OrderProcessor
             return false;
         }
 
-        if ($row['status'] === $status || $row['status'] === 'paid') {
-            return true; // Already processed
+        if ($row['status'] === $status) {
+            return true;
+        }
+        if ($status === 'paid' && in_array($row['status'], ['paid', 'preparing', 'shipping', 'delivered'], true)) {
+            return true;
         }
 
         $orderId = (int)$row['id'];
 
+        $finalTxnId = $transactionId ?: ($row['transaction_id'] ?? '');
+        if (empty($finalTxnId) && ($row['payment_method'] ?? '') === 'direct_payment') {
+            $finalTxnId = 'COD-' . $orderCode;
+        }
+
         // Update parent order status
+        $parentUpdate = [
+            'status'         => $status,
+            'transaction_id' => $finalTxnId,
+        ];
+        if (empty($row['paid_at']) && ($status === 'paid' || $status === 'delivered')) {
+            $parentUpdate['paid_at'] = date('Y-m-d H:i:s');
+        }
+
         $connection->update(
             $table,
-            [
-                'status'         => $status,
-                'transaction_id' => $transactionId,
-                'paid_at'        => date('Y-m-d H:i:s'),
-            ],
+            $parentUpdate,
             ['id = ?' => $orderId]
         );
 
@@ -84,13 +96,17 @@ class OrderProcessor
 
         if ($childOrders) {
             // Mark all child orders as same status
+            $childUpdate = [
+                'status'         => $status,
+                'transaction_id' => $finalTxnId,
+            ];
+            if (empty($row['paid_at']) && ($status === 'paid' || $status === 'delivered')) {
+                $childUpdate['paid_at'] = date('Y-m-d H:i:s');
+            }
+
             $connection->update(
                 $table,
-                [
-                    'status'         => $status,
-                    'transaction_id' => $transactionId,
-                    'paid_at'        => date('Y-m-d H:i:s'),
-                ],
+                $childUpdate,
                 ['parent_id = ?' => $orderId]
             );
 
@@ -106,6 +122,39 @@ class OrderProcessor
                         'created_at' => date('Y-m-d H:i:s'),
                     ]
                 );
+            }
+        }
+
+        // If this is a child order, check if all sibling child orders are delivered.
+        // If so, transition the parent order to delivered.
+        $parentId = $row['parent_id'] !== null ? (int)$row['parent_id'] : null;
+        if ($parentId !== null && $status === 'delivered') {
+            $siblingCount = (int)$connection->fetchOne(
+                "SELECT COUNT(*) FROM {$table} WHERE parent_id = ? AND status != 'delivered'",
+                [$parentId]
+            );
+            if ($siblingCount === 0) {
+                $parentCode = $connection->fetchOne(
+                    "SELECT order_code FROM {$table} WHERE id = ?",
+                    [$parentId]
+                );
+                if ($parentCode) {
+                    $connection->update(
+                        $table,
+                        ['status' => 'delivered'],
+                        ['id = ?' => $parentId]
+                    );
+                    $connection->insert(
+                        $connection->getTableName('tmdt_order_status_history'),
+                        [
+                            'order_code' => $parentCode,
+                            'order_id'   => $parentId,
+                            'status'     => 'delivered',
+                            'comment'    => 'Tất cả các đơn hàng con đã được giao. Đơn hàng tổng tự động hoàn thành.',
+                            'created_at' => date('Y-m-d H:i:s'),
+                        ]
+                    );
+                }
             }
         }
 
@@ -136,6 +185,21 @@ class OrderProcessor
                 "SELECT product_id, sku, name, unit, quantity, unit_price, row_total, seller_id FROM {$orderItemsTable} WHERE order_id = ?",
                 [$currentOrderId]
             );
+
+            $orderRow = $connection->fetchRow(
+                "SELECT shipping_json FROM {$table} WHERE id = ?",
+                [$currentOrderId]
+            );
+            $shippingData = json_decode($orderRow['shipping_json'] ?? '{}', true);
+            $warehouseName = '';
+            if (!empty($shippingData['supplier_info']['warehouse'])) {
+                $warehouseName = (string)$shippingData['supplier_info']['warehouse'];
+            } elseif (!empty($shippingData['suppliers']) && is_array($shippingData['suppliers'])) {
+                $firstSupplier = reset($shippingData['suppliers']);
+                if (!empty($firstSupplier['warehouse'])) {
+                    $warehouseName = (string)$firstSupplier['warehouse'];
+                }
+            }
 
             $sellerRevenues = [];
             $sellerItems = [];
@@ -170,6 +234,54 @@ class OrderProcessor
                             $stockItem->setQty($qtyAfter);
                             $stockItem->setIsInStock($qtyAfter > 0);
                             $this->stockRegistry->updateStockItemBySku($sku, $stockItem);
+
+                            // Update stock in the specific inventory source item table
+                            $sourceCode = 'default';
+                            if ($warehouseName !== '') {
+                                $sourceCodeVal = $connection->fetchOne(
+                                    "SELECT source_code FROM " . $connection->getTableName('inventory_source') . " WHERE name = ? LIMIT 1",
+                                    [$warehouseName]
+                                );
+                                if ($sourceCodeVal) {
+                                    $sourceCode = $sourceCodeVal;
+                                } else {
+                                    if (str_contains(strtolower($warehouseName), 'bắc giang') || str_contains(strtolower($warehouseName), 'bac giang')) {
+                                        $sourceCode = 'bac-giang';
+                                    } elseif (str_contains(strtolower($warehouseName), 'bình dương') || str_contains(strtolower($warehouseName), 'binh duong')) {
+                                        $sourceCode = 'binh-duong';
+                                    }
+                                }
+                            }
+
+                            $sourceItemTable = $connection->getTableName('inventory_source_item');
+                            $sourceItem = $connection->fetchRow(
+                                "SELECT source_item_id, quantity FROM {$sourceItemTable} WHERE sku = ? AND source_code = ?",
+                                [$sku, $sourceCode]
+                            );
+
+                            if ($sourceItem) {
+                                $sourceQtyBefore = (float)$sourceItem['quantity'];
+                                $sourceQtyAfter = max(0.0, $sourceQtyBefore - $qtySold);
+                                $connection->update(
+                                    $sourceItemTable,
+                                    [
+                                        'quantity' => $sourceQtyAfter,
+                                        'status'   => ($sourceQtyAfter > 0) ? 1 : 0
+                                    ],
+                                    ['source_item_id = ?' => (int)$sourceItem['source_item_id']]
+                                );
+                            } else {
+                                $sourceQtyAfter = max(0.0, $qtyBefore - $qtySold);
+                                $connection->insert(
+                                    $sourceItemTable,
+                                    [
+                                        'source_code' => $sourceCode,
+                                        'sku'         => $sku,
+                                        'quantity'    => $sourceQtyAfter,
+                                        'status'      => ($sourceQtyAfter > 0) ? 1 : 0
+                                    ]
+                                );
+                            }
 
                             // Record log in tmdt_inventory_log using relation IDs
                             $connection->insert(
@@ -265,8 +377,8 @@ class OrderProcessor
                 }
             }
 
-            // Only record transactions and credit available balances if the status transitions to 'paid'
-            if ($status === 'paid') {
+            // Only record transactions and credit available balances if the status transitions to 'delivered'
+            if ($status === 'delivered') {
                 foreach ($sellerRevenues as $sellerId => $amount) {
                     try {
                         // Insert revenue transaction
@@ -275,7 +387,7 @@ class OrderProcessor
                             [
                                 'order_code'         => $currentOrderCode,
                                 'order_id'           => $currentOrderId,
-                                'transaction_id'     => $transactionId,
+                                'transaction_id'     => $finalTxnId ?: ($row['transaction_id'] ?? 'COD-' . $currentOrderCode),
                                 'amount'             => $amount,
                                 'seller_id'          => (string)$sellerId,
                                 'seller_customer_id' => $sellerId,

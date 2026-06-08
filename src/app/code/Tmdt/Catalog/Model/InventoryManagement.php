@@ -56,6 +56,7 @@ class InventoryManagement implements InventoryManagementInterface
             $this->stockRegistry->updateStockItemBySku($sku, $stockItem);
 
             $connection = $this->resourceConnection->getConnection();
+            $this->syncSourceItems($sku, $qtyAfter, $connection);
             $connection->insert(
                 $connection->getTableName('tmdt_inventory_log'),
                 [
@@ -105,6 +106,41 @@ class InventoryManagement implements InventoryManagementInterface
             ->order('il.created_at DESC');
 
         return $connection->fetchAll($select);
+    }
+
+    /**
+     * Synchronize stock across all B2B warehouses (default, bac-giang, binh-duong)
+     */
+    private function syncSourceItems(string $sku, float $qty, $connection): void
+    {
+        $sourceItemTable = $connection->getTableName('inventory_source_item');
+        $sources = ['default', 'bac-giang', 'binh-duong'];
+        foreach ($sources as $sourceCode) {
+            $exists = $connection->fetchOne(
+                "SELECT source_item_id FROM {$sourceItemTable} WHERE sku = ? AND source_code = ? LIMIT 1",
+                [$sku, $sourceCode]
+            );
+            if ($exists) {
+                $connection->update(
+                    $sourceItemTable,
+                    [
+                        'quantity' => $qty,
+                        'status'   => ($qty > 0) ? 1 : 0
+                    ],
+                    ['source_item_id = ?' => (int)$exists]
+                );
+            } else {
+                $connection->insert(
+                    $sourceItemTable,
+                    [
+                        'source_code' => $sourceCode,
+                        'sku'         => $sku,
+                        'quantity'    => $qty,
+                        'status'      => ($qty > 0) ? 1 : 0
+                    ]
+                );
+            }
+        }
     }
 
     private function getCurrentCustomerId(): string

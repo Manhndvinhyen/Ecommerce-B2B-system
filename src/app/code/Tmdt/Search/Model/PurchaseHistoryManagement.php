@@ -258,6 +258,9 @@ class PurchaseHistoryManagement implements PurchaseHistoryInterface
         return match (strtolower($status)) {
             'paid' => 'Đã thanh toán',
             'processing' => 'Đang xử lý',
+            'preparing' => 'Đang chuẩn bị hàng',
+            'shipping' => 'Đang giao hàng',
+            'delivered' => 'Đã giao hàng',
             'cancelled', 'canceled' => 'Đã hủy',
             'expired' => 'Hết hạn',
             'pending' => 'Chờ thanh toán',

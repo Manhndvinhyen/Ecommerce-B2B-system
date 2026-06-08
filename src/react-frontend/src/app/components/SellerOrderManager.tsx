@@ -10,8 +10,10 @@ import {
   Truck,
   ChevronDown,
   CheckSquare,
+  PackageCheck,
 } from 'lucide-react';
 import { toCurrencyTextFromNumber } from '../cart/CartProvider';
+import { OrderTrackingMap } from './OrderTrackingMap';
 
 type SellerOrderItem = {
   item_id: number;
@@ -61,13 +63,30 @@ const formatDateTime = (value: string) => {
   return parsed.toLocaleString('vi-VN');
 };
 
-const getStatusBadgeClass = (status: string) => {
+const getStatusMeta = (status: string) => {
   const normalized = status.trim().toLowerCase();
-  if (normalized === 'paid') return 'bg-emerald-50 text-emerald-700 border-emerald-100';
-  if (normalized === 'processing') return 'bg-blue-50 text-blue-700 border-blue-100';
-  if (normalized === 'cancelled' || normalized === 'canceled') return 'bg-slate-100 text-slate-700 border-slate-200';
-  if (normalized === 'expired') return 'bg-rose-50 text-rose-700 border-rose-100';
-  return 'bg-amber-50 text-amber-800 border-amber-100';
+  if (normalized === 'paid') {
+    return { label: 'Đã thanh toán', className: 'bg-emerald-50 text-emerald-700 border-emerald-100', dot: 'bg-emerald-500' };
+  }
+  if (normalized === 'processing') {
+    return { label: 'Đang xử lý', className: 'bg-blue-50 text-blue-700 border-blue-100', dot: 'bg-blue-500' };
+  }
+  if (normalized === 'preparing') {
+    return { label: 'Đang chuẩn bị hàng', className: 'bg-indigo-50 text-indigo-700 border-indigo-100', dot: 'bg-indigo-500' };
+  }
+  if (normalized === 'shipping') {
+    return { label: 'Đang giao hàng', className: 'bg-orange-50 text-orange-700 border-orange-100', dot: 'bg-orange-500' };
+  }
+  if (normalized === 'delivered') {
+    return { label: 'Đã giao hàng', className: 'bg-teal-50 text-teal-700 border-teal-100', dot: 'bg-teal-500' };
+  }
+  if (normalized === 'cancelled' || normalized === 'canceled') {
+    return { label: 'Đã hủy', className: 'bg-slate-100 text-slate-700 border-slate-200', dot: 'bg-slate-500' };
+  }
+  if (normalized === 'expired') {
+    return { label: 'Hết hạn', className: 'bg-rose-50 text-rose-700 border-rose-100', dot: 'bg-rose-500' };
+  }
+  return { label: 'Chờ thanh toán', className: 'bg-amber-50 text-amber-800 border-amber-100', dot: 'bg-amber-500' };
 };
 
 export function SellerOrderManager() {
@@ -81,9 +100,9 @@ export function SellerOrderManager() {
 
   const summary = useMemo(() => {
     const totalRevenue = orders.reduce((sum, order) => sum + Number(order.seller_subtotal || 0), 0);
-    const paidOrders = orders.filter((order) => order.status === 'paid').length;
-    const pendingOrders = orders.filter((order) => order.status === 'pending').length;
-    const processingOrders = orders.filter((order) => order.status === 'processing').length;
+    const paidOrders = orders.filter((order) => ['paid', 'preparing', 'shipping', 'delivered'].includes(order.status.trim().toLowerCase())).length;
+    const pendingOrders = orders.filter((order) => order.status.trim().toLowerCase() === 'pending').length;
+    const processingOrders = orders.filter((order) => order.status.trim().toLowerCase() === 'processing').length;
 
     return {
       totalRevenue,
@@ -133,7 +152,19 @@ export function SellerOrderManager() {
       }
 
       const json = await response.json();
-      setOrders(Array.isArray(json?.items) ? json.items : []);
+      if (Array.isArray(json)) {
+        if (json[0] === true && Array.isArray(json[2])) {
+          setOrders(json[2]);
+        } else if (Array.isArray(json[1])) {
+          setOrders(json[1]);
+        } else {
+          setOrders(json as SellerOrder[]);
+        }
+      } else if (json && Array.isArray(json.items)) {
+        setOrders(json.items);
+      } else {
+        setOrders([]);
+      }
       setErrorMessage('');
     } catch {
       setErrorMessage('Không tải được danh sách đơn hàng. Vui lòng thử lại sau.');
@@ -184,11 +215,44 @@ export function SellerOrderManager() {
     }
   };
 
+  const handleUpdateFulfillment = async (orderCode: string, targetStatus: string, actionLabel: string) => {
+    const token = getAuthToken();
+    if (!token) return;
+
+    if (!window.confirm(`Bạn có chắc chắn muốn chuyển trạng thái đơn hàng ${orderCode} sang "${actionLabel}"?`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`${window.location.origin}/rest/V1/tmdt-orders/update-fulfillment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ orderCode, status: targetStatus }),
+      });
+
+      if (res.ok) {
+        alert(`Đơn hàng ${orderCode} đã chuyển sang trạng thái "${actionLabel}" thành công!`);
+        void fetchOrders(true);
+      } else {
+        const data = await res.json();
+        alert(data.message || 'Có lỗi xảy ra khi cập nhật trạng thái đơn hàng.');
+      }
+    } catch {
+      alert('Không thể kết nối đến máy chủ.');
+    }
+  };
+
   const statusTabs = [
     { key: 'all', label: 'Tất cả' },
-    { key: 'paid', label: 'Đã thanh toán' },
     { key: 'pending', label: 'Chờ thanh toán' },
     { key: 'processing', label: 'Đang xử lý' },
+    { key: 'paid', label: 'Đã thanh toán' },
+    { key: 'preparing', label: 'Chuẩn bị hàng' },
+    { key: 'shipping', label: 'Đang giao' },
+    { key: 'delivered', label: 'Đã giao' },
     { key: 'cancelled', label: 'Đã hủy' },
     { key: 'expired', label: 'Hết hạn' },
   ];
@@ -328,14 +392,17 @@ export function SellerOrderManager() {
                         <ShoppingBag className="size-3.5" />
                         {order.order_reference}
                       </div>
-                      <span
-                        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${getStatusBadgeClass(order.status)}`}
-                      >
-                        <span
-                          className={`size-1.5 rounded-full ${order.status === 'paid' ? 'bg-emerald-500' : order.status === 'processing' ? 'bg-blue-500' : order.status === 'expired' ? 'bg-rose-500' : 'bg-amber-500'}`}
-                        />
-                        {order.status_label}
-                      </span>
+                      {(() => {
+                        const statusMeta = getStatusMeta(order.status);
+                        return (
+                          <span
+                            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${statusMeta.className}`}
+                          >
+                            <span className={`size-1.5 rounded-full ${statusMeta.dot}`} />
+                            {order.status_label || statusMeta.label}
+                          </span>
+                        );
+                      })()}
                     </div>
 
                     <div className="mt-3 flex flex-wrap gap-3 text-[11px] text-slate-400 font-semibold">
@@ -413,6 +480,49 @@ export function SellerOrderManager() {
                           Xác nhận đã thu tiền
                         </button>
                       )}
+                      {(order.status === 'paid' || order.status === 'processing') && (
+                        <button
+                          type="button"
+                          onClick={() => void handleUpdateFulfillment(order.order_reference, 'preparing', 'Chuẩn bị hàng')}
+                          className="mt-3 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full text-xs font-black shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                        >
+                          <PackageCheck className="size-3.5" />
+                          Chuẩn bị hàng
+                        </button>
+                      )}
+                      {order.status === 'preparing' && (
+                        <button
+                          type="button"
+                          onClick={() => void handleUpdateFulfillment(order.order_reference, 'shipping', 'Giao hàng')}
+                          className="mt-3 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-full text-xs font-black shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                        >
+                          <Truck className="size-3.5" />
+                          Bàn giao giao hàng
+                        </button>
+                      )}
+                      {order.status === 'shipping' && (
+                        <>
+                          {order.payment_method === 'direct_payment' ? (
+                            <button
+                              type="button"
+                              onClick={() => void handleConfirmPayment(order.order_reference)}
+                              className="mt-3 px-4 py-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white rounded-full text-xs font-black shadow-md shadow-emerald-500/10 hover:shadow-emerald-500/25 transition-all cursor-pointer flex items-center gap-1.5"
+                            >
+                              <CheckSquare className="size-3.5" />
+                              Xác nhận đã thu tiền & hoàn thành
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => void handleUpdateFulfillment(order.order_reference, 'delivered', 'Xác nhận đã giao')}
+                              className="mt-3 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-full text-xs font-black shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                            >
+                              <CheckSquare className="size-3.5" />
+                              Xác nhận đã giao
+                            </button>
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -424,35 +534,53 @@ export function SellerOrderManager() {
                     onClick={() => toggleOrderExpand(order.order_reference)}
                     className="flex w-full items-center justify-between text-xs font-black uppercase tracking-wider text-emerald-600 hover:text-emerald-700 transition"
                   >
-                    <span>{isExpanded ? 'Ẩn chi tiết sản phẩm' : `Xem chi tiết sản phẩm (${order.items.length})`}</span>
+                    <span>{isExpanded ? 'Ẩn bản đồ & sản phẩm' : `Theo dõi đơn & sản phẩm (${order.items.length})`}</span>
                     <ChevronDown className={`size-4 transform transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
                   </button>
 
                   {isExpanded && (
-                    <div className="mt-3 space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
-                      {order.items.map((item) => (
-                        <div key={item.item_id} className="flex items-center gap-3 rounded-xl bg-slate-50/60 p-3 hover:bg-slate-100/40 transition-colors">
-                          {item.image ? (
-                            <img src={item.image} alt={item.name} className="size-11 rounded-lg object-cover border border-slate-200" />
-                          ) : (
-                            <div className="flex size-11 items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-300">
-                              <PackageSearch className="size-5" />
+                    <div className="mt-3 space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                      <OrderTrackingMap
+                        order={{
+                          orderReference: order.order_reference,
+                          status: order.status,
+                          statusLabel: order.status_label,
+                          supplier: order.supplier || 'Freso Supplier',
+                          customerRegion: order.customer_region,
+                          shippingAddress: order.shipping_address,
+                          deliveryDate: order.delivery_date,
+                          deliveryTime: order.delivery_time,
+                        }}
+                      />
+
+                      <div className="rounded-xl border border-slate-100 bg-slate-50/20 p-3">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 mb-2">Chi tiết sản phẩm</p>
+                        <div className="space-y-2">
+                          {order.items.map((item) => (
+                            <div key={item.item_id} className="flex items-center gap-3 rounded-xl bg-white p-2.5 border border-slate-100 hover:bg-slate-50/50 transition-colors">
+                              {item.image ? (
+                                <img src={item.image} alt={item.name} className="size-10 rounded-lg object-cover border border-slate-200 shrink-0" />
+                              ) : (
+                                <div className="flex size-10 items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-300 shrink-0">
+                                  <PackageSearch className="size-4" />
+                                </div>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-xs font-bold text-slate-900">{item.name}</p>
+                                <p className="mt-0.5 text-[9px] text-slate-500 font-semibold">
+                                  {item.sku} · {item.category || 'Chưa phân loại'}
+                                </p>
+                              </div>
+                              <div className="text-right text-xs">
+                                <p className="font-bold text-slate-900">
+                                  {item.quantity} {item.unit || 'SP'}
+                                </p>
+                                <p className="text-slate-500 font-semibold">{toCurrencyTextFromNumber(item.row_total)}</p>
+                              </div>
                             </div>
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-xs font-bold text-slate-900">{item.name}</p>
-                            <p className="mt-0.5 text-[10px] text-slate-500 font-semibold">
-                              {item.sku} · {item.category || 'Chưa phân loại'}
-                            </p>
-                          </div>
-                          <div className="text-right text-xs">
-                            <p className="font-bold text-slate-900">
-                              {item.quantity} {item.unit || 'SP'}
-                            </p>
-                            <p className="text-slate-500 font-semibold">{toCurrencyTextFromNumber(item.row_total)}</p>
-                          </div>
+                          ))}
                         </div>
-                      ))}
+                      </div>
                     </div>
                   )}
                 </div>

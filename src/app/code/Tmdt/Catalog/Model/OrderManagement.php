@@ -118,6 +118,11 @@ class OrderManagement implements OrderManagementInterface
         string $shippingJson,
         string $paymentMethod = 'bank_transfer'
     ): array {
+        $paymentMethod = trim(strtolower($paymentMethod));
+        if ($paymentMethod === 'cod') {
+            $paymentMethod = 'direct_payment';
+        }
+
         if ($totalAmount <= 0) {
             return ['success' => false, 'message' => 'Tổng tiền đơn hàng không hợp lệ.'];
         }
@@ -406,6 +411,40 @@ class OrderManagement implements OrderManagementInterface
         $connection = $this->resourceConnection->getConnection();
         $table = $connection->getTableName('inventory_source');
 
+        // Ensure "Kho Bắc Giang" exists
+        $bgExists = $connection->fetchOne("SELECT source_code FROM {$table} WHERE source_code = 'bac-giang'");
+        if (!$bgExists) {
+            $connection->insert($table, [
+                'source_code' => 'bac-giang',
+                'name' => 'Kho Bắc Giang',
+                'enabled' => 1,
+                'description' => 'Kho hàng tại Bắc Giang',
+                'latitude' => 21.2730,
+                'longitude' => 106.1946,
+                'country_id' => 'VN',
+                'postcode' => '230000',
+                'use_default_carrier_config' => 1,
+                'is_pickup_location_active' => 0
+            ]);
+        }
+
+        // Ensure "Kho Bình Dương" exists
+        $bdExists = $connection->fetchOne("SELECT source_code FROM {$table} WHERE source_code = 'binh-duong'");
+        if (!$bdExists) {
+            $connection->insert($table, [
+                'source_code' => 'binh-duong',
+                'name' => 'Kho Bình Dương',
+                'enabled' => 1,
+                'description' => 'Kho hàng tại Bình Dương',
+                'latitude' => 10.9805,
+                'longitude' => 106.6517,
+                'country_id' => 'VN',
+                'postcode' => '820000',
+                'use_default_carrier_config' => 1,
+                'is_pickup_location_active' => 0
+            ]);
+        }
+
         $rows = $connection->fetchAll(
             "SELECT name, latitude, longitude FROM {$table} WHERE enabled = 1 AND latitude IS NOT NULL AND longitude IS NOT NULL"
         );
@@ -450,7 +489,7 @@ class OrderManagement implements OrderManagementInterface
         }
 
         $status = strtolower(trim((string)$order['status']));
-        if (in_array($status, ['paid', 'preparing', 'shipping', 'delivered'], true)) {
+        if (in_array($status, ['paid', 'delivered'], true)) {
             return true;
         }
 
@@ -472,10 +511,15 @@ class OrderManagement implements OrderManagementInterface
             );
         }
 
+        $targetStatus = 'paid';
+        if (in_array($status, ['preparing', 'shipping'], true)) {
+            $targetStatus = 'delivered';
+        }
+
         return $this->orderProcessor->confirmOrder(
             $orderCode,
             'COD-' . $orderCode,
-            'paid',
+            $targetStatus,
             'Direct payment has been collected by the seller.'
         );
     }
@@ -712,6 +756,58 @@ class OrderManagement implements OrderManagementInterface
         }
 
         return false;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function confirmReceiptByCustomer(string $orderCode): bool
+    {
+        $orderCode = trim($orderCode);
+        if ($orderCode === '') {
+            throw new \Magento\Framework\Exception\LocalizedException(__('Mã đơn hàng không hợp lệ.'));
+        }
+
+        $customerId = (int)$this->getSellerIdFromSession();
+
+        $connection = $this->resourceConnection->getConnection();
+        $table = $connection->getTableName(self::TABLE);
+
+        $order = $connection->fetchRow(
+            "SELECT id, status, customer_id FROM {$table} WHERE order_code = ? LIMIT 1",
+            [$orderCode]
+        );
+
+        if (!$order) {
+            throw new \Magento\Framework\Exception\LocalizedException(__('Không tìm thấy đơn hàng.'));
+        }
+
+        // Verify that this order belongs to the logged in customer
+        if ((int)$order['customer_id'] !== $customerId) {
+            throw new \Magento\Framework\Exception\LocalizedException(
+                __('Bạn không có quyền xác nhận đã nhận hàng cho đơn hàng này.')
+            );
+        }
+
+        $currentStatus = strtolower(trim((string)$order['status']));
+        if ($currentStatus === 'delivered') {
+            return true;
+        }
+
+        // Only allow confirming receipt if the order is in 'shipping' status
+        if ($currentStatus !== 'shipping') {
+            throw new \Magento\Framework\Exception\LocalizedException(
+                __('Đơn hàng phải ở trạng thái đang giao hàng mới có thể xác nhận đã nhận.')
+            );
+        }
+
+        // Transition order status to 'delivered' using orderProcessor
+        return $this->orderProcessor->confirmOrder(
+            $orderCode,
+            '',
+            'delivered',
+            'Khách hàng xác nhận đã nhận được hàng.'
+        );
     }
 }
 

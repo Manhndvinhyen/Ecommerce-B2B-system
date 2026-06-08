@@ -117,7 +117,6 @@ export function SellerHeader() {
       'profile-seller',
       'nhan-vien',
       'quan-ly-san-pham',
-      'quan-ly-gio-hang',
       'quan-ly-kho',
       'don-hang',
       'bao-gia'

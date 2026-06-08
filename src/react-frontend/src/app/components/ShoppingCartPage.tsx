@@ -123,31 +123,27 @@ export function ShoppingCartPage() {
     setIsRfqSubmitting(true);
     setRfqMessage('');
     try {
-      const response = await fetch(`${window.location.origin}/rest/V1/tmdt-rfq/request`, {
+      const response = await fetch(`${window.location.origin}/rest/V1/tmdt-rfq/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          payload: {
-            productName: rfqForm.productName,
-            category: rfqForm.category,
-            quantity: Number(rfqForm.quantity),
-            unit: rfqForm.unit,
-            deliveryRegion: rfqForm.deliveryRegion,
-            neededBy: rfqForm.neededBy,
-            targetPrice: rfqForm.targetPrice ? Number(rfqForm.targetPrice) : null,
-            imageUrl: rfqForm.imageUrl,
-            description: rfqForm.description,
-          },
+          productName: rfqForm.productName,
+          quantity: Number(rfqForm.quantity),
+          unit: rfqForm.unit,
+          desiredPrice: rfqForm.targetPrice ? Number(rfqForm.targetPrice) : 0,
+          shippingAddress: rfqForm.deliveryRegion || 'Chưa xác định',
+          deliveryDate: rfqForm.neededBy || new Date(Date.now() + 3*24*60*60*1000).toISOString().split('T')[0],
+          expiryDate: new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0]
         }),
       });
-      const data = (await response.json().catch(() => ({}))) as { success?: boolean; message?: string; request_id?: number };
+      const data = (await response.json().catch(() => ({}))) as { success?: boolean; message?: string };
       if (!response.ok || data.success === false) {
         throw new Error(data.message || 'Khong the gui yeu cau bao gia.');
       }
-      setRfqMessage(`Da gui yeu cau bao gia RFQ-${data.request_id || ''}.`);
+      setRfqMessage(data.message || 'Da gui yeu cau bao gia thanh cong.');
       setRfqForm({
         productName: '',
         category: '',

@@ -26,6 +26,12 @@
         <column xsi:type="text" name="notes" nullable="true" comment="Notes" />
         <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At" />
         <column xsi:type="timestamp" name="updated_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Updated At" />
+        <column xsi:type="varchar" name="logo" nullable="true" length="255" comment="Supplier Logo/Emoji" />
+        <column xsi:type="varchar" name="category" nullable="true" length="255" comment="Supplier Category" />
+        <column xsi:type="varchar" name="badges" nullable="true" length="255" comment="Supplier Badges" />
+        <column xsi:type="int" name="default_customers" padding="10" unsigned="true" nullable="true" comment="Default Customers Count" />
+        <column xsi:type="int" name="default_products" padding="10" unsigned="true" nullable="true" comment="Default Products Count" />
+        <column xsi:type="int" name="default_branches" padding="10" unsigned="true" nullable="true" comment="Default Branches Count" />
         <constraint xsi:type="primary" referenceId="PRIMARY">
             <column name="registration_id" />
         </constraint>

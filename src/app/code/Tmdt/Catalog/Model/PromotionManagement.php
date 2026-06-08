@@ -59,4 +59,114 @@ class PromotionManagement implements PromotionManagementInterface
             ];
         }
     }
+
+    /**
+     * @inheritDoc
+     */
+    public function getSuppliers(): array
+    {
+        $connection = $this->resourceConnection->getConnection();
+        
+        try {
+            $regTable = $this->resourceConnection->getTableName('tmdt_customer_registration');
+            $prodVarcharTable = $this->resourceConnection->getTableName('catalog_product_entity_varchar');
+            $attrTable = $this->resourceConnection->getTableName('eav_attribute');
+            $orderTable = $this->resourceConnection->getTableName('tmdt_orders');
+            $orderItemsTable = $this->resourceConnection->getTableName('tmdt_order_items');
+
+            // 1. Get tmdt_seller_id attribute ID
+            $sellerAttrId = (int)$connection->fetchOne(
+                $connection->select()
+                    ->from($attrTable, ['attribute_id'])
+                    ->where('attribute_code = ?', 'tmdt_seller_id')
+                    ->where('entity_type_id = ?', 4)
+                    ->limit(1)
+            );
+
+            // 2. Fetch all B2B sellers from database
+            $select = $connection->select()
+                ->from($regTable)
+                ->where('role = ?', 'seller')
+                ->where('status = ?', 'approved')
+                ->order('registration_id ASC');
+            
+            $sellers = $connection->fetchAll($select) ?: [];
+            $items = [];
+
+            foreach ($sellers as $seller) {
+                $id = (int)$seller['customer_id'];
+                
+                // Parse badges (comma-separated list in DB to array)
+                $badgesStr = isset($seller['badges']) ? (string)$seller['badges'] : '';
+                $badges = !empty($badgesStr) ? array_map('trim', explode(',', $badgesStr)) : [];
+
+                // Retrieve logo & category
+                $logo = isset($seller['logo']) ? (string)$seller['logo'] : '🧑‍🌾';
+                $category = isset($seller['category']) ? (string)$seller['category'] : 'Nông sản sỉ B2B';
+
+                // Fetch dynamic stats from database tables
+                $productCount = 0;
+                if ($sellerAttrId > 0) {
+                    $productCount = (int)$connection->fetchOne(
+                        "SELECT COUNT(DISTINCT entity_id) FROM {$prodVarcharTable}
+                         WHERE attribute_id = ? AND value = ?",
+                        [$sellerAttrId, (string)$id]
+                    );
+                }
+
+                $orderCount = (int)$connection->fetchOne(
+                    "SELECT COUNT(DISTINCT o.id) FROM {$orderTable} o
+                     INNER JOIN {$orderItemsTable} oi ON o.id = oi.order_id
+                     WHERE oi.seller_id = ?
+                       AND o.status IN ('paid', 'processing')
+                       AND COALESCE(o.parent_code, '') != 'parent'",
+                    [$id]
+                );
+
+                $customerCount = (int)$connection->fetchOne(
+                    "SELECT COUNT(DISTINCT o.customer_email) FROM {$orderTable} o
+                     INNER JOIN {$orderItemsTable} oi ON o.id = oi.order_id
+                     WHERE oi.seller_id = ?
+                       AND o.status IN ('paid', 'processing')
+                       AND COALESCE(o.parent_code, '') != 'parent'",
+                    [$id]
+                );
+
+                // Read defaults from DB columns
+                $defaultCustomers = isset($seller['default_customers']) ? (int)$seller['default_customers'] : 0;
+                $defaultProducts = isset($seller['default_products']) ? (int)$seller['default_products'] : 0;
+                $defaultBranches = isset($seller['default_branches']) ? (int)$seller['default_branches'] : 0;
+
+                // Fallback to default stats if dynamic stats are 0
+                $statsCustomers = $customerCount > 0 ? $customerCount : $defaultCustomers;
+                $statsProducts = $productCount > 0 ? $productCount : $defaultProducts;
+                $statsBranches = $orderCount > 0 ? $orderCount : $defaultBranches;
+
+                $items[] = [
+                    'id' => $id,
+                    'name' => (string)$seller['business_name'],
+                    'logo' => $logo,
+                    'category' => $category,
+                    'stats' => [
+                        'customers' => $statsCustomers,
+                        'products' => $statsProducts,
+                        'branches' => $statsBranches
+                    ],
+                    'badges' => $badges,
+                    'seller_province' => (string)$seller['province']
+                ];
+            }
+
+            return [
+                'success' => true,
+                'items' => $items
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'success' => false,
+                'message' => $e->getMessage(),
+                'items' => []
+            ];
+        }
+    }
 }

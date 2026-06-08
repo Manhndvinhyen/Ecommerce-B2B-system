@@ -11,4 +11,11 @@ interface PromotionManagementInterface
      * @return mixed[]
      */
     public function getPromotions(): array;
+
+    /**
+     * Get list of B2B suppliers from database with real statistics.
+     *
+     * @return mixed[]
+     */
+    public function getSuppliers(): array;
 }

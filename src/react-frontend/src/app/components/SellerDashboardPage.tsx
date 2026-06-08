@@ -11,6 +11,7 @@ import { BranchManagementPanel } from './BranchManagementPanel';
 import { SellerHeader } from './SellerHeader';
 import { AuthPageFooter } from './auth/AuthPageFooter';
 import { ChatbotWidget } from './ChatbotWidget';
+import { RfqDashboard } from './RfqDashboard';
 import { parseRegistrationProfilePayload } from '../utils/registrationProfile';
 
 export function SellerDashboardPage() {
@@ -308,7 +309,7 @@ export function SellerDashboardPage() {
             )}
             {activeTab === orderLabel && <SellerOrderManager />}
             {activeTab === quoteLabel && (
-              <div className="p-8">Nội dung cho: {activeTab}</div>
+              <RfqDashboard mode="seller" />
             )}
             {activeTab !== dashboardLabel &&
               activeTab !== profileLabel &&

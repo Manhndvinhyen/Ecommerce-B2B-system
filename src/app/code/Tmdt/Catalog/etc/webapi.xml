@@ -85,31 +85,7 @@
             <resource ref="anonymous"/>
         </resources>
     </route>
-    <!-- RFQ Marketplace -->
-    <route url="/V1/tmdt-rfq/request" method="POST">
-        <service class="Tmdt\Catalog\Api\RfqManagementInterface" method="createRequest"/>
-        <resources>
-            <resource ref="self"/>
-        </resources>
-    </route>
-    <route url="/V1/tmdt-rfq/seller/requests" method="GET">
-        <service class="Tmdt\Catalog\Api\RfqManagementInterface" method="getSellerRequests"/>
-        <resources>
-            <resource ref="self"/>
-        </resources>
-    </route>
-    <route url="/V1/tmdt-rfq/buyer/requests" method="GET">
-        <service class="Tmdt\Catalog\Api\RfqManagementInterface" method="getBuyerRequests"/>
-        <resources>
-            <resource ref="self"/>
-        </resources>
-    </route>
-    <route url="/V1/tmdt-rfq/quote" method="POST">
-        <service class="Tmdt\Catalog\Api\RfqManagementInterface" method="submitQuote"/>
-        <resources>
-            <resource ref="self"/>
-        </resources>
-    </route>
+
     <!-- Currency Rates REST API -->
     <route url="/V1/tmdt-catalog/rates" method="GET">
         <service class="Tmdt\Catalog\Api\RatesInterface" method="getRates"/>

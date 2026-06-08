@@ -176,19 +176,39 @@ function AppContent() {
   }
 
   if (isRegisterView) {
-    return <RegisterPage />;
+    return (
+      <>
+        <RegisterPage />
+        <ChatbotWidget />
+      </>
+    );
   }
 
   if (isCartView) {
-    return <ShoppingCartPage />;
+    return (
+      <>
+        <ShoppingCartPage />
+        <ChatbotWidget />
+      </>
+    );
   }
 
   if (isLoginView) {
-    return <LoginPage />;
+    return (
+      <>
+        <LoginPage />
+        <ChatbotWidget />
+      </>
+    );
   }
 
   if (isForgotPasswordView) {
-    return <ForgotPasswordPage />;
+    return (
+      <>
+        <ForgotPasswordPage />
+        <ChatbotWidget />
+      </>
+    );
   }
 
   if (isProductView) {

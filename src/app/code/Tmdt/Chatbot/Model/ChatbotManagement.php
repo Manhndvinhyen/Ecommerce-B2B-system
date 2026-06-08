@@ -10,10 +10,12 @@ use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory as ProductColl
 use Magento\Framework\App\CacheInterface;
 use Magento\Framework\App\DeploymentConfig;
 use Magento\Framework\App\Config\ScopeConfigInterface;
+use Magento\Framework\App\ObjectManager;
 use Magento\Framework\Encryption\EncryptorInterface;
 use Magento\Framework\UrlInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use Tmdt\Chatbot\Api\ChatbotInterface;
+use Tmdt\Search\Model\ProductRetrievalService;
 use Tmdt\Search\Model\SearchDictionary;
 
 class ChatbotManagement implements ChatbotInterface
@@ -21,6 +23,7 @@ class ChatbotManagement implements ChatbotInterface
     private const CACHE_TAG = 'tmdt_chatbot';
     private const REPLY_CACHE_TTL = 300;
     private const PRODUCT_LIMIT = 3;
+    private const PRODUCT_CANDIDATE_LIMIT = 120;
     private const KEYWORD_LIMIT = 12;
     private const SEARCH_ATTRIBUTE = 'tmdt_search_keywords';
     private const MIN_PRODUCT_SCORE = 40;
@@ -35,13 +38,18 @@ class ChatbotManagement implements ChatbotInterface
     private const VEGETABLE_TERMS = [
         'rau', 'rau xanh', 'vegetable', 'cai', 'cai xanh', 'cai ngot', 'cai thao',
         'xa lach', 'lettuce', 'salad', 'su su', 'dua leo', 'dua chuot', 'ca chua',
-        'carrot', 'ca rot', 'khoai tay', 'nam', 'cu qua', 'cu', 'qua tuoi',
+        'carrot', 'ca rot', 'khoai tay', 'nam', 'cu qua', 'rau cu', 'rau cu qua', 'cu', 'qua tuoi',
     ];
 
     private const NON_VEGETABLE_TERMS = [
         'thit', 'heo', 'lon', 'pork', 'bo', 'beef', 'ga', 'chicken', 'vit', 'duck',
         'trung', 'egg', 'ca hoi', 'ca phi le', 'ca tuoi', 'fish', 'tom', 'shrimp', 'muc', 'squid', 'cua',
         'hai san', 'seafood', 'xuc xich', 'sausage', 'ca vien', 'bo vien',
+    ];
+
+    private const VEGETABLE_NAME_TERMS = [
+        'rau', 'cu', 'cai', 'bap cai', 'sup lo', 'su su', 'ca chua', 'carrot', 'ca rot',
+        'khoai tay', 'potato', 'nam', 'dua leo', 'dua chuot', 'pepper',
     ];
 
     private string $deepSeekModel = 'deepseek-chat';
@@ -53,7 +61,8 @@ class ChatbotManagement implements ChatbotInterface
         private readonly EncryptorInterface $encryptor,
         private readonly StoreManagerInterface $storeManager,
         private readonly CacheInterface $cache,
-        private readonly SearchDictionary $searchDictionary
+        private readonly SearchDictionary $searchDictionary,
+        private readonly ?ProductRetrievalService $productRetrievalService = null
     ) {
     }
 
@@ -70,11 +79,16 @@ class ChatbotManagement implements ChatbotInterface
             ], JSON_UNESCAPED_UNICODE);
         }
 
-        $keywords = $this->buildSearchKeywords($message);
-        $products = $this->findTopProducts($keywords, self::PRODUCT_LIMIT);
+        $retriever = $this->getProductRetrievalService();
+        $keywords = $retriever !== null
+            ? $retriever->buildQueryTerms($message)
+            : $this->buildSearchKeywords($message);
+        $products = $retriever !== null
+            ? $retriever->retrieve($message, self::PRODUCT_LIMIT)
+            : $this->findTopProducts($keywords, self::PRODUCT_LIMIT);
         $productInfo = $this->buildProductInfo($products);
 
-        $replyCacheKey = 'chatbot_reply_' . md5($this->searchDictionary->normalize($message) . $productInfo);
+        $replyCacheKey = 'chatbot_reply_v4_' . md5($this->searchDictionary->normalize($message) . $productInfo);
         $cachedReply = $this->cache->load($replyCacheKey);
         if ($cachedReply !== false) {
             $reply = $cachedReply;
@@ -112,6 +126,19 @@ class ChatbotManagement implements ChatbotInterface
         return array_slice($this->searchDictionary->expand($terms), 0, self::KEYWORD_LIMIT);
     }
 
+    private function getProductRetrievalService(): ?ProductRetrievalService
+    {
+        if ($this->productRetrievalService !== null) {
+            return $this->productRetrievalService;
+        }
+
+        try {
+            return ObjectManager::getInstance()->get(ProductRetrievalService::class);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     private function findTopProducts(array $keywords, int $limit): array
     {
         $filters = [];
@@ -147,7 +174,7 @@ class ChatbotManagement implements ChatbotInterface
             Visibility::VISIBILITY_BOTH,
         ]]);
         $collection->addAttributeToFilter($filters);
-        $collection->setPageSize(30);
+        $collection->setPageSize(self::PRODUCT_CANDIDATE_LIMIT);
 
         $scored = [];
         $intent = $this->detectIntent($keywords);
@@ -180,8 +207,10 @@ class ChatbotManagement implements ChatbotInterface
         $name = $this->searchDictionary->normalize((string) $product->getName());
         $sku = $this->searchDictionary->normalize((string) $product->getSku());
         $searchKeywords = $this->searchDictionary->normalize((string) $product->getData(self::SEARCH_ATTRIBUTE));
+        $categoryText = $this->searchDictionary->normalize($this->getProductCategoryText($product));
 
         $score = 0;
+        $intent = $this->detectIntent($keywords);
         foreach ($keywords as $keyword) {
             $needle = $this->normalizeKeyword((string) $keyword);
             if (!$this->isUsefulKeyword($needle)) {
@@ -198,6 +227,19 @@ class ChatbotManagement implements ChatbotInterface
             if (str_contains($searchKeywords, $needle)) {
                 $score += 25;
             }
+            if ($categoryText !== '' && str_contains($categoryText, $needle)) {
+                $score += 55;
+            }
+        }
+
+        if ($intent === 'vegetable' && $this->categoryOrKeywordsMatchVegetable($categoryText . ' ' . $searchKeywords)) {
+            $score += 80;
+        }
+        if ($intent === 'vegetable' && $this->categoryOrKeywordsMatchVegetable($name . ' ' . $sku . ' ' . $categoryText)) {
+            $score += 120;
+        }
+        if ($intent === 'vegetable') {
+            $score += $this->scoreVegetableNameMatch($name);
         }
 
         return $score;
@@ -241,8 +283,9 @@ class ChatbotManagement implements ChatbotInterface
         $haystack = ' '
             . $this->normalizeKeyword((string) $product->getName()) . ' '
             . $this->normalizeKeyword((string) $product->getSku()) . ' '
-            . $this->normalizeKeyword((string) $product->getData(self::SEARCH_ATTRIBUTE))
+            . $this->normalizeKeyword($this->getProductCategoryText($product))
             . ' ';
+        $searchKeywords = ' ' . $this->normalizeKeyword((string) $product->getData(self::SEARCH_ATTRIBUTE)) . ' ';
 
         if ($intent === 'vegetable') {
             foreach (self::NON_VEGETABLE_TERMS as $term) {
@@ -254,7 +297,7 @@ class ChatbotManagement implements ChatbotInterface
 
             foreach (self::VEGETABLE_TERMS as $term) {
                 $needle = ' ' . $this->normalizeKeyword($term) . ' ';
-                if (str_contains($haystack, $needle)) {
+                if (str_contains($haystack, $needle) || str_contains($searchKeywords, $needle)) {
                     return true;
                 }
             }
@@ -263,6 +306,62 @@ class ChatbotManagement implements ChatbotInterface
         }
 
         return true;
+    }
+
+    private function categoryOrKeywordsMatchVegetable(string $value): bool
+    {
+        $haystack = ' ' . $this->normalizeKeyword($value) . ' ';
+        foreach (self::VEGETABLE_TERMS as $term) {
+            $needle = ' ' . $this->normalizeKeyword($term) . ' ';
+            if (str_contains($haystack, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function scoreVegetableNameMatch(string $name): int
+    {
+        $haystack = ' ' . $this->normalizeKeyword($name) . ' ';
+        foreach (self::VEGETABLE_NAME_TERMS as $term) {
+            $needle = ' ' . $this->normalizeKeyword($term) . ' ';
+            if (str_contains($haystack, $needle)) {
+                return 160;
+            }
+        }
+
+        return 0;
+    }
+
+    private function getProductCategoryText(object $product): string
+    {
+        $categoryIds = method_exists($product, 'getCategoryIds') ? (array) $product->getCategoryIds() : [];
+        if (!$categoryIds) {
+            return '';
+        }
+
+        try {
+            $categoryRepository = \Magento\Framework\App\ObjectManager::getInstance()
+                ->get(\Magento\Catalog\Api\CategoryRepositoryInterface::class);
+        } catch (\Throwable) {
+            return '';
+        }
+
+        $names = [];
+        foreach ($categoryIds as $categoryId) {
+            try {
+                $category = $categoryRepository->get((int) $categoryId);
+                $name = trim((string) $category->getName());
+            } catch (\Throwable) {
+                continue;
+            }
+            if ($name !== '' && !in_array($name, ['Root Catalog', 'Default Category', 'Products'], true)) {
+                $names[] = $name;
+            }
+        }
+
+        return implode(' ', $names);
     }
 
     private function formatProduct(object $product): array
@@ -293,7 +392,12 @@ class ChatbotManagement implements ChatbotInterface
     {
         $lines = [];
         foreach ($products as $product) {
-            $lines[] = '- ' . $product['name'] . ' | Gia: ' . $product['price'];
+            $category = trim((string) ($product['categoryLabel'] ?? ''));
+            $score = isset($product['relevanceScore']) ? ' | Diem lien quan: ' . (int) $product['relevanceScore'] : '';
+            $lines[] = '- ' . $product['name']
+                . ($category !== '' ? ' | Nhom: ' . $category : '')
+                . ' | Gia: ' . $product['price']
+                . $score;
         }
 
         return implode("\n", $lines);
@@ -315,11 +419,15 @@ class ChatbotManagement implements ChatbotInterface
         }
 
         $aiReply = $this->callDeepSeek(
-            'Ban la nhan vien tu van ban hang B2B. Khach hoi: "' . $message . "\".\n"
-            . "Top 3 san pham lien quan nhat:\n" . $productInfo . "\n"
-            . 'Hay tra loi ngan gon 2-4 cau bang tieng Viet, giai thich vi sao cac san pham nay phu hop. Khong lap lai link vi he thong hien thi the san pham rieng.',
+            'Ban la nhan vien tu van ban hang B2B. He thong da truy xuat CSDL san pham nhu mot RAG context. '
+            . 'Khach hoi: "' . $message . "\".\n"
+            . "San pham lien quan nhat lay tu CSDL:\n" . $productInfo . "\n"
+            . 'Hay tra loi ngan gon 2-4 cau bang tieng Viet, giai thich vi sao cac san pham nay phu hop. '
+            . 'Chi dua vao danh sach san pham he thong da cung cap; khong noi rang danh muc khach yeu cau khong co neu danh sach nay khong rong. '
+            . 'Neu khach hoi mot nhom hang cu the, hay uu tien dung ten nhom hang do trong cau tra loi. '
+            . 'Khong goi y san pham ngoai danh sach va khong lap lai link vi he thong hien thi the san pham rieng.',
             512,
-            0.7
+            0.35
         );
 
         if ($aiReply) {

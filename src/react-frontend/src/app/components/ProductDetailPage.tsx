@@ -447,6 +447,11 @@ export function ProductDetailPage() {
     setQuantity((prev) => Math.max(1, prev + delta));
   };
 
+  const updateQuantityFromInput = (value: string) => {
+    const parsed = Number.parseInt(value, 10);
+    setQuantity(Number.isFinite(parsed) ? Math.max(1, parsed) : 1);
+  };
+
   useEffect(() => {
     if (!product) {
       return;
@@ -691,9 +696,17 @@ export function ProductDetailPage() {
                       >
                         -
                       </button>
-                      <span className="min-w-12 text-center text-base font-semibold text-gray-800">
-                        {quantity}
-                      </span>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        inputMode="numeric"
+                        value={quantity}
+                        onChange={(event) => updateQuantityFromInput(event.target.value)}
+                        onBlur={(event) => updateQuantityFromInput(event.target.value)}
+                        className="h-10 w-16 border-x border-gray-200 text-center text-base font-semibold text-gray-800 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                        aria-label="Số lượng"
+                      />
                       <button
                         type="button"
                         onClick={() => updateQuantity(1)}

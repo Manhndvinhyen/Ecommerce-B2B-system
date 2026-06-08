@@ -4,6 +4,7 @@ import { categoryMenu, getCategoryPageLink } from '../data/categories';
 import { getDefaultWishlistList, hasWishlistAuth } from '../utils/wishlistApi';
 import { adminMenuItems } from './SidebarMenu';
 import { useCart } from '../cart/CartProvider';
+import { parseRegistrationProfilePayload } from '../utils/registrationProfile';
 
 export function Header() {
   const { cartItems } = useCart();
@@ -126,6 +127,79 @@ export function Header() {
   useEffect(() => {
     if (!customerToken) return;
 
+    const syncProfileFromRegistration = async () => {
+      try {
+        console.info('[FresoHeaderProfile] Syncing registration profile into header state.');
+        const profileRes = await fetch(`${window.location.origin}/rest/V1/tmdt-registration/profile`, {
+          method: 'GET',
+          cache: 'no-store',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${customerToken}`,
+          },
+        });
+        const payload = await profileRes.json().catch(() => null);
+        if (!profileRes.ok || !payload || typeof payload !== 'object') {
+          console.warn('[FresoHeaderProfile] Registration profile sync skipped.', {
+            status: profileRes.status,
+            payload,
+          });
+          return;
+        }
+
+        const data = parseRegistrationProfilePayload(payload);
+
+        const nextRole = String(data.role ?? '').trim().toLowerCase();
+        const storedRole = window.localStorage.getItem('freso_role') || window.sessionStorage.getItem('freso_role') || '';
+        const nextSellerAccess = parseStoredBoolFlag(String(data.seller_access ?? ''));
+        const effectiveRole = nextRole || (nextSellerAccess ? storedRole.trim().toLowerCase() : '');
+        const nextOwner = parseStoredBoolFlag(String(data.is_owner ?? ''));
+        const nextSuperAdmin = parseStoredBoolFlag(String(data.is_super_admin ?? ''));
+        const nextBranch = String(data.unit_nickname ?? data.branch_name ?? '').trim();
+        console.info('[FresoHeaderProfile] Registration profile loaded.', {
+          role: nextRole,
+          effectiveRole,
+          sellerAccess: nextSellerAccess,
+          isOwner: nextOwner,
+          isSuperAdmin: nextSuperAdmin,
+          branchName: nextBranch,
+          raw: data,
+        });
+
+        if (!effectiveRole) {
+          console.warn('[FresoHeaderProfile] Registration profile has no role; keeping existing cached role/flags.');
+          return;
+        }
+
+        if (effectiveRole) {
+          window.localStorage.setItem('freso_role', effectiveRole);
+          window.sessionStorage.setItem('freso_role', effectiveRole);
+          setUserRole(effectiveRole);
+        }
+        window.localStorage.setItem('freso_status', String(data.status ?? '').trim().toLowerCase());
+        window.sessionStorage.setItem('freso_status', String(data.status ?? '').trim().toLowerCase());
+        window.localStorage.setItem('freso_seller_access', nextSellerAccess ? '1' : '0');
+        window.sessionStorage.setItem('freso_seller_access', nextSellerAccess ? '1' : '0');
+        window.localStorage.setItem('freso_is_owner', nextOwner ? '1' : '0');
+        window.sessionStorage.setItem('freso_is_owner', nextOwner ? '1' : '0');
+        window.localStorage.setItem('freso_is_super_admin', nextSuperAdmin ? '1' : '0');
+        window.sessionStorage.setItem('freso_is_super_admin', nextSuperAdmin ? '1' : '0');
+        setCanManageBranches(effectiveRole === 'seller' && (nextOwner || nextSuperAdmin));
+
+        if (nextBranch) {
+          window.localStorage.setItem('freso_branch_name', nextBranch);
+          window.sessionStorage.setItem('freso_branch_name', nextBranch);
+          setBranchName(nextBranch);
+        }
+
+        window.dispatchEvent(new CustomEvent('freso:profile-updated'));
+      } catch (error) {
+        console.error('[FresoHeaderProfile] Registration profile sync failed.', error);
+      }
+    };
+
+    void syncProfileFromRegistration();
+
     fetch(`${window.location.origin}/rest/V1/customers/me`, {
       method: 'GET',
       headers: {
@@ -168,18 +242,26 @@ export function Header() {
         }
 
         const nextRole = roleAttr ? String(roleAttr.value ?? '').trim().toLowerCase() : userRole;
+        const currentStoredRole = (
+          window.localStorage.getItem('freso_role') ||
+          window.sessionStorage.getItem('freso_role') ||
+          ''
+        ).trim().toLowerCase();
+        const shouldKeepRegistrationRole =
+          (currentStoredRole === 'seller' || currentStoredRole === 'branch') && nextRole === 'customer';
+        const effectiveRole = shouldKeepRegistrationRole ? currentStoredRole : nextRole;
         const hasBranchManagementPrivilege =
-          nextRole === 'seller' &&
+          effectiveRole === 'seller' &&
           (parseBoolFlag(String(ownerAttr?.value ?? '')) || parseBoolFlag(String(superAdminAttr?.value ?? '')));
         setCanManageBranches(hasBranchManagementPrivilege);
 
-        if (roleAttr) {
+        if (roleAttr && !shouldKeepRegistrationRole) {
           const currentRole = window.localStorage.getItem('freso_role') || window.sessionStorage.getItem('freso_role') || '';
 
-          if (nextRole !== currentRole) {
-            window.localStorage.setItem('freso_role', nextRole);
-            window.sessionStorage.setItem('freso_role', nextRole);
-            setUserRole(nextRole);
+          if (effectiveRole !== currentRole) {
+            window.localStorage.setItem('freso_role', effectiveRole);
+            window.sessionStorage.setItem('freso_role', effectiveRole);
+            setUserRole(effectiveRole);
             window.dispatchEvent(new CustomEvent('freso:profile-updated'));
           }
         }

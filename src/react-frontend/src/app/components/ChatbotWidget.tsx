@@ -20,6 +20,7 @@ interface Message {
 // ========== CONSTANTS ==========
 const CHATBOT_API = '/rest/V1/chatbot/ask';
 const CHATBOT_STORAGE_KEY = 'freso_chatbot_session_v1';
+const CHATBOT_REQUEST_TIMEOUT_MS = 120000;
 const DEFAULT_MESSAGES: Message[] = [
   {
     sender: 'bot',
@@ -52,6 +53,37 @@ const loadChatbotSession = () => {
   } catch {
     return { messages: DEFAULT_MESSAGES, input: '', isOpen: false };
   }
+};
+
+const parseChatbotResponse = (raw: string): { reply: string; products: Product[] } => {
+  const parseValue = (value: unknown): { reply: string; products: Product[] } => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return { reply: '', products: [] };
+      }
+
+      try {
+        return parseValue(JSON.parse(trimmed));
+      } catch {
+        return { reply: trimmed, products: [] };
+      }
+    }
+
+    if (value && typeof value === 'object') {
+      const objectValue = value as Record<string, unknown>;
+      if ('message' in objectValue || 'products' in objectValue) {
+        return {
+          reply: String(objectValue.message ?? '').trim(),
+          products: Array.isArray(objectValue.products) ? (objectValue.products as Product[]) : [],
+        };
+      }
+    }
+
+    return { reply: String(value ?? '').trim(), products: [] };
+  };
+
+  return parseValue(raw);
 };
 
 // ========== HELPER: Render markdown đơn giản ==========
@@ -198,6 +230,70 @@ export const ChatbotWidget: React.FC = () => {
     setMessages(prev => [...prev, { sender: 'user', text }]);
     setInput('');
     setIsLoading(true);
+    console.info('[FresoChatbot] Sending chatbot request.', {
+      message: text,
+      endpoint: CHATBOT_API,
+      timeoutMs: CHATBOT_REQUEST_TIMEOUT_MS,
+    });
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => {
+        console.warn('[FresoChatbot] Chatbot request timed out.', {
+          message: text,
+          timeoutMs: CHATBOT_REQUEST_TIMEOUT_MS,
+        });
+        controller.abort(new DOMException('Chatbot request timed out', 'TimeoutError'));
+      }, CHATBOT_REQUEST_TIMEOUT_MS);
+      const response = await fetch(CHATBOT_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text }),
+        signal: controller.signal,
+      }).finally(() => window.clearTimeout(timeoutId));
+
+      const raw = await response.text();
+      console.info('[FresoChatbot] Chatbot API response received.', {
+        ok: response.ok,
+        status: response.status,
+        rawPreview: raw.slice(0, 500),
+      });
+      if (!response.ok) {
+        throw new Error(raw.trim() || `HTTP ${response.status}`);
+      }
+
+      const { reply, products } = parseChatbotResponse(raw);
+      console.info('[FresoChatbot] Chatbot response parsed.', {
+        hasReply: Boolean(reply),
+        productCount: products.length,
+        replyPreview: reply.slice(0, 300),
+      });
+      setMessages(prev => [
+        ...prev,
+        {
+          sender: 'bot',
+          text: reply || 'Minh chua nhan duoc noi dung tra loi tu he thong. Ban vui long thu lai sau it phut.',
+          products,
+          isError: !reply,
+        },
+      ]);
+    } catch (error) {
+      console.error('[ChatbotWidget] API Error:', error);
+      const isTimeoutError = error instanceof DOMException && (error.name === 'AbortError' || error.name === 'TimeoutError');
+      setMessages(prev => [
+        ...prev,
+        {
+          sender: 'bot',
+          text: isTimeoutError
+            ? 'He thong tu van dang phan hoi cham. Ban vui long thu lai sau it phut.'
+            : 'AI dang tam thoi khong phan hoi. Ban vui long thu lai sau.',
+          isError: true,
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+    return;
 
     try {
       const response = await fetch(CHATBOT_API, {

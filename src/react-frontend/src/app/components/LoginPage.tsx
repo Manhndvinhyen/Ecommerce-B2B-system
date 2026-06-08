@@ -30,6 +30,10 @@ type LoginApiResponse = {
   full_name?: string;
   branch_name?: string;
   role?: string;
+  status?: string;
+  seller_access?: boolean | number | string;
+  is_owner?: boolean | number | string;
+  is_super_admin?: boolean | number | string;
   redirect_url?: string;
 };
 
@@ -39,6 +43,11 @@ type SessionStartResponse = {
   email?: string;
   full_name?: string;
   branch_name?: string;
+  role?: string;
+  status?: string;
+  seller_access?: boolean | number | string;
+  is_owner?: boolean | number | string;
+  is_super_admin?: boolean | number | string;
   redirect_url?: string;
 };
 
@@ -64,6 +73,8 @@ type GoogleWindow = Window & {
   };
 };
 
+const parseBoolFlag = (value: unknown) => value === true || value === 1 || value === '1' || value === 'true';
+
 const parseLoginApiResponse = (rawData: unknown): LoginApiResponse | null => {
   if (Array.isArray(rawData)) {
     return {
@@ -75,7 +86,11 @@ const parseLoginApiResponse = (rawData: unknown): LoginApiResponse | null => {
       full_name: typeof rawData[5] === 'string' ? rawData[5] : undefined,
       branch_name: typeof rawData[6] === 'string' ? rawData[6] : undefined,
       role: typeof rawData[7] === 'string' ? rawData[7] : undefined,
-      redirect_url: typeof rawData[8] === 'string' ? rawData[8] : undefined,
+      status: typeof rawData[8] === 'string' ? rawData[8] : undefined,
+      seller_access: rawData[9] as LoginApiResponse['seller_access'],
+      is_owner: rawData[10] as LoginApiResponse['is_owner'],
+      is_super_admin: rawData[11] as LoginApiResponse['is_super_admin'],
+      redirect_url: typeof rawData[12] === 'string' ? rawData[12] : undefined,
     };
   }
 
@@ -94,6 +109,10 @@ const parseLoginApiResponse = (rawData: unknown): LoginApiResponse | null => {
     full_name: typeof data.full_name === 'string' ? data.full_name : undefined,
     branch_name: typeof data.branch_name === 'string' ? data.branch_name : undefined,
     role: typeof data.role === 'string' ? data.role : undefined,
+    status: typeof data.status === 'string' ? data.status : undefined,
+    seller_access: data.seller_access,
+    is_owner: data.is_owner,
+    is_super_admin: data.is_super_admin,
     redirect_url: typeof data.redirect_url === 'string' ? data.redirect_url : undefined,
   };
 };
@@ -107,9 +126,11 @@ const defaultFormData: LoginFormData = {
 
 const startCustomerSession = async (token: string, storage: Storage): Promise<string | null> => {
   if (!token) {
+    console.warn('[FresoLogin] Cannot start Magento session because token is empty.');
     return null;
   }
 
+  console.info('[FresoLogin] Starting Magento customer session.');
   const response = await fetch(`${window.location.origin}/tmdt/registration/session`, {
     method: 'POST',
     keepalive: true,
@@ -122,6 +143,10 @@ const startCustomerSession = async (token: string, storage: Storage): Promise<st
   const data = (await response.json().catch(() => null)) as SessionStartResponse | null;
 
   if (!response.ok || !data?.success) {
+    console.error('[FresoLogin] Magento customer session start failed.', {
+      status: response.status,
+      data,
+    });
     return null;
   }
 
@@ -141,7 +166,18 @@ const startCustomerSession = async (token: string, storage: Storage): Promise<st
     persistAuthValue(storage, 'freso_branch_name', normalizedBranchName);
   }
 
+  persistAuthValue(storage, 'freso_role', data.role);
+  persistAuthValue(storage, 'freso_status', data.status);
+  storage.setItem('freso_seller_access', parseBoolFlag(data.seller_access) ? '1' : '0');
+  storage.setItem('freso_is_owner', parseBoolFlag(data.is_owner) ? '1' : '0');
+  storage.setItem('freso_is_super_admin', parseBoolFlag(data.is_super_admin) ? '1' : '0');
+
   const redirectUrl = typeof data.redirect_url === 'string' ? data.redirect_url.trim() : '';
+  console.info('[FresoLogin] Magento customer session started.', {
+    role: (data as SessionStartResponse & { role?: string }).role,
+    status: (data as SessionStartResponse & { status?: string }).status,
+    redirectUrl,
+  });
   return redirectUrl || null;
 };
 
@@ -271,6 +307,15 @@ export function LoginPage() {
       .then(async (response) => {
         const rawData = await response.json().catch(() => null);
         const data = parseLoginApiResponse(rawData);
+        console.info('[FresoLogin] Password login API response parsed.', {
+          ok: response.ok,
+          success: data?.success,
+          customerId: data?.customer_id,
+          role: data?.role,
+          status: data?.status,
+          redirectUrl: data?.redirect_url,
+          rawData,
+        });
 
         if (!response.ok || data?.success === false || !data?.token) {
           throw new Error(data?.message || 'Thông tin đăng nhập không hợp lệ.');
@@ -295,6 +340,10 @@ export function LoginPage() {
         }
         const customerToken = data.token;
         const isMagentoTokenValid = await verifyMagentoCustomerToken(customerToken);
+        console.info('[FresoLogin] Magento customer token verification result.', {
+          isMagentoTokenValid,
+          tokenPreview: customerToken.slice(0, 8),
+        });
         persistAuthDebug({
           flow: 'password',
           hasCustomToken: Boolean(data.token),
@@ -310,12 +359,22 @@ export function LoginPage() {
           fullName: data.full_name,
           branchName: data.branch_name,
           role: data.role,
+          status: data.status,
+          sellerAccess: parseBoolFlag(data.seller_access),
+          isOwner: parseBoolFlag(data.is_owner),
+          isSuperAdmin: parseBoolFlag(data.is_super_admin),
         });
 
         const sessionRedirect = await startCustomerSession(data.token, primaryStorage);
+        console.info('[FresoLogin] Redirecting after password login.', {
+          sessionRedirect,
+          apiRedirect: data.redirect_url,
+          finalRedirect: sessionRedirect || getPostLoginRedirect(data.redirect_url),
+        });
         window.location.href = sessionRedirect || getPostLoginRedirect(data.redirect_url);
       })
       .catch((error: unknown) => {
+        console.error('[FresoLogin] Password login failed.', error);
         setSubmitError(error instanceof Error ? error.message : 'Không thể đăng nhập vào hệ thống.');
       })
       .finally(() => {
@@ -355,6 +414,15 @@ export function LoginPage() {
       .then(async (responseData) => {
         const rawData = await responseData.json().catch(() => null);
         const data = parseLoginApiResponse(rawData);
+        console.info('[FresoLogin] Google login API response parsed.', {
+          ok: responseData.ok,
+          success: data?.success,
+          customerId: data?.customer_id,
+          role: data?.role,
+          status: data?.status,
+          redirectUrl: data?.redirect_url,
+          rawData,
+        });
 
         if (!responseData.ok || data?.success === false || !data?.token) {
           throw new Error(data?.message || 'Đăng nhập Google không thành công.');
@@ -363,6 +431,10 @@ export function LoginPage() {
         const primaryStorage = formData.rememberMe ? window.localStorage : window.sessionStorage;
         const secondaryStorage = formData.rememberMe ? window.sessionStorage : window.localStorage;
         const isMagentoTokenValid = await verifyMagentoCustomerToken(data.token);
+        console.info('[FresoLogin] Google Magento customer token verification result.', {
+          isMagentoTokenValid,
+          tokenPreview: data.token.slice(0, 8),
+        });
         persistAuthDebug({
           flow: 'google',
           hasCustomToken: Boolean(data.token),
@@ -378,9 +450,18 @@ export function LoginPage() {
           fullName: data.full_name,
           branchName: data.branch_name,
           role: data.role,
+          status: data.status,
+          sellerAccess: parseBoolFlag(data.seller_access),
+          isOwner: parseBoolFlag(data.is_owner),
+          isSuperAdmin: parseBoolFlag(data.is_super_admin),
         });
 
         const sessionRedirect = await startCustomerSession(data.token, primaryStorage);
+        console.info('[FresoLogin] Redirecting after Google login.', {
+          sessionRedirect,
+          apiRedirect: data.redirect_url,
+          finalRedirect: sessionRedirect || getPostLoginRedirect(data.redirect_url),
+        });
         window.location.href = sessionRedirect || getPostLoginRedirect(data.redirect_url);
       })
       .catch((error: unknown) => {

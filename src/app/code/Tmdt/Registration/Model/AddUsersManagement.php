@@ -39,9 +39,6 @@ class AddUsersManagement implements AddUsersInterface
     {
         $ownerId = $this->getCustomerIdFromRequest();
         $owner = $this->customerRepository->getById($ownerId);
-        if (!$this->isOwnerCustomer($owner)) {
-            throw new AuthorizationException(__('Ban khong co quyen tao co so.'));
-        }
 
         $bodyParams = $this->request->getBodyParams();
         $payload = is_array($bodyParams) && isset($bodyParams['payload']) ? $bodyParams['payload'] : $bodyParams;
@@ -78,7 +75,10 @@ class AddUsersManagement implements AddUsersInterface
 
         $ownerRole = strtolower(trim((string) ($ownerRegistration['role'] ?? '')));
         $ownerStatus = strtolower(trim((string) ($ownerRegistration['status'] ?? '')));
-        if ($ownerRole !== 'seller' || $ownerStatus !== 'approved') {
+        if ((!$this->isOwnerCustomer($owner) && !($ownerRole === 'seller' && $ownerStatus === 'approved'))
+            || $ownerRole !== 'seller'
+            || $ownerStatus !== 'approved'
+        ) {
             throw new AuthorizationException(__('Chi chu doanh nghiep da duyet moi co quyen tao co so.'));
         }
 

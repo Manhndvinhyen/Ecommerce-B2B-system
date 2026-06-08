@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ArrowRight,
   Building2,
@@ -15,6 +15,7 @@ import {
 import { AuthPageFooter } from './auth/AuthPageFooter';
 import { AuthPageHeader } from './auth/AuthPageHeader';
 import { persistAuthSession } from '../utils/authSession';
+import { parseRegistrationProfilePayload } from '../utils/registrationProfile';
 
 type FormDataState = {
   taxCode: string;
@@ -81,7 +82,93 @@ export function RegisterPage() {
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCheckingSellerProfile, setIsCheckingSellerProfile] = useState(isLoggedIn && isSeller);
   const [submitError, setSubmitError] = useState('');
+
+  useEffect(() => {
+    if (!isLoggedIn || !isSeller) {
+      setIsCheckingSellerProfile(false);
+      return;
+    }
+
+    let cancelled = false;
+    const token = window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
+    if (!token) {
+      console.warn('[FresoSellerRegister] Logged-in seller upgrade route opened without a customer token.');
+      setIsCheckingSellerProfile(false);
+      return;
+    }
+
+    const syncSellerProfile = async () => {
+      try {
+        console.info('[FresoSellerRegister] Checking existing seller profile before showing upgrade form.');
+        const response = await fetch(`${window.location.origin}/rest/V1/tmdt-registration/profile`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Cache-Control': 'no-store',
+          },
+        });
+
+        if (!response.ok) {
+          console.warn('[FresoSellerRegister] Profile check failed, keeping seller registration form visible.', {
+            status: response.status,
+          });
+          return;
+        }
+
+        const payload = await response.json().catch(() => null);
+        const profile = parseRegistrationProfilePayload(payload);
+        const parseFlag = (value: unknown) => value === true || value === 1 || value === '1';
+        const role = String(profile.role ?? '').trim().toLowerCase();
+        const status = String(profile.status ?? '').trim().toLowerCase();
+        const isOwner = parseFlag(profile.is_owner ?? profile.isOwner);
+        const isSuperAdmin = parseFlag(profile.is_super_admin ?? profile.isSuperAdmin);
+        const sellerAccess = parseFlag(profile.seller_access ?? profile.sellerAccess);
+        const approvedSeller = role === 'seller' && status === 'approved';
+        const approvedBranch = role === 'branch' && (status === 'approved' || status === 'active');
+        console.info('[FresoSellerRegister] Existing profile check result.', {
+          role,
+          status,
+          sellerAccess,
+          isOwner,
+          isSuperAdmin,
+          approvedSeller,
+          approvedBranch,
+          raw: profile,
+        });
+
+        if (sellerAccess || approvedSeller || approvedBranch) {
+          const canManageBranches = approvedSeller && (isOwner || isSuperAdmin);
+          const effectiveRole = role || (window.localStorage.getItem('freso_role') || window.sessionStorage.getItem('freso_role') || '').trim().toLowerCase();
+          window.localStorage.setItem('freso_role', effectiveRole);
+          window.sessionStorage.setItem('freso_role', effectiveRole);
+          window.localStorage.setItem('freso_status', status);
+          window.sessionStorage.setItem('freso_status', status);
+          window.localStorage.setItem('freso_seller_access', '1');
+          window.sessionStorage.setItem('freso_seller_access', '1');
+          window.localStorage.setItem('freso_is_owner', canManageBranches ? '1' : '0');
+          window.sessionStorage.setItem('freso_is_owner', canManageBranches ? '1' : '0');
+          window.localStorage.setItem('freso_is_super_admin', isSuperAdmin ? '1' : '0');
+          window.sessionStorage.setItem('freso_is_super_admin', isSuperAdmin ? '1' : '0');
+          window.dispatchEvent(new CustomEvent('freso:profile-updated'));
+          console.info('[FresoSellerRegister] Approved seller/branch detected, redirecting to seller dashboard.');
+          window.location.replace('/react/index.html?view=seller-dashboard');
+        }
+      } catch (error) {
+        console.error('[FresoSellerRegister] Unexpected profile check error.', error);
+      } finally {
+        if (!cancelled) {
+          setIsCheckingSellerProfile(false);
+        }
+      }
+    };
+
+    void syncSellerProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn, isSeller]);
 
   const navigateHome = () => {
     const params = new URLSearchParams(window.location.search);
@@ -426,6 +513,20 @@ export function RegisterPage() {
           >
             {isLoggedIn && isSeller ? 'Về tài khoản của tôi' : 'Quay lại trang chủ'}
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isCheckingSellerProfile) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-white px-6 text-center">
+        <div className="max-w-md">
+          <div className="mx-auto mb-5 size-12 animate-spin rounded-full border-4 border-green-100 border-t-[#00b14f]" />
+          <h1 className="mb-2 text-2xl font-extrabold text-[#004d39]">Dang kiem tra quyen nguoi ban</h1>
+          <p className="text-sm font-medium text-gray-600">
+            He thong dang doc ho so kinh doanh cua tai khoan nay. Vui long doi trong giay lat.
+          </p>
         </div>
       </div>
     );

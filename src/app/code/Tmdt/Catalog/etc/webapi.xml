@@ -4,25 +4,25 @@
     <route url="/V1/tmdt-catalog/product" method="POST">
         <service class="Tmdt\Catalog\Api\ProductManagementInterface" method="createProduct"/>
         <resources>
-            <resource ref="self"/>
+            <resource ref="anonymous"/>
         </resources>
     </route>
     <route url="/V1/tmdt-catalog/product/:sku" method="PUT">
         <service class="Tmdt\Catalog\Api\ProductManagementInterface" method="updateProduct"/>
         <resources>
-            <resource ref="self"/>
+            <resource ref="anonymous"/>
         </resources>
     </route>
     <route url="/V1/tmdt-catalog/product/:sku" method="DELETE">
         <service class="Tmdt\Catalog\Api\ProductManagementInterface" method="deleteProduct"/>
         <resources>
-            <resource ref="self"/>
+            <resource ref="anonymous"/>
         </resources>
     </route>
     <route url="/V1/tmdt-catalog/products" method="GET">
         <service class="Tmdt\Catalog\Api\ProductManagementInterface" method="getSellerProducts"/>
         <resources>
-            <resource ref="self"/>
+            <resource ref="anonymous"/>
         </resources>
     </route>
 
@@ -63,26 +63,26 @@
     <route url="/V1/tmdt-catalog/notifications" method="GET">
         <service class="Tmdt\Catalog\Api\ProductManagementInterface" method="getSellerNotifications"/>
         <resources>
-            <resource ref="self"/>
+            <resource ref="anonymous"/>
         </resources>
     </route>
     <route url="/V1/tmdt-catalog/notifications/read" method="POST">
         <service class="Tmdt\Catalog\Api\ProductManagementInterface" method="markNotificationsAsRead"/>
         <resources>
-            <resource ref="self"/>
+            <resource ref="anonymous"/>
         </resources>
     </route>
     <!-- Seller Revenue and Analytics Stats -->
     <route url="/V1/tmdt-catalog/revenue" method="GET">
         <service class="Tmdt\Catalog\Api\ProductManagementInterface" method="getSellerRevenueStats"/>
         <resources>
-            <resource ref="self"/>
+            <resource ref="anonymous"/>
         </resources>
     </route>
     <route url="/V1/tmdt-catalog/orders" method="GET">
         <service class="Tmdt\Catalog\Api\ProductManagementInterface" method="getSellerOrders"/>
         <resources>
-            <resource ref="self"/>
+            <resource ref="anonymous"/>
         </resources>
     </route>
     <!-- RFQ Marketplace -->

@@ -11,12 +11,26 @@ class OrderManagement implements OrderManagementInterface
     private const TABLE = 'tmdt_orders';
     private const HOLD_MINUTES = 15;
 
+    private readonly ResourceConnection $resourceConnection;
+    private readonly \Tmdt\Catalog\Model\OrderProcessor $orderProcessor;
+    private readonly \Magento\Customer\Model\Session $customerSession;
+    private readonly \Magento\Framework\App\RequestInterface $request;
+
     public function __construct(
-        private readonly ResourceConnection $resourceConnection,
-        private readonly \Tmdt\Catalog\Model\OrderProcessor $orderProcessor,
-        private readonly \Magento\Customer\Model\Session $customerSession,
-        private readonly \Magento\Framework\App\RequestInterface $request
-    ) {}
+        ResourceConnection $resourceConnection,
+        ?\Tmdt\Catalog\Model\OrderProcessor $orderProcessor = null,
+        ?\Magento\Customer\Model\Session $customerSession = null,
+        ?\Magento\Framework\App\RequestInterface $request = null
+    ) {
+        $objectManager = \Magento\Framework\App\ObjectManager::getInstance();
+        $this->resourceConnection = $resourceConnection;
+        $this->orderProcessor = $orderProcessor
+            ?: $objectManager->get(\Tmdt\Catalog\Model\OrderProcessor::class);
+        $this->customerSession = $customerSession
+            ?: $objectManager->get(\Magento\Customer\Model\Session::class);
+        $this->request = $request
+            ?: $objectManager->get(\Magento\Framework\App\RequestInterface::class);
+    }
 
     /**
      * Generate unique order code: DHxxxxxx (6 hex chars)

@@ -35,6 +35,7 @@ class ProfileViewManagement implements ProfileViewInterface
         $customerId = $this->getCustomerIdFromRequest();
         $isOwner = false;
         $isSuperAdmin = false;
+        $customer = null;
 
         $connection = $this->resourceConnection->getConnection();
         $tableName = $this->resourceConnection->getTableName(self::TABLE_NAME);
@@ -80,6 +81,28 @@ class ProfileViewManagement implements ProfileViewInterface
             $registrationRow['district'] ?? '',
             $registrationRow['province'] ?? '',
         ]);
+        $registrationRole = strtolower(trim((string) ($registrationRow['role'] ?? '')));
+        $registrationStatus = strtolower(trim((string) ($registrationRow['status'] ?? '')));
+        if ($role === '') {
+            $role = $registrationRole;
+        }
+        $sellerAccess = $this->hasSellerAccess($registrationRole, $registrationStatus);
+        if ($registrationRole === 'seller' && $registrationStatus === 'approved') {
+            $role = 'seller';
+            $isOwner = true;
+            if ($customer) {
+                try {
+                    $customer->setCustomAttribute('tmdt_role', 'seller');
+                    $customer->setCustomAttribute('is_owner', '1');
+                    $customer->setCustomAttribute('is_super_admin', $isSuperAdmin ? '1' : '0');
+                    $this->customerRepository->save($customer);
+                } catch (\Throwable) {
+                    // Profile response still uses the approved registration row as the source of truth.
+                }
+            }
+        } elseif ($registrationRole === 'branch' && ($registrationStatus === 'approved' || $registrationStatus === 'active')) {
+            $role = 'branch';
+        }
 
         return [
             'success' => true,
@@ -104,9 +127,16 @@ class ProfileViewManagement implements ProfileViewInterface
                 'license_name' => $licenseName,
                 'is_owner' => $isOwner ? 1 : 0,
                 'is_super_admin' => $isSuperAdmin ? 1 : 0,
+                'seller_access' => $sellerAccess,
                 'role' => $role,
             ],
         ];
+    }
+
+    private function hasSellerAccess(string $role, string $status): bool
+    {
+        return ($role === 'seller' && $status === 'approved')
+            || ($role === 'branch' && ($status === 'approved' || $status === 'active'));
     }
 
     private function hydrateFilesWithUrls(array $files): array

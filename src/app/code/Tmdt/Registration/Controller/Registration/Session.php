@@ -81,7 +81,12 @@ class Session extends Action implements CsrfAwareActionInterface
             'email' => (string) ($registrationRow['email'] ?? ''),
             'full_name' => (string) ($registrationRow['full_name'] ?? ''),
             'branch_name' => (string) ($registrationRow['unit_nickname'] ?? ''),
-            'redirect_url' => $this->extractRedirectUrl() ?: '/react/index.html',
+            'role' => (string) ($registrationRow['role'] ?? ''),
+            'status' => (string) ($registrationRow['status'] ?? ''),
+            'seller_access' => $this->hasSellerAccess($registrationRow),
+            'is_owner' => $this->isOwnerRegistration($registrationRow) ? 1 : 0,
+            'is_super_admin' => 0,
+            'redirect_url' => $this->extractRedirectUrl() ?: $this->getPostLoginRedirect($registrationRow),
         ]);
     }
 
@@ -137,11 +142,37 @@ class Session extends Action implements CsrfAwareActionInterface
 
         $row = $connection->fetchRow(
             $connection->select()
-                ->from($tableName, ['customer_id', 'email', 'full_name', 'unit_nickname'])
+                ->from($tableName, ['customer_id', 'email', 'full_name', 'unit_nickname', 'status', 'role'])
                 ->where('customer_id = ?', $customerId)
                 ->limit(1)
         );
 
         return is_array($row) ? $row : null;
+    }
+
+    private function getPostLoginRedirect(array $registrationRow): string
+    {
+        if ($this->hasSellerAccess($registrationRow)) {
+            return '/react/index.html?view=seller-dashboard';
+        }
+
+        return '/react/index.html?view=dashboard';
+    }
+
+    private function hasSellerAccess(array $registrationRow): bool
+    {
+        $role = strtolower(trim((string) ($registrationRow['role'] ?? '')));
+        $status = strtolower(trim((string) ($registrationRow['status'] ?? '')));
+
+        return ($role === 'seller' && $status === 'approved')
+            || ($role === 'branch' && ($status === 'approved' || $status === 'active'));
+    }
+
+    private function isOwnerRegistration(array $registrationRow): bool
+    {
+        $role = strtolower(trim((string) ($registrationRow['role'] ?? '')));
+        $status = strtolower(trim((string) ($registrationRow['status'] ?? '')));
+
+        return $role === 'seller' && $status === 'approved';
     }
 }

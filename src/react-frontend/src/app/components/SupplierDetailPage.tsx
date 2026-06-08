@@ -16,6 +16,7 @@ import {
 import { renderSupplierLogo } from './FeaturedSuppliers';
 import { getMockSupplierForProduct } from '../data/mockSuppliers';
 import { toCurrencyTextFromNumber, useCart, toCurrencyTextFromLooseValue, toUnitPriceFromLooseValue, parsePrice } from '../cart/CartProvider';
+import { inferCategoryFromSku, toQuerySlug, categoryMenu } from '../data/categories';
 
 type ProductItem = {
   id: string | number;
@@ -65,16 +66,34 @@ const fallbackImageByCategory: Record<string, string> = {
   'Tiện ích bếp': 'https://images.unsplash.com/photo-1556910103-1c02745aae4d?w=500&h=500&fit=crop'
 };
 
-const inferCategoryFromSku = (sku: string) => {
-  const normalized = String(sku || '').toLowerCase();
-  if (normalized.startsWith('veg-') || normalized.startsWith('rau-')) return 'Rau củ quả';
-  if (normalized.startsWith('frt-') || normalized.startsWith('trai-')) return 'Trái cây';
-  if (normalized.startsWith('meat-') || normalized.startsWith('thit-') || normalized.includes('heo') || normalized.includes('bo') || normalized.includes('ga')) return 'Thực phẩm tươi sống';
-  if (normalized.startsWith('sea-') || normalized.startsWith('hai-') || normalized.includes('tom') || normalized.includes('ca-') || normalized.includes('muc')) return 'Thuỷ hải sản';
-  if (normalized.startsWith('fzn-') || normalized.startsWith('dong-')) return 'Thực phẩm đông lạnh';
-  if (normalized.startsWith('dry-') || normalized.startsWith('kho-')) return 'Thực phẩm khô';
-  if (normalized.startsWith('kit-') || normalized.startsWith('tien-')) return 'Tiện ích bếp';
-  return 'Rau củ quả'; // default
+const resolveMainCategory = (categoryName: string, sku: string): string => {
+  if (!categoryName) {
+    const inferred = inferCategoryFromSku(sku);
+    return inferred?.category || 'Rau củ quả';
+  }
+  
+  const cleanName = categoryName.trim().toLowerCase();
+  
+  // 1. Check if it is already a main category
+  for (const group of categoryMenu) {
+    if (group.name.toLowerCase() === cleanName) {
+      return group.name;
+    }
+  }
+  
+  // 2. Check if it matches any subcategory
+  for (const group of categoryMenu) {
+    const matched = group.subcategories.some(
+      (sub) => sub.toLowerCase() === cleanName || toQuerySlug(sub) === toQuerySlug(categoryName)
+    );
+    if (matched) {
+      return group.name;
+    }
+  }
+  
+  // 3. Fallback to SKU inference
+  const inferred = inferCategoryFromSku(sku);
+  return inferred?.category || 'Rau củ quả';
 };
 
 const inferUnitByCategory = (category: string) => {
@@ -197,7 +216,9 @@ export function SupplierDetailPage({ supplierId, supplierName }: SupplierDetailP
 
         // Map Magento items
         const mappedProducts: ProductItem[] = items.map((item) => {
-          const productCategory = inferCategoryFromSku(item.sku);
+          const actualCategory = item.categories?.find((cat) => cat?.name && cat.id !== 2 && cat.id !== 1)?.name 
+            || item.categories?.find((cat) => cat?.name)?.name;
+          const productCategory = resolveMainCategory(actualCategory || '', item.sku);
           const localMatch = customLocalProducts.find(
             (p) => String(p.sku).trim().toLowerCase() === item.sku.trim().toLowerCase()
           );
@@ -232,7 +253,8 @@ export function SupplierDetailPage({ supplierId, supplierName }: SupplierDetailP
           const specialPrice = parsePrice(p.special_price ?? p.specialPrice);
           const normalPrice = parsePrice(p.price ?? p.priceValue);
           const priceValue = (specialPrice && specialPrice > 0) ? specialPrice : normalPrice;
-          const supplier = getMockSupplierForProduct(p.sku, p.categoryLabel);
+          const productCategory = resolveMainCategory(p.categoryLabel || '', p.sku);
+          const supplier = getMockSupplierForProduct(p.sku, productCategory);
           return {
             id: p.id || p.sku,
             sku: p.sku,
@@ -240,8 +262,8 @@ export function SupplierDetailPage({ supplierId, supplierName }: SupplierDetailP
             price: formatPrice(priceValue),
             priceValue,
             unit: p.unit || 'kg',
-            image: p.image || fallbackImageByCategory[p.categoryLabel] || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop',
-            categoryLabel: p.categoryLabel,
+            image: p.image || fallbackImageByCategory[productCategory] || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop',
+            categoryLabel: productCategory,
             supplierName: p.store_name || supplier.name,
             supplierRegion: supplier.region
           };

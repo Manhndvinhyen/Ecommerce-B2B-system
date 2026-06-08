@@ -11,13 +11,11 @@ SKIP_LIVE_CHECK="${SKIP_LIVE_CHECK:-0}"
 
 echo "🚀 Bắt đầu build React App..."
 
-cd "$REACT_DIR" || { echo "❌ Không tìm thấy thư mục src/react-frontend"; exit 1; }
-
-echo "📦 Cài đặt thư viện NPM..."
-if [ -f "package-lock.json" ]; then
-  npm ci --no-audit --no-fund
+echo "📦 Cài đặt thư viện NPM trong Docker..."
+if [ -f "$REACT_DIR/package-lock.json" ]; then
+  "$PROJECT_ROOT/bin/cli" sh -c "cd react-frontend && npm ci --no-audit --no-fund"
 else
-  npm install --no-audit --no-fund
+  "$PROJECT_ROOT/bin/cli" sh -c "cd react-frontend && npm install --no-audit --no-fund"
 fi
 
 HOST_UID="$(id -u)"
@@ -31,34 +29,16 @@ if [[ -x "$PROJECT_ROOT/bin/root" ]]; then
   ) || true
 fi
 
-if [ ! -f ".env" ]; then
+if [ ! -f "$REACT_DIR/.env" ]; then
     echo "⚠️ Không tìm thấy file .env, đang tự động tạo từ .env.example..."
-    cp .env.example .env
+    cp "$REACT_DIR/.env.example" "$REACT_DIR/.env"
 fi
 
-if [[ -z "${VITE_GOOGLE_CLIENT_ID:-}" && -f "$CUSTOM_ENV_FILE" ]]; then
-  echo "🔐 Nạp biến môi trường local từ env/custom.env (không commit)"
-  # shellcheck disable=SC1090
-  set -a
-  source "$CUSTOM_ENV_FILE"
-  set +a
-fi
+echo "🛠️ Build ứng dụng React trong Docker..."
+"$PROJECT_ROOT/bin/cli" sh -c "cd react-frontend && npm run build"
 
-if [[ -z "${VITE_GOOGLE_CLIENT_ID:-}" && -n "${GOOGLE_OAUTH_CLIENT_ID:-}" ]]; then
-  export VITE_GOOGLE_CLIENT_ID="$GOOGLE_OAUTH_CLIENT_ID"
-fi
-
-if [[ -z "${VITE_GOOGLE_CLIENT_ID:-}" ]]; then
-  echo "⚠️ Thiếu VITE_GOOGLE_CLIENT_ID (hoặc GOOGLE_OAUTH_CLIENT_ID)."
-  echo "➡️ Vẫn tiếp tục build, nhưng nút đăng nhập Google sẽ bị tắt trên frontend."
-  echo "👉 Khuyến nghị: lưu GOOGLE_OAUTH_CLIENT_ID trong env/custom.env (đã gitignore) hoặc set secret CI/CD."
-fi
-
-echo "🛠️ Build ứng dụng React..."
-npm run build
-
-echo "🔁 Đồng bộ build vào Magento theme (react-home)..."
-node scripts/magento-sync.mjs
+echo "🔁 Đồng bộ build vào Magento theme (react-home) trong Docker..."
+"$PROJECT_ROOT/bin/cli" sh -c "cd react-frontend && node scripts/magento-sync.mjs"
 
 LOCAL_SCRIPT=$(sed -n 's/.*src="\(\/react\/assets\/index-[^"]*\.js\)".*/\1/p' "$PROJECT_ROOT/src/pub/react/index.html" | head -1)
 echo "   - Local bundle: ${LOCAL_SCRIPT:-N/A}"

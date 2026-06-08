@@ -1244,7 +1244,7 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
                           toggleWishlistItem(product);
                         }
                       }}
-                      className="absolute top-2 right-2 bg-white rounded-full p-2 hover:bg-red-50 transition-colors shadow-sm"
+                      className="absolute top-2 right-2 bg-white rounded-full p-2 hover:bg-red-50 transition-colors shadow-sm z-10"
                       aria-label={`Yêu thích ${product.name}`}
                     >
                       <Heart

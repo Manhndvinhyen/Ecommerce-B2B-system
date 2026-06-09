@@ -4,7 +4,7 @@ const testimonials = [
   {
     name: 'Nguyễn Thị Lan',
     role: 'Khách hàng thân thiết',
-    content: 'Thực phẩm luôn tươi ngon, giao hàng đúng giờ. Tôi rất hài lòng với chất lượng dịch vụ và sẽ tiếp tục ủng hộ Freso.',
+    content: 'Thực phẩm luôn tươi ngon, giao hàng đúng giờ. Tôi rất hài lòng với chất lượng dịch vụ và sẽ tiếp tục ủng hộ Organica.',
     rating: 5,
     avatar: 'https://i.pravatar.cc/150?img=1'
   },
@@ -33,7 +33,7 @@ export function Testimonials() {
             Khách hàng nói gì về chúng tôi
           </h2>
           <p className="text-gray-600 max-w-2xl mx-auto">
-            Hàng ngàn khách hàng hài lòng đã tin tưởng và lựa chọn Freso
+            Hàng ngàn khách hàng hài lòng đã tin tưởng và lựa chọn Organica
           </p>
         </div>
 

@@ -1,5 +1,5 @@
 const SITE_ORIGIN = 'https://organica.click';
-const SITE_NAME = 'Freso';
+const SITE_NAME = 'Organica';
 const DEFAULT_IMAGE = `${SITE_ORIGIN}/react/og-image.jpg`;
 
 type MetaSelector = {

@@ -21,7 +21,7 @@ export function SellerProfile() {
             </span>
             <h2 className="text-xl font-black tracking-tight">Hồ sơ đối tác người bán</h2>
             <p className="text-xs text-white/80 font-medium">
-              Quản lý thông tin tài khoản cá nhân và cấu hình pháp lý doanh nghiệp sỉ của bạn trên Freso
+              Quản lý thông tin tài khoản cá nhân và cấu hình pháp lý doanh nghiệp sỉ của bạn trên Organica
             </p>
           </div>
 

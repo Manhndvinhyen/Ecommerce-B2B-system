@@ -2,7 +2,7 @@ export function AuthPageHeader() {
   return (
     <header className="w-full flex items-center justify-between px-6 py-4 lg:px-12 border-b border-gray-100 bg-white sticky top-0 z-50 shadow-sm">
       <div className="flex items-center">
-        <span className="text-3xl font-extrabold text-[#00b14f] tracking-tight">Freso</span>
+        <span className="text-3xl font-extrabold text-[#00b14f] tracking-tight">Organica</span>
       </div>
       <div className="flex items-center gap-6">
         <a

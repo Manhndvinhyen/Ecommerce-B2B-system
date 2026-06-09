@@ -485,7 +485,7 @@ export function Header() {
               {/* Logo */}
               <div className="flex items-center gap-8">
                 <a href={reactHomePath} className="text-2xl font-bold text-green-600">
-                  Freso
+                  Organica
                 </a>
 
                 {/* Navigation */}
@@ -726,7 +726,7 @@ export function Header() {
             {/* Logo + Navigation */}
             <div className="flex items-center gap-8">
               <a href={reactHomePath} className="text-2xl font-bold text-green-600">
-                Freso
+                Organica
               </a>
 
               <nav className="hidden lg:flex items-center gap-6">

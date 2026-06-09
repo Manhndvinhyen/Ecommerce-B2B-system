@@ -495,7 +495,7 @@ export function RegisterPage() {
               'Hồ sơ kinh doanh của bạn đã được gửi thành công. Bạn có thể dùng tài khoản mua hàng như bình thường và chờ admin duyệt trước khi vào kênh người bán.'
             ) : (
               <>
-                Cảm ơn doanh nghiệp <span className="font-bold text-[#00b14f]">{formData.businessName}</span> đã tin tưởng Freso.
+                Cảm ơn doanh nghiệp <span className="font-bold text-[#00b14f]">{formData.businessName}</span> đã tin tưởng Organica.
                 Chúng tôi sẽ sớm liên hệ để xác thực thông tin.
               </>
             )}
@@ -561,7 +561,7 @@ export function RegisterPage() {
             </h1>
             <p className="text-[#006a4e]/70 text-[15px] lg:text-[16px] mb-12 font-medium leading-relaxed italic">
               {isLoggedIn && isSeller
-                ? 'Nâng cấp cửa hàng của bạn để bắt đầu phân phối nông sản tươi sạch trên sàn Freso.'
+                ? 'Nâng cấp cửa hàng của bạn để bắt đầu phân phối nông sản tươi sạch trên sàn Organica.'
                 : currentStep === 1
                   ? 'Nông sản tươi sạch từ thảo nguyên mướt xanh, kết nối trực tiếp đến đơn vị của bạn.'
                   : 'Hãy thiết lập thông tin bảo mật để bắt đầu quản lý nguồn cung nông sản sạch của bạn.'}

@@ -350,7 +350,7 @@ export function WishlistPage() {
                   Bạn chưa có sản phẩm yêu thích nào trong danh sách "{activeList?.name ?? ''}"
                 </h3>
                 <p className="text-sm text-gray-500 max-w-md mb-6 leading-relaxed">
-                  Hãy khám phá ngay những sản phẩm mới nhất của Freso và thêm ngay vào danh sách yêu thích nhé!
+                  Hãy khám phá ngay những sản phẩm mới nhất của Organica và thêm ngay vào danh sách yêu thích nhé!
                 </p>
                 <button
                   type="button"

@@ -380,7 +380,7 @@ export const GeneralInfo = () => {
                 Giấy phép kinh doanh
               </h2>
               <p className="text-xs text-gray-400 leading-relaxed mb-6">
-                Hồ sơ pháp lý đã được duyệt xác thực bởi hệ thống Freso.
+                Hồ sơ pháp lý đã được duyệt xác thực bởi hệ thống Organica.
               </p>
               
               <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center gap-3">

@@ -449,7 +449,7 @@ export function PurchaseHistoryContent({
                             <div className="flex items-center gap-2">
                               <Store className="size-4.5 text-green-600 shrink-0" />
                               <span className="font-extrabold text-slate-800 text-sm tracking-tight hover:text-green-700 transition-colors">
-                                {order.supplier || 'Freso Supplier'}
+                                {order.supplier || 'Organica Supplier'}
                               </span>
                             </div>
                             <div className="flex items-center gap-2">

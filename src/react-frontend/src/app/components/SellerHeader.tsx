@@ -387,7 +387,7 @@ export function SellerHeader() {
         <div className="flex items-center gap-4">
           <a href={`${reactHomePath}?view=seller-dashboard`} className="flex items-center gap-2 group">
             <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#00b14f] to-emerald-500 tracking-tight group-hover:opacity-90 transition-opacity">
-              Freso
+              Organica
             </span>
             <span className="text-gray-300 font-light text-xl">|</span>
             <span className="text-gray-800 text-sm md:text-base font-extrabold tracking-tight bg-gray-50 px-2.5 py-1 rounded-lg border border-gray-100 shadow-sm whitespace-nowrap">

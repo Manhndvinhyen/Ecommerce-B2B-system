@@ -6,7 +6,7 @@ export function AuthPageFooter() {
       <div className="max-w-[1440px] mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-12">
         <div className="space-y-6">
           <div className="flex items-center">
-            <span className="text-2xl font-extrabold text-[#00b14f]">Freso</span>
+            <span className="text-2xl font-extrabold text-[#00b14f]">Organica</span>
           </div>
           <p className="text-[14px] text-gray-500 leading-relaxed font-medium">Nền tảng giao hàng thực phẩm tươi sống hàng đầu Việt Nam</p>
           <div className="flex items-center gap-4">
@@ -63,14 +63,14 @@ export function AuthPageFooter() {
               <div className="p-1.5 bg-green-50 rounded-lg text-[#00b14f] shrink-0">
                 <Mail size={16} />
               </div>
-              <span className="text-[14px] text-gray-500 font-medium">support@freso.vn</span>
+              <span className="text-[14px] text-gray-500 font-medium">support@organica.vn</span>
             </li>
           </ul>
         </div>
       </div>
 
       <div className="max-w-[1440px] mx-auto mt-12 pt-8 border-t border-gray-50 flex flex-col sm:flex-row justify-between items-center gap-4">
-        <p className="text-[13px] text-gray-400 font-medium">© 2026 Freso. All rights reserved.</p>
+        <p className="text-[13px] text-gray-400 font-medium">© 2026 Organica. All rights reserved.</p>
         <div className="flex items-center gap-6">
           <a href="#" className="text-[13px] text-gray-400 hover:text-[#00b14f] font-medium transition-colors">
             Chính sách bảo mật

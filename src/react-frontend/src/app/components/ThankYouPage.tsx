@@ -145,7 +145,7 @@ export function ThankYouPage() {
 
         {/* Confetti-like decoration */}
         <p className="mt-6 text-center text-sm text-gray-400">
-          Cảm ơn bạn đã tin tưởng mua hàng tại <strong className="text-green-600">Freso B2B</strong> 🌿
+          Cảm ơn bạn đã tin tưởng mua hàng tại <strong className="text-green-600">Organica B2B</strong> 🌿
         </p>
       </div>
     </div>

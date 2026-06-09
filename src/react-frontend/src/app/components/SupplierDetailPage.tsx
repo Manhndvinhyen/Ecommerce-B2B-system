@@ -344,7 +344,7 @@ export function SupplierDetailPage({ supplierId, supplierName }: SupplierDetailP
               </p>
               
               <p className="text-sm text-gray-500 leading-relaxed max-w-2xl">
-                Nhà cung cấp uy tín hợp tác cùng Freso B2B. Cam kết nguồn hàng ổn định, chất lượng đồng đều, hóa đơn VAT đầy đủ, hỗ trợ giao xe lạnh tối ưu độ tươi sạch.
+                Nhà cung cấp uy tín hợp tác cùng Organica B2B. Cam kết nguồn hàng ổn định, chất lượng đồng đều, hóa đơn VAT đầy đủ, hỗ trợ giao xe lạnh tối ưu độ tươi sạch.
               </p>
             </div>
 

@@ -30,7 +30,7 @@ export function SellerSidebar(props: SellerSidebarProps = {}) {
 
   useEffect(() => {
     const name = window.localStorage.getItem('freso_customer_name') || window.sessionStorage.getItem('freso_customer_name') || 'Nhà bán hàng sỉ';
-    const branch = window.localStorage.getItem('freso_branch_name') || window.sessionStorage.getItem('freso_branch_name') || 'Chi nhánh Freso';
+    const branch = window.localStorage.getItem('freso_branch_name') || window.sessionStorage.getItem('freso_branch_name') || 'Chi nhánh Organica';
     setMerchantName(name);
     setBranchName(branch);
   }, []);

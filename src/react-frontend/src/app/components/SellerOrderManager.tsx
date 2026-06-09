@@ -579,7 +579,7 @@ export function SellerOrderManager() {
                           orderReference: order.order_reference,
                           status: order.status,
                           statusLabel: order.status_label,
-                          supplier: order.supplier || 'Freso Supplier',
+                          supplier: order.supplier || 'Organica Supplier',
                           customerRegion: order.customer_region,
                           shippingAddress: order.shipping_address,
                           deliveryDate: order.delivery_date,

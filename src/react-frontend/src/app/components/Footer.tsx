@@ -9,7 +9,7 @@ export function Footer() {
         <div className="grid md:grid-cols-4 gap-8 mb-12">
           {/* Company Info */}
           <div>
-            <div className="text-2xl font-bold text-white mb-4">Freso</div>
+            <div className="text-2xl font-bold text-white mb-4">Organica</div>
             <p className="text-gray-400 mb-4">
               Nền tảng giao hàng thực phẩm tươi sống hàng đầu Việt Nam
             </p>
@@ -89,7 +89,7 @@ export function Footer() {
               </li>
               <li className="flex items-center gap-2">
                 <Mail className="size-5 text-green-500 flex-shrink-0" />
-                <span className="text-sm">support@freso.vn</span>
+                <span className="text-sm">support@organica.vn</span>
               </li>
             </ul>
           </div>
@@ -98,7 +98,7 @@ export function Footer() {
         <div className="border-t border-gray-800 pt-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-sm text-gray-400">
-              © 2026 Freso. All rights reserved.
+              © 2026 Organica. All rights reserved.
             </p>
             <div className="flex gap-6 text-sm">
               <a href="/privacy-policy-cookie-restriction-mode" className="hover:text-green-500 transition-colors">

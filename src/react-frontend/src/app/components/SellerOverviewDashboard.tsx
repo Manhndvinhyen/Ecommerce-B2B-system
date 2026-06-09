@@ -84,7 +84,7 @@ export function SellerOverviewDashboard() {
   const [activeSegment, setActiveSegment] = useState<number | null>(null);
 
   // Read merchant details
-  const [merchantName, setMerchantName] = useState('Nhà cung cấp Thực phẩm Sạch Freso');
+  const [merchantName, setMerchantName] = useState('Nhà cung cấp Thực phẩm Sạch Organica');
   const [merchantCode, setMerchantCode] = useState('FR-982736');
 
   // Seller stock warning alerts

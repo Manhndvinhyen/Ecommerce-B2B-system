@@ -26,6 +26,9 @@ class PromotionManagement implements PromotionManagementInterface
             $select = $connection->select()
                 ->from($tableName)
                 ->where('is_active = ?', 1)
+                ->where('(start_at IS NULL OR start_at <= NOW())')
+                ->where('(end_at IS NULL OR end_at >= NOW())')
+                ->where('(type != ? OR usage_limit IS NULL OR used_count < usage_limit)', 'voucher')
                 ->order('id ASC');
 
             $rows = $connection->fetchAll($select) ?: [];
@@ -42,8 +45,17 @@ class PromotionManagement implements PromotionManagementInterface
                     'button_action' => (string)$row['button_action'],
                     'type' => (string)$row['type'],
                     'discount_code' => $row['discount_code'] ? (string)$row['discount_code'] : null,
+                    'discount_type' => $row['discount_type'] ? (string)$row['discount_type'] : 'fixed',
                     'discount_value' => $row['discount_value'] !== null ? (float)$row['discount_value'] : null,
                     'min_order_amount' => $row['min_order_amount'] !== null ? (float)$row['min_order_amount'] : null,
+                    'max_discount_amount' => $row['max_discount_amount'] !== null ? (float)$row['max_discount_amount'] : null,
+                    'apply_scope' => $row['apply_scope'] ? (string)$row['apply_scope'] : null,
+                    'category_ids' => $row['category_ids'] ? (string)$row['category_ids'] : null,
+                    'product_skus' => $row['product_skus'] ? (string)$row['product_skus'] : null,
+                    'usage_limit' => $row['usage_limit'] !== null ? (int)$row['usage_limit'] : null,
+                    'used_count' => isset($row['used_count']) ? (int)$row['used_count'] : 0,
+                    'start_at' => $row['start_at'] ? (string)$row['start_at'] : null,
+                    'end_at' => $row['end_at'] ? (string)$row['end_at'] : null,
                 ];
             }
 

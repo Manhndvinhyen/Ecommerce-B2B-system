@@ -21,7 +21,7 @@ class Index extends Action
     public function execute()
     {
         $page = $this->pageFactory->create();
-        $page->getConfig()->getTitle()->prepend(__('Quản lý Khuyến mãi & Banners'));
+        $page->getConfig()->getTitle()->prepend(__('Quan ly khuyen mai va voucher'));
 
         return $page;
     }

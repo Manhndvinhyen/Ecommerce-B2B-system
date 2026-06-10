@@ -188,9 +188,16 @@ class ForgotPasswordRequestOtpManagement implements ForgotPasswordRequestOtpInte
         $scheme = $encryption === 'ssl' ? 'ssl://' : '';
         $socketAddress = $scheme . $host . ':' . $port;
 
+        // Properly encode or quote display name to avoid SMTP 555 syntax errors (e.g. spaces or special chars in name)
+        if (preg_match('/[^\x20-\x7e]/', $fromName)) {
+            $encodedFromName = '=?UTF-8?B?' . base64_encode($fromName) . '?=';
+        } else {
+            $encodedFromName = '"' . str_replace('"', '', $fromName) . '"';
+        }
+
         $headers = [
-            'From: ' . $fromName . ' <' . $fromEmail . '>',
-            'To: <' . $email . '>',
+            'From: ' . $encodedFromName . ' <' . $fromEmail . '>',
+            'To: ' . $email,
             'Subject: ' . $subject,
             'MIME-Version: 1.0',
             'Content-Type: text/plain; charset=UTF-8',
@@ -313,9 +320,9 @@ class ForgotPasswordRequestOtpManagement implements ForgotPasswordRequestOtpInte
      */
     private function getSmtpConfig(): ?array
     {
-        $host = trim((string) getenv('TMDT_SMTP_HOST'));
-        $username = trim((string) getenv('TMDT_SMTP_USERNAME'));
-        $password = str_replace(' ', '', trim((string) getenv('TMDT_SMTP_PASSWORD')));
+        $host = trim(trim((string) getenv('TMDT_SMTP_HOST')), '"\'');
+        $username = trim(trim((string) getenv('TMDT_SMTP_USERNAME')), '"\'');
+        $password = trim(str_replace(' ', '', trim((string) getenv('TMDT_SMTP_PASSWORD'))), '"\'');
 
         if ($host === '' || $username === '' || $password === '') {
             return null;
@@ -326,12 +333,12 @@ class ForgotPasswordRequestOtpManagement implements ForgotPasswordRequestOtpInte
             $port = 587;
         }
 
-        $encryption = mb_strtolower(trim((string) getenv('TMDT_SMTP_ENCRYPTION')));
+        $encryption = mb_strtolower(trim(trim((string) getenv('TMDT_SMTP_ENCRYPTION')), '"\''));
         if (!in_array($encryption, ['tls', 'ssl', ''], true)) {
             $encryption = 'tls';
         }
 
-        $fromEmail = trim((string) getenv('TMDT_SMTP_FROM_EMAIL'));
+        $fromEmail = trim(trim((string) getenv('TMDT_SMTP_FROM_EMAIL')), '"\'');
         $fromEmail = trim($fromEmail, "<> ");
         if ($fromEmail === '') {
             $fromEmail = $username;
@@ -341,7 +348,7 @@ class ForgotPasswordRequestOtpManagement implements ForgotPasswordRequestOtpInte
             $fromEmail = $username;
         }
 
-        $fromName = trim((string) getenv('TMDT_SMTP_FROM_NAME'));
+        $fromName = trim(trim((string) getenv('TMDT_SMTP_FROM_NAME')), '"\'');
         if ($fromName === '') {
             $fromName = 'TMDT Shop';
         }

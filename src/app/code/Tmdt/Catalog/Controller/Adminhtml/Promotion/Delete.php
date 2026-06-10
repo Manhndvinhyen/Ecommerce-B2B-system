@@ -24,7 +24,7 @@ class Delete extends Action
         $id = (int)$this->getRequest()->getParam('id');
 
         if ($id <= 0) {
-            $this->messageManager->addErrorMessage(__('ID khuyến mãi không hợp lệ.'));
+            $this->messageManager->addErrorMessage(__('ID khong hop le.'));
             return $resultRedirect->setPath('*/*/index');
         }
 
@@ -33,9 +33,9 @@ class Delete extends Action
 
         try {
             $connection->delete($tableName, ['id = ?' => $id]);
-            $this->messageManager->addSuccessMessage(__('Xóa khuyến mãi thành công.'));
+            $this->messageManager->addSuccessMessage(__('Da xoa chuong trinh thanh cong.'));
         } catch (\Throwable $e) {
-            $this->messageManager->addErrorMessage(__('Lỗi khi xóa khuyến mãi: %1', $e->getMessage()));
+            $this->messageManager->addErrorMessage(__('Loi khi xoa: %1', $e->getMessage()));
         }
 
         return $resultRedirect->setPath('*/*/index');

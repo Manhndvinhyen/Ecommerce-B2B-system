@@ -1,211 +1,165 @@
 <?php
 /** @var \Tmdt\Catalog\Block\Adminhtml\Promotion $block */
-$rows = $block->getRows();
 $saveUrl = $block->getSaveUrl();
+$autoPromotions = $block->getRows('auto_discount');
+$vouchers = $block->getRows('voucher');
+$categories = $block->getCategoryOptions();
+$products = $block->getProductOptions();
+
+$renderCategoryOptions = static function ($block, array $categories, $selected = ''): void {
+    foreach ($categories as $category) {
+        $id = (string)$category['id'];
+        $label = str_repeat('-- ', max(0, (int)$category['level'] - 2)) . (string)$category['name'];
+        $isSelected = $block->isSelectedListValue($selected, $id) ? ' selected' : '';
+        echo '<option value="' . (int)$category['id'] . '"' . $isSelected . '>' . $block->escapeHtml($label) . '</option>';
+    }
+};
 ?>
-<div class="promotion-management-wrapper" style="font-family: Arial, sans-serif; margin-top: 15px;">
-    <!-- Create Promotion Section -->
-    <div class="promo-card" style="background: #fff; border: 1px solid #d6d6d6; border-radius: 8px; padding: 20px; margin-bottom: 25px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-        <h3 style="margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 8px; font-weight: bold; color: #333;">
-            <span style="font-size: 18px; vertical-align: middle;">➕ Thêm Banner / Khuyến mãi mới</span>
-        </h3>
-        <form action="<?= $block->escapeUrl($saveUrl) ?>" method="post" id="create-promo-form">
+
+<style>
+    .tmdt-admin-promo { font-family: Arial, sans-serif; }
+    .tmdt-promo-card { background: #fff; border: 1px solid #d6d6d6; border-radius: 6px; margin: 0 0 22px; padding: 18px; }
+    .tmdt-promo-title { align-items: center; border-bottom: 1px solid #e7e7e7; display: flex; gap: 12px; justify-content: space-between; margin: 0 0 16px; padding-bottom: 10px; }
+    .tmdt-promo-title h2 { font-size: 18px; margin: 0; }
+    .tmdt-promo-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+    .tmdt-promo-field label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 5px; }
+    .tmdt-promo-field input,
+    .tmdt-promo-field select,
+    .tmdt-promo-field textarea { border: 1px solid #c8c8c8; border-radius: 4px; box-sizing: border-box; min-height: 32px; padding: 6px 8px; width: 100%; }
+    .tmdt-promo-field select[multiple] { min-height: 112px; }
+    .tmdt-promo-row { border: 1px solid #e3e3e3; border-radius: 6px; margin-top: 12px; padding: 14px; }
+    .tmdt-promo-row-head { align-items: center; display: flex; justify-content: space-between; margin-bottom: 12px; }
+    .tmdt-promo-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 14px; }
+    .tmdt-muted { color: #707070; font-size: 12px; }
+    .tmdt-status-active { color: #217a35; font-weight: 700; }
+    .tmdt-status-off { color: #b42318; font-weight: 700; }
+</style>
+
+<div class="tmdt-admin-promo">
+    <div class="tmdt-promo-card">
+        <div class="tmdt-promo-title">
+            <h2>Tao khuyen mai tu dong</h2>
+            <span class="tmdt-muted">Ap dung len san pham hoac danh muc, khach hang khong can nhap ma.</span>
+        </div>
+        <form action="<?= $block->escapeUrl($saveUrl) ?>" method="post">
             <?= $block->getBlockHtml('formkey') ?>
-            <div style="display: grid; grid-template-cols: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px;">
-                <div>
-                    <label style="display: block; font-weight: bold; font-size: 12px; margin-bottom: 5px;">Tiêu đề *</label>
-                    <input type="text" name="title" required style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" placeholder="Ví dụ: Mùa vụ sầu riêng Ri6">
-                </div>
-                <div>
-                    <label style="display: block; font-weight: bold; font-size: 12px; margin-bottom: 5px;">Ảnh URL / Đường dẫn *</label>
-                    <input type="text" name="image" required style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" placeholder="https://unsplash.com/... hoặc /media/...">
-                </div>
-                <div>
-                    <label style="display: block; font-weight: bold; font-size: 12px; margin-bottom: 5px;">Nhãn nút bấm *</label>
-                    <input type="text" name="button_text" required style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" placeholder="Xem ngay, Nhận voucher...">
-                </div>
-                <div>
-                    <label style="display: block; font-weight: bold; font-size: 12px; margin-bottom: 5px;">Hành động nút *</label>
-                    <input type="text" name="button_action" required style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" placeholder="category:rau-cu-qua, coupon:CODE, register">
-                </div>
-                <div>
-                    <label style="display: block; font-weight: bold; font-size: 12px; margin-bottom: 5px;">Loại hiển thị *</label>
-                    <select name="type" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
-                        <option value="banner">Slide Banner chính (Center Banner)</option>
-                        <option value="voucher">Thẻ Voucher (Vouchers list)</option>
-                        <option value="seasonal">Khuyến mãi mùa vụ (Right Sidebar Cards)</option>
+            <input type="hidden" name="type" value="auto_discount">
+            <div class="tmdt-promo-grid">
+                <div class="tmdt-promo-field"><label>Ten chuong trinh *</label><input name="title" required></div>
+                <div class="tmdt-promo-field"><label>Loai giam gia *</label><select name="discount_type"><option value="percent">Phan tram</option><option value="fixed">So tien co dinh</option></select></div>
+                <div class="tmdt-promo-field"><label>Gia tri giam *</label><input type="number" step="0.01" min="0" name="discount_value" required></div>
+                <div class="tmdt-promo-field"><label>Pham vi *</label><select name="apply_scope"><option value="all">Tat ca san pham</option><option value="category">Theo danh muc</option><option value="product">Theo san pham/SKU</option></select></div>
+                <div class="tmdt-promo-field"><label>Danh muc</label><select name="category_ids[]" multiple><?php $renderCategoryOptions($block, $categories); ?></select></div>
+                <div class="tmdt-promo-field">
+                    <label>San pham</label>
+                    <select name="product_skus[]" multiple>
+                        <?php foreach ($products as $product): ?>
+                            <option value="<?= $block->escapeHtmlAttr((string)$product['sku']) ?>"><?= $block->escapeHtml((string)$product['sku'] . ' - ' . (string)$product['name']) ?></option>
+                        <?php endforeach; ?>
                     </select>
                 </div>
-                <div>
-                    <label style="display: block; font-weight: bold; font-size: 12px; margin-bottom: 5px;">Mã giảm giá (Nếu có)</label>
-                    <input type="text" name="discount_code" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" placeholder="Ví dụ: FRESO50">
-                </div>
-                <div>
-                    <label style="display: block; font-weight: bold; font-size: 12px; margin-bottom: 5px;">Giá trị giảm (VND / Số tiền)</label>
-                    <input type="number" step="0.01" name="discount_value" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" placeholder="50000">
-                </div>
-                <div>
-                    <label style="display: block; font-weight: bold; font-size: 12px; margin-bottom: 5px;">Đơn tối thiểu (VND)</label>
-                    <input type="number" step="0.01" name="min_order_amount" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" placeholder="1000000">
-                </div>
-                <div>
-                    <label style="display: block; font-weight: bold; font-size: 12px; margin-bottom: 5px;">Trạng thái</label>
-                    <select name="is_active" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
-                        <option value="1">Kích hoạt (Hoạt động)</option>
-                        <option value="0">Tạm ngưng (Ẩn)</option>
-                    </select>
-                </div>
+                <div class="tmdt-promo-field"><label>Bat dau *</label><input type="datetime-local" name="start_at" required></div>
+                <div class="tmdt-promo-field"><label>Ket thuc *</label><input type="datetime-local" name="end_at" required></div>
+                <div class="tmdt-promo-field"><label>Trang thai</label><select name="is_active"><option value="1">Hoat dong</option><option value="0">Ngung hoat dong</option></select></div>
             </div>
-            <div style="margin-top: 15px;">
-                <label style="display: block; font-weight: bold; font-size: 12px; margin-bottom: 5px;">Mô tả chi tiết *</label>
-                <textarea name="description" required rows="2" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" placeholder="Nội dung hiển thị chương trình khuyến mãi..."></textarea>
-            </div>
-            <div style="margin-top: 15px; text-align: right;">
-                <button type="submit" class="action-primary" style="padding: 8px 20px; font-weight: bold; border-radius: 4px; cursor: pointer;">Tạo mới khuyến mãi</button>
-            </div>
+            <div class="tmdt-promo-field" style="margin-top:12px;"><label>Mo ta</label><textarea name="description" rows="2"></textarea></div>
+            <div class="tmdt-promo-actions"><button type="submit" class="action-primary">Luu khuyen mai</button></div>
         </form>
     </div>
 
-    <!-- Promotions List Grid -->
-    <div style="background: #fff; border: 1px solid #d6d6d6; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-        <h3 style="margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 8px; font-weight: bold; color: #333; display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 18px;">📋 Danh sách Banner & Khuyến mãi (<?= count($rows) ?> bản ghi)</span>
-        </h3>
-        
-        <?php if (empty($rows)): ?>
-            <div style="padding: 20px; text-align: center; color: #777;">Chưa có bản ghi khuyến mãi nào trong cơ sở dữ liệu.</div>
-        <?php else: ?>
-            <div style="overflow-x: auto;">
-                <table class="data-table" style="width: 100%; border-collapse: collapse; font-size: 12px; min-width: 900px;">
-                    <thead>
-                        <tr style="background: #f5f5f5; border-bottom: 2px solid #dfdfdf; text-align: left;">
-                            <th style="padding: 10px; font-weight: bold; width: 60px;">ID</th>
-                            <th style="padding: 10px; font-weight: bold; width: 140px;">Loại / Trạng thái</th>
-                            <th style="padding: 10px; font-weight: bold; width: 220px;">Tiêu đề / Ảnh</th>
-                            <th style="padding: 10px; font-weight: bold;">Mô tả khuyến mãi</th>
-                            <th style="padding: 10px; font-weight: bold; width: 180px;">Nút bấm / Hành động</th>
-                            <th style="padding: 10px; font-weight: bold; width: 160px;">Voucher / Đơn tối thiểu</th>
-                            <th style="padding: 10px; font-weight: bold; width: 150px; text-align: center;">Hành động</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($rows as $row): ?>
-                            <tr style="border-bottom: 1px solid #e0e0e0; vertical-align: top;">
-                                <td style="padding: 10px;"><?= $row['id'] ?></td>
-                                <td style="padding: 10px;">
-                                    <form action="<?= $block->escapeUrl($saveUrl) ?>" method="post" style="margin: 0;">
-                                        <?= $block->getBlockHtml('formkey') ?>
-                                        <input type="hidden" name="id" value="<?= $row['id'] ?>">
-                                        <input type="hidden" name="title" value="<?= $block->escapeHtmlAttr($row['title']) ?>">
-                                        <input type="hidden" name="description" value="<?= $block->escapeHtmlAttr($row['description']) ?>">
-                                        <input type="hidden" name="image" value="<?= $block->escapeHtmlAttr($row['image']) ?>">
-                                        <input type="hidden" name="button_text" value="<?= $block->escapeHtmlAttr($row['button_text']) ?>">
-                                        <input type="hidden" name="button_action" value="<?= $block->escapeHtmlAttr($row['button_action']) ?>">
-                                        <input type="hidden" name="discount_code" value="<?= $block->escapeHtmlAttr($row['discount_code']) ?>">
-                                        <input type="hidden" name="discount_value" value="<?= $row['discount_value'] ?>">
-                                        <input type="hidden" name="min_order_amount" value="<?= $row['min_order_amount'] ?>">
-                                        
-                                        <select name="type" onchange="this.form.submit()" style="width: 100%; padding: 4px; margin-bottom: 5px; border-radius: 4px; border: 1px solid #ccc;">
-                                            <option value="banner" <?= $row['type'] === 'banner' ? 'selected' : '' ?>>Slide Banner</option>
-                                            <option value="voucher" <?= $row['type'] === 'voucher' ? 'selected' : '' ?>>Voucher</option>
-                                            <option value="seasonal" <?= $row['type'] === 'seasonal' ? 'selected' : '' ?>>Mùa vụ</option>
-                                        </select>
-                                        
-                                        <select name="is_active" onchange="this.form.submit()" style="width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #ccc; font-weight: bold; color: <?= $row['is_active'] ? 'green' : 'red' ?>;">
-                                            <option value="1" <?= $row['is_active'] ? 'selected' : '' ?>>Hoạt động</option>
-                                            <option value="0" <?= !$row['is_active'] ? 'selected' : '' ?>>Đang ẩn</option>
-                                        </select>
-                                    </form>
-                                </td>
-                                <td style="padding: 10px;">
-                                    <form action="<?= $block->escapeUrl($saveUrl) ?>" method="post" style="margin: 0;">
-                                        <?= $block->getBlockHtml('formkey') ?>
-                                        <input type="hidden" name="id" value="<?= $row['id'] ?>">
-                                        <input type="hidden" name="type" value="<?= $row['type'] ?>">
-                                        <input type="hidden" name="is_active" value="<?= $row['is_active'] ?>">
-                                        <input type="hidden" name="description" value="<?= $block->escapeHtmlAttr($row['description']) ?>">
-                                        <input type="hidden" name="button_text" value="<?= $block->escapeHtmlAttr($row['button_text']) ?>">
-                                        <input type="hidden" name="button_action" value="<?= $block->escapeHtmlAttr($row['button_action']) ?>">
-                                        <input type="hidden" name="discount_code" value="<?= $block->escapeHtmlAttr($row['discount_code']) ?>">
-                                        <input type="hidden" name="discount_value" value="<?= $row['discount_value'] ?>">
-                                        <input type="hidden" name="min_order_amount" value="<?= $row['min_order_amount'] ?>">
-
-                                        <input type="text" name="title" value="<?= $block->escapeHtmlAttr($row['title']) ?>" style="width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #ccc; font-weight: bold; margin-bottom: 5px;" placeholder="Tiêu đề">
-                                        <input type="text" name="image" value="<?= $block->escapeHtmlAttr($row['image']) ?>" style="width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #ccc; font-size: 10px;" placeholder="Ảnh URL">
-                                        <button type="submit" style="display: none;"></button>
-                                    </form>
-                                    <?php if ($row['image']): ?>
-                                        <div style="margin-top: 5px;"><img src="<?= $block->escapeUrl($row['image']) ?>" alt="Preview" style="max-height: 40px; max-width: 120px; border-radius: 4px; border: 1px solid #eee; object-fit: cover;" /></div>
-                                    <?php endif; ?>
-                                </td>
-                                <td style="padding: 10px;">
-                                    <form action="<?= $block->escapeUrl($saveUrl) ?>" method="post" style="margin: 0;">
-                                        <?= $block->getBlockHtml('formkey') ?>
-                                        <input type="hidden" name="id" value="<?= $row['id'] ?>">
-                                        <input type="hidden" name="type" value="<?= $row['type'] ?>">
-                                        <input type="hidden" name="is_active" value="<?= $row['is_active'] ?>">
-                                        <input type="hidden" name="title" value="<?= $block->escapeHtmlAttr($row['title']) ?>">
-                                        <input type="hidden" name="image" value="<?= $block->escapeHtmlAttr($row['image']) ?>">
-                                        <input type="hidden" name="button_text" value="<?= $block->escapeHtmlAttr($row['button_text']) ?>">
-                                        <input type="hidden" name="button_action" value="<?= $block->escapeHtmlAttr($row['button_action']) ?>">
-                                        <input type="hidden" name="discount_code" value="<?= $block->escapeHtmlAttr($row['discount_code']) ?>">
-                                        <input type="hidden" name="discount_value" value="<?= $row['discount_value'] ?>">
-                                        <input type="hidden" name="min_order_amount" value="<?= $row['min_order_amount'] ?>">
-
-                                        <textarea name="description" rows="3" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #ccc; font-size: 11px; resize: vertical;"><?= $block->escapeHtml($row['description']) ?></textarea>
-                                        <button type="submit" style="display: none;"></button>
-                                    </form>
-                                </td>
-                                <td style="padding: 10px;">
-                                    <form action="<?= $block->escapeUrl($saveUrl) ?>" method="post" style="margin: 0;">
-                                        <?= $block->getBlockHtml('formkey') ?>
-                                        <input type="hidden" name="id" value="<?= $row['id'] ?>">
-                                        <input type="hidden" name="type" value="<?= $row['type'] ?>">
-                                        <input type="hidden" name="is_active" value="<?= $row['is_active'] ?>">
-                                        <input type="hidden" name="title" value="<?= $block->escapeHtmlAttr($row['title']) ?>">
-                                        <input type="hidden" name="image" value="<?= $block->escapeHtmlAttr($row['image']) ?>">
-                                        <input type="hidden" name="description" value="<?= $block->escapeHtmlAttr($row['description']) ?>">
-                                        <input type="hidden" name="discount_code" value="<?= $block->escapeHtmlAttr($row['discount_code']) ?>">
-                                        <input type="hidden" name="discount_value" value="<?= $row['discount_value'] ?>">
-                                        <input type="hidden" name="min_order_amount" value="<?= $row['min_order_amount'] ?>">
-
-                                        <input type="text" name="button_text" value="<?= $block->escapeHtmlAttr($row['button_text']) ?>" style="width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #ccc; margin-bottom: 5px;" placeholder="Nhãn nút">
-                                        <input type="text" name="button_action" value="<?= $block->escapeHtmlAttr($row['button_action']) ?>" style="width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #ccc;" placeholder="Hành động">
-                                        <button type="submit" style="display: none;"></button>
-                                    </form>
-                                </td>
-                                <td style="padding: 10px;">
-                                    <form action="<?= $block->escapeUrl($saveUrl) ?>" method="post" style="margin: 0;">
-                                        <?= $block->getBlockHtml('formkey') ?>
-                                        <input type="hidden" name="id" value="<?= $row['id'] ?>">
-                                        <input type="hidden" name="type" value="<?= $row['type'] ?>">
-                                        <input type="hidden" name="is_active" value="<?= $row['is_active'] ?>">
-                                        <input type="hidden" name="title" value="<?= $block->escapeHtmlAttr($row['title']) ?>">
-                                        <input type="hidden" name="image" value="<?= $block->escapeHtmlAttr($row['image']) ?>">
-                                        <input type="hidden" name="description" value="<?= $block->escapeHtmlAttr($row['description']) ?>">
-                                        <input type="hidden" name="button_text" value="<?= $block->escapeHtmlAttr($row['button_text']) ?>">
-                                        <input type="hidden" name="button_action" value="<?= $block->escapeHtmlAttr($row['button_action']) ?>">
-
-                                        <input type="text" name="discount_code" value="<?= $block->escapeHtmlAttr($row['discount_code']) ?>" style="width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #ccc; margin-bottom: 5px;" placeholder="Mã giảm">
-                                        <input type="number" step="0.01" name="discount_value" value="<?= $row['discount_value'] ?>" style="width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #ccc; margin-bottom: 5px;" placeholder="Giá trị">
-                                        <input type="number" step="0.01" name="min_order_amount" value="<?= $row['min_order_amount'] ?>" style="width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #ccc;" placeholder="Đơn tối thiểu">
-                                        <button type="submit" style="display: none;"></button>
-                                    </form>
-                                </td>
-                                <td style="padding: 10px; text-align: center;">
-                                    <div style="display: flex; flex-direction: column; gap: 5px; justify-content: center; height: 100%;">
-                                        <button type="button" onclick="this.closest('tr').querySelectorAll('form').forEach(f => f.dispatchEvent(new Event('submit', {cancelable:true})))" class="action-secondary" style="padding: 5px; font-size: 11px; cursor: pointer; font-weight: bold; background: #ebf3fc; border: 1px solid #bcd8f4; color: #1059a4; border-radius: 4px;">💾 Lưu dòng</button>
-                                        <a href="<?= $block->escapeUrl($block->getDeleteUrl((int)$row['id'])) ?>" onclick="return confirm('Bạn chắc chắn muốn xóa khuyến mãi này?')" class="action-delete" style="padding: 5px; font-size: 11px; cursor: pointer; font-weight: bold; background: #fdf2f2; border: 1px solid #f8baba; color: #a94442; border-radius: 4px; text-decoration: none; display: inline-block;">🗑️ Xóa</a>
-                                    </div>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-            <div style="margin-top: 10px; color: #777; font-size: 11px;">
-                💡 *Mẹo: Bạn có thể sửa trực tiếp thông tin trên các trường dữ liệu ở bảng và nhấn nút <strong>Lưu dòng</strong> hoặc nhấn Enter trên trường đó để cập nhật.*
-            </div>
+    <div class="tmdt-promo-card">
+        <div class="tmdt-promo-title"><h2>Danh sach khuyen mai tu dong (<?= count($autoPromotions) ?>)</h2></div>
+        <?php if (empty($autoPromotions)): ?>
+            <p class="tmdt-muted">Chua co chuong trinh khuyen mai tu dong.</p>
         <?php endif; ?>
+        <?php foreach ($autoPromotions as $row): ?>
+            <form class="tmdt-promo-row" action="<?= $block->escapeUrl($saveUrl) ?>" method="post">
+                <?= $block->getBlockHtml('formkey') ?>
+                <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
+                <input type="hidden" name="type" value="auto_discount">
+                <div class="tmdt-promo-row-head">
+                    <strong>#<?= (int)$row['id'] ?> - <?= $block->escapeHtml((string)$row['title']) ?></strong>
+                    <span class="<?= (int)$row['is_active'] === 1 ? 'tmdt-status-active' : 'tmdt-status-off' ?>"><?= (int)$row['is_active'] === 1 ? 'Dang bat' : 'Da ngung' ?></span>
+                </div>
+                <div class="tmdt-promo-grid">
+                    <div class="tmdt-promo-field"><label>Ten chuong trinh *</label><input name="title" value="<?= $block->escapeHtmlAttr((string)$row['title']) ?>" required></div>
+                    <div class="tmdt-promo-field"><label>Loai giam gia *</label><select name="discount_type"><option value="percent" <?= ($row['discount_type'] ?? '') === 'percent' ? 'selected' : '' ?>>Phan tram</option><option value="fixed" <?= ($row['discount_type'] ?? '') === 'fixed' ? 'selected' : '' ?>>So tien</option></select></div>
+                    <div class="tmdt-promo-field"><label>Gia tri giam *</label><input type="number" step="0.01" name="discount_value" value="<?= $block->escapeHtmlAttr((string)$row['discount_value']) ?>" required></div>
+                    <div class="tmdt-promo-field"><label>Pham vi *</label><select name="apply_scope"><option value="all" <?= ($row['apply_scope'] ?? '') === 'all' ? 'selected' : '' ?>>Tat ca</option><option value="category" <?= ($row['apply_scope'] ?? '') === 'category' ? 'selected' : '' ?>>Danh muc</option><option value="product" <?= ($row['apply_scope'] ?? '') === 'product' ? 'selected' : '' ?>>San pham</option></select></div>
+                    <div class="tmdt-promo-field"><label>Danh muc</label><select name="category_ids[]" multiple><?php $renderCategoryOptions($block, $categories, $row['category_ids'] ?? ''); ?></select></div>
+                    <div class="tmdt-promo-field"><label>SKU san pham</label><textarea name="product_skus" rows="5" placeholder="SKU cach nhau bang dau phay"><?= $block->escapeHtml((string)($row['product_skus'] ?? '')) ?></textarea></div>
+                    <div class="tmdt-promo-field"><label>Bat dau *</label><input type="datetime-local" name="start_at" value="<?= $block->escapeHtmlAttr($block->formatDateTimeInput($row['start_at'] ?? null)) ?>" required></div>
+                    <div class="tmdt-promo-field"><label>Ket thuc *</label><input type="datetime-local" name="end_at" value="<?= $block->escapeHtmlAttr($block->formatDateTimeInput($row['end_at'] ?? null)) ?>" required></div>
+                    <div class="tmdt-promo-field"><label>Trang thai</label><select name="is_active"><option value="1" <?= (int)$row['is_active'] === 1 ? 'selected' : '' ?>>Hoat dong</option><option value="0" <?= (int)$row['is_active'] === 0 ? 'selected' : '' ?>>Ngung hoat dong</option></select></div>
+                </div>
+                <div class="tmdt-promo-field" style="margin-top:12px;"><label>Mo ta</label><textarea name="description" rows="2"><?= $block->escapeHtml((string)$row['description']) ?></textarea></div>
+                <div class="tmdt-promo-actions">
+                    <button type="submit" class="action-secondary">Luu thay doi</button>
+                    <a href="<?= $block->escapeUrl($block->getDeleteUrl((int)$row['id'])) ?>" class="action-delete" onclick="return confirm('Xoa chuong trinh nay?')">Xoa</a>
+                </div>
+            </form>
+        <?php endforeach; ?>
+    </div>
+
+    <div class="tmdt-promo-card">
+        <div class="tmdt-promo-title">
+            <h2>Tao voucher</h2>
+            <span class="tmdt-muted">Khach hang nhap ma tai checkout. Moi don hang chi ap dung mot voucher.</span>
+        </div>
+        <form action="<?= $block->escapeUrl($saveUrl) ?>" method="post">
+            <?= $block->getBlockHtml('formkey') ?>
+            <input type="hidden" name="type" value="voucher">
+            <input type="hidden" name="apply_scope" value="all">
+            <div class="tmdt-promo-grid">
+                <div class="tmdt-promo-field"><label>Ma voucher *</label><input name="discount_code" required></div>
+                <div class="tmdt-promo-field"><label>Ten voucher *</label><input name="title" required></div>
+                <div class="tmdt-promo-field"><label>Loai giam gia *</label><select name="discount_type"><option value="fixed">So tien</option><option value="percent">Phan tram</option></select></div>
+                <div class="tmdt-promo-field"><label>Gia tri giam *</label><input type="number" step="0.01" min="0" name="discount_value" required></div>
+                <div class="tmdt-promo-field"><label>Don hang toi thieu</label><input type="number" step="0.01" min="0" name="min_order_amount"></div>
+                <div class="tmdt-promo-field"><label>Muc giam toi da</label><input type="number" step="0.01" min="0" name="max_discount_amount"></div>
+                <div class="tmdt-promo-field"><label>So luot su dung</label><input type="number" min="0" name="usage_limit"></div>
+                <div class="tmdt-promo-field"><label>Bat dau *</label><input type="datetime-local" name="start_at" required></div>
+                <div class="tmdt-promo-field"><label>Ket thuc *</label><input type="datetime-local" name="end_at" required></div>
+                <div class="tmdt-promo-field"><label>Trang thai</label><select name="is_active"><option value="1">Hoat dong</option><option value="0">Ngung hoat dong</option></select></div>
+            </div>
+            <div class="tmdt-promo-field" style="margin-top:12px;"><label>Mo ta</label><textarea name="description" rows="2"></textarea></div>
+            <div class="tmdt-promo-actions"><button type="submit" class="action-primary">Luu voucher</button></div>
+        </form>
+    </div>
+
+    <div class="tmdt-promo-card">
+        <div class="tmdt-promo-title"><h2>Danh sach voucher (<?= count($vouchers) ?>)</h2></div>
+        <?php if (empty($vouchers)): ?>
+            <p class="tmdt-muted">Chua co voucher nao.</p>
+        <?php endif; ?>
+        <?php foreach ($vouchers as $row): ?>
+            <form class="tmdt-promo-row" action="<?= $block->escapeUrl($saveUrl) ?>" method="post">
+                <?= $block->getBlockHtml('formkey') ?>
+                <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
+                <input type="hidden" name="type" value="voucher">
+                <input type="hidden" name="apply_scope" value="all">
+                <div class="tmdt-promo-row-head">
+                    <strong>#<?= (int)$row['id'] ?> - <?= $block->escapeHtml((string)$row['discount_code']) ?></strong>
+                    <span class="<?= (int)$row['is_active'] === 1 ? 'tmdt-status-active' : 'tmdt-status-off' ?>"><?= (int)$row['is_active'] === 1 ? 'Co the su dung neu con han' : 'Khong cho don moi' ?></span>
+                </div>
+                <div class="tmdt-promo-grid">
+                    <div class="tmdt-promo-field"><label>Ma voucher *</label><input name="discount_code" value="<?= $block->escapeHtmlAttr((string)$row['discount_code']) ?>" required></div>
+                    <div class="tmdt-promo-field"><label>Ten voucher *</label><input name="title" value="<?= $block->escapeHtmlAttr((string)$row['title']) ?>" required></div>
+                    <div class="tmdt-promo-field"><label>Loai giam gia *</label><select name="discount_type"><option value="fixed" <?= ($row['discount_type'] ?? '') === 'fixed' ? 'selected' : '' ?>>So tien</option><option value="percent" <?= ($row['discount_type'] ?? '') === 'percent' ? 'selected' : '' ?>>Phan tram</option></select></div>
+                    <div class="tmdt-promo-field"><label>Gia tri giam *</label><input type="number" step="0.01" name="discount_value" value="<?= $block->escapeHtmlAttr((string)$row['discount_value']) ?>" required></div>
+                    <div class="tmdt-promo-field"><label>Don hang toi thieu</label><input type="number" step="0.01" name="min_order_amount" value="<?= $block->escapeHtmlAttr((string)($row['min_order_amount'] ?? '')) ?>"></div>
+                    <div class="tmdt-promo-field"><label>Muc giam toi da</label><input type="number" step="0.01" name="max_discount_amount" value="<?= $block->escapeHtmlAttr((string)($row['max_discount_amount'] ?? '')) ?>"></div>
+                    <div class="tmdt-promo-field"><label>So luot su dung</label><input type="number" min="0" name="usage_limit" value="<?= $block->escapeHtmlAttr((string)($row['usage_limit'] ?? '')) ?>"><div class="tmdt-muted">Da dung: <?= (int)($row['used_count'] ?? 0) ?></div></div>
+                    <div class="tmdt-promo-field"><label>Bat dau *</label><input type="datetime-local" name="start_at" value="<?= $block->escapeHtmlAttr($block->formatDateTimeInput($row['start_at'] ?? null)) ?>" required></div>
+                    <div class="tmdt-promo-field"><label>Ket thuc *</label><input type="datetime-local" name="end_at" value="<?= $block->escapeHtmlAttr($block->formatDateTimeInput($row['end_at'] ?? null)) ?>" required></div>
+                    <div class="tmdt-promo-field"><label>Trang thai</label><select name="is_active"><option value="1" <?= (int)$row['is_active'] === 1 ? 'selected' : '' ?>>Hoat dong</option><option value="0" <?= (int)$row['is_active'] === 0 ? 'selected' : '' ?>>Ngung hoat dong</option></select></div>
+                </div>
+                <div class="tmdt-promo-field" style="margin-top:12px;"><label>Mo ta</label><textarea name="description" rows="2"><?= $block->escapeHtml((string)$row['description']) ?></textarea></div>
+                <div class="tmdt-promo-actions">
+                    <button type="submit" class="action-secondary">Luu thay doi</button>
+                    <a href="<?= $block->escapeUrl($block->getDeleteUrl((int)$row['id'])) ?>" class="action-delete" onclick="return confirm('Xoa voucher nay?')">Xoa</a>
+                </div>
+            </form>
+        <?php endforeach; ?>
     </div>
 </div>

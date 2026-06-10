@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Backend:etc/menu.xsd">
     <menu>
-        <add id="Tmdt_Catalog::promotion" title="Quan ly khuyen mai" module="Tmdt_Catalog" sortOrder="30" parent="Magento_Customer::customer" action="tmdt_catalog/promotion/index" resource="Tmdt_Catalog::promotion" />
+        <add id="Tmdt_Catalog::promotion" title="Khuyen mai va Voucher" module="Tmdt_Catalog" sortOrder="30" parent="Magento_Customer::customer" action="tmdt_catalog/promotion/index" resource="Tmdt_Catalog::promotion" />
     </menu>
 </config>

@@ -713,8 +713,40 @@ export function CheckoutPage() {
     }
   }, []);
 
+  const isVoucherInEffectiveWindow = (voucher: any) => {
+    const now = Date.now();
+    const startsAt = voucher.start_at ? new Date(voucher.start_at).getTime() : null;
+    const endsAt = voucher.end_at ? new Date(voucher.end_at).getTime() : null;
+    const hasStarted = startsAt === null || Number.isNaN(startsAt) || startsAt <= now;
+    const hasNotExpired = endsAt === null || Number.isNaN(endsAt) || endsAt >= now;
+    const hasUsageLeft = !voucher.usage_limit || Number(voucher.used_count || 0) < Number(voucher.usage_limit);
+    return hasStarted && hasNotExpired && hasUsageLeft;
+  };
+
+  const getVoucherDiscountAmount = (voucher: any, baseAmount: number) => {
+    if (!voucher || baseAmount <= 0) return 0;
+    const value = Number(voucher.discount_value || 0);
+    if (value <= 0) return 0;
+
+    const rawDiscount = voucher.discount_type === 'percent'
+      ? baseAmount * Math.min(value, 100) / 100
+      : value;
+    const maxDiscount = Number(voucher.max_discount_amount || 0);
+    const cappedDiscount = maxDiscount > 0 ? Math.min(rawDiscount, maxDiscount) : rawDiscount;
+    return Math.min(baseAmount, Math.max(0, cappedDiscount));
+  };
+
+  const getVoucherLabel = (voucher: any) => {
+    if (voucher.discount_type === 'percent') {
+      const value = Number(voucher.discount_value || 0);
+      const maxDiscount = Number(voucher.max_discount_amount || 0);
+      return `${value}%${maxDiscount > 0 ? ` tối đa ${toCurrencyTextFromNumber(maxDiscount)}` : ''}`;
+    }
+    return toCurrencyTextFromNumber(voucher.discount_value || 0);
+  };
+
   const claimedVouchersList = useMemo(() => {
-    return availableVouchers.filter((v) => claimedCodes.includes(v.discount_code));
+    return availableVouchers.filter((v) => claimedCodes.includes(v.discount_code) && isVoucherInEffectiveWindow(v));
   }, [availableVouchers, claimedCodes]);
 
   // Subscription / Recurring Order states
@@ -865,6 +897,9 @@ export function CheckoutPage() {
     if (appliedVoucher && subtotal < (appliedVoucher.min_order_amount || 0)) {
       setAppliedVoucher(null);
       setVoucherError(`Đơn hàng chưa đạt giá trị tối thiểu ${toCurrencyTextFromNumber(appliedVoucher.min_order_amount)}`);
+    } else if (appliedVoucher && !isVoucherInEffectiveWindow(appliedVoucher)) {
+      setAppliedVoucher(null);
+      setVoucherError('Voucher đã hết hạn hoặc hết lượt sử dụng.');
     }
   }, [subtotal, appliedVoucher]);
 
@@ -873,7 +908,8 @@ export function CheckoutPage() {
     const isShipping = (appliedVoucher.discount_code || '').toLowerCase().includes('ship');
     if (isShipping) return 0;
     if (subtotal < (appliedVoucher.min_order_amount || 0)) return 0;
-    return Math.min(subtotal, Number(appliedVoucher.discount_value || 0));
+    if (!isVoucherInEffectiveWindow(appliedVoucher)) return 0;
+    return getVoucherDiscountAmount(appliedVoucher, subtotal);
   }, [appliedVoucher, subtotal]);
 
   const shippingDiscount = useMemo(() => {
@@ -881,7 +917,8 @@ export function CheckoutPage() {
     const isShipping = (appliedVoucher.discount_code || '').toLowerCase().includes('ship');
     if (!isShipping) return 0;
     if (subtotal < (appliedVoucher.min_order_amount || 0)) return 0;
-    return Math.min(shippingFee, Number(appliedVoucher.discount_value || 0));
+    if (!isVoucherInEffectiveWindow(appliedVoucher)) return 0;
+    return getVoucherDiscountAmount(appliedVoucher, shippingFee);
   }, [appliedVoucher, subtotal, shippingFee]);
 
   const totalAmount = useMemo(() => {
@@ -2468,7 +2505,10 @@ export function CheckoutPage() {
                         }
                         const selected = claimedVouchersList.find((v) => v.discount_code === code);
                         if (selected) {
-                          if (subtotal < (selected.min_order_amount || 0)) {
+                          if (!isVoucherInEffectiveWindow(selected)) {
+                            setVoucherError('Voucher đã hết hạn hoặc hết lượt sử dụng.');
+                            setAppliedVoucher(null);
+                          } else if (subtotal < (selected.min_order_amount || 0)) {
                             setVoucherError(`Đơn hàng chưa đạt giá trị tối thiểu ${toCurrencyTextFromNumber(selected.min_order_amount)}`);
                             setAppliedVoucher(null);
                           } else {
@@ -2484,7 +2524,7 @@ export function CheckoutPage() {
                         const isUnderMin = subtotal < (v.min_order_amount || 0);
                         return (
                           <option key={v.discount_code} value={v.discount_code} disabled={isUnderMin}>
-                            {v.discount_code} - Giảm {toCurrencyTextFromNumber(v.discount_value)} {isUnderMin ? '(Chưa đủ điều kiện)' : ''}
+                            {v.discount_code} - Giảm {getVoucherLabel(v)} {isUnderMin ? '(Chưa đủ điều kiện)' : ''}
                           </option>
                         );
                       })}

@@ -435,11 +435,26 @@ class ProductManagement implements ProductManagementInterface
             }
         }
 
+        $categoryIdsByProductId = $this->getCategoryIdsByProductIds($connection, $productIds);
+        $activeAutoPromotions = $this->getActiveAutoPromotions($connection);
+
         $products = [];
         
         foreach ($results as $row) {
             $productId = (int) $row['id'];
             $basePrice = $row['price'] !== null ? (float) $row['price'] : 0.0;
+            $existingSpecialPrice = $row['special_price'] !== null ? (float) $row['special_price'] : null;
+            $promotion = $this->resolveBestAutoPromotion(
+                (string)$row['sku'],
+                $categoryIdsByProductId[$productId] ?? [],
+                $basePrice,
+                $activeAutoPromotions
+            );
+            $promotionPrice = $promotion['price'] ?? null;
+            $effectiveSpecialPrice = $existingSpecialPrice;
+            if ($promotionPrice !== null && ($effectiveSpecialPrice === null || $promotionPrice < $effectiveSpecialPrice)) {
+                $effectiveSpecialPrice = $promotionPrice;
+            }
             
             $wholesaleTiers = [];
             if (isset($tierPricesByProductId[$productId]) && $basePrice > 0) {
@@ -462,7 +477,9 @@ class ProductManagement implements ProductManagementInterface
                 'sku' => (string) $row['sku'],
                 'name' => (string) $row['name'],
                 'price' => $basePrice,
-                'special_price' => $row['special_price'] !== null ? (float) $row['special_price'] : null,
+                'special_price' => $effectiveSpecialPrice,
+                'promotion_price' => $promotionPrice,
+                'promotion' => $promotion['promotion'] ?? null,
                 'qty' => $row['qty'] !== null ? (float) $row['qty'] : 0.0,
                 'is_in_stock' => $row['is_in_stock'] !== null ? (bool) $row['is_in_stock'] : false,
                 'unit' => (string) $row['unit'],
@@ -472,6 +489,127 @@ class ProductManagement implements ProductManagementInterface
         }
         
         return $products;
+    }
+
+    private function getCategoryIdsByProductIds($connection, array $productIds): array
+    {
+        if (empty($productIds)) {
+            return [];
+        }
+
+        $categoryProductTable = $connection->getTableName('catalog_category_product');
+        $rows = $connection->fetchAll(
+            "SELECT product_id, category_id FROM {$categoryProductTable} WHERE product_id IN (" . implode(',', array_map('intval', $productIds)) . ")"
+        );
+
+        $categoryIdsByProductId = [];
+        foreach ($rows as $row) {
+            $productId = (int)$row['product_id'];
+            if (!isset($categoryIdsByProductId[$productId])) {
+                $categoryIdsByProductId[$productId] = [];
+            }
+            $categoryIdsByProductId[$productId][] = (string)$row['category_id'];
+        }
+
+        return $categoryIdsByProductId;
+    }
+
+    private function getActiveAutoPromotions($connection): array
+    {
+        $tableName = $this->resourceConnection->getTableName('tmdt_promotions');
+
+        try {
+            $select = $connection->select()
+                ->from($tableName)
+                ->where('type = ?', 'auto_discount')
+                ->where('is_active = ?', 1)
+                ->where('(start_at IS NULL OR start_at <= NOW())')
+                ->where('(end_at IS NULL OR end_at >= NOW())')
+                ->order('id ASC');
+
+            return $connection->fetchAll($select) ?: [];
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    private function resolveBestAutoPromotion(string $sku, array $categoryIds, float $basePrice, array $promotions): array
+    {
+        if ($basePrice <= 0 || empty($promotions)) {
+            return [];
+        }
+
+        $best = null;
+        $bestDiscount = 0.0;
+        $normalizedSku = strtoupper(trim($sku));
+
+        foreach ($promotions as $promotion) {
+            if (!$this->promotionMatchesProduct($promotion, $normalizedSku, $categoryIds)) {
+                continue;
+            }
+
+            $discount = $this->calculatePromotionDiscount($basePrice, $promotion);
+            if ($discount > $bestDiscount) {
+                $bestDiscount = $discount;
+                $best = $promotion;
+            }
+        }
+
+        if ($best === null || $bestDiscount <= 0) {
+            return [];
+        }
+
+        $discountedPrice = max(0, $basePrice - $bestDiscount);
+
+        return [
+            'price' => round($discountedPrice, 2),
+            'promotion' => [
+                'id' => (int)$best['id'],
+                'title' => (string)$best['title'],
+                'discount_type' => (string)($best['discount_type'] ?? 'fixed'),
+                'discount_value' => (float)($best['discount_value'] ?? 0),
+                'discount_amount' => round($bestDiscount, 2),
+                'start_at' => $best['start_at'] ?? null,
+                'end_at' => $best['end_at'] ?? null,
+            ]
+        ];
+    }
+
+    private function promotionMatchesProduct(array $promotion, string $sku, array $categoryIds): bool
+    {
+        $scope = (string)($promotion['apply_scope'] ?? 'all');
+        if ($scope === 'all' || $scope === '') {
+            return true;
+        }
+
+        if ($scope === 'product') {
+            $skus = array_map(static function ($item): string {
+                return strtoupper(trim($item));
+            }, explode(',', (string)($promotion['product_skus'] ?? '')));
+
+            return in_array($sku, $skus, true);
+        }
+
+        if ($scope === 'category') {
+            $promotionCategoryIds = array_filter(array_map('trim', explode(',', (string)($promotion['category_ids'] ?? ''))));
+            return count(array_intersect($categoryIds, $promotionCategoryIds)) > 0;
+        }
+
+        return false;
+    }
+
+    private function calculatePromotionDiscount(float $basePrice, array $promotion): float
+    {
+        $discountValue = (float)($promotion['discount_value'] ?? 0);
+        if ($discountValue <= 0) {
+            return 0.0;
+        }
+
+        if (($promotion['discount_type'] ?? '') === 'percent') {
+            return min($basePrice, $basePrice * min(100, $discountValue) / 100);
+        }
+
+        return min($basePrice, $discountValue);
     }
 
     /**

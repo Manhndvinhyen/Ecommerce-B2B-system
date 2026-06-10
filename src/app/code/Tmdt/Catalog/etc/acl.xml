@@ -4,7 +4,7 @@
         <resources>
             <resource id="Magento_Backend::admin">
                 <resource id="Magento_Customer::customer">
-                    <resource id="Tmdt_Catalog::promotion" title="Quan ly khuyen mai &amp; Banners" sortOrder="120" />
+                    <resource id="Tmdt_Catalog::promotion" title="Khuyen mai va Voucher" sortOrder="120" />
                 </resource>
             </resource>
         </resources>

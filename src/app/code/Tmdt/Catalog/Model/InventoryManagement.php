@@ -103,6 +103,7 @@ class InventoryManagement implements InventoryManagementInterface
                 []
             )
             ->where('cpev.value = ?', $sellerId)
+            ->group('il.log_id')
             ->order('il.created_at DESC');
 
         return $connection->fetchAll($select);

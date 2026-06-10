@@ -79,12 +79,17 @@ class OrderManagement implements OrderManagementInterface
 
             $sellerId = null;
             if ($sellerAttrId > 0) {
-                $sellerVal = trim((string)$connection->fetchOne(
-                    "SELECT value FROM {$productVarcharTable} WHERE entity_id = ? AND attribute_id = ? LIMIT 1",
+                $sellerVal = $connection->fetchOne(
+                    "SELECT value FROM {$productVarcharTable} 
+                     WHERE entity_id = ? AND attribute_id = ? AND value IS NOT NULL AND value != '' AND value != 'NONE' 
+                     ORDER BY store_id DESC LIMIT 1",
                     [$productId, $sellerAttrId]
-                ));
-                if (!empty($sellerVal) && $sellerVal !== 'NONE' && is_numeric($sellerVal)) {
-                    $sellerId = (int)$sellerVal;
+                );
+                if ($sellerVal !== false) {
+                    $sellerVal = trim((string)$sellerVal);
+                    if (is_numeric($sellerVal)) {
+                        $sellerId = (int)$sellerVal;
+                    }
                 }
             }
 

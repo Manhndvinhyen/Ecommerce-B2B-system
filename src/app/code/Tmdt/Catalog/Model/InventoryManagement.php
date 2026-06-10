@@ -263,11 +263,30 @@ class InventoryManagement implements InventoryManagementInterface
     {
         try {
             $product = $this->productRepository->get($sku);
-            $prodSellerId = $product->getCustomAttribute('tmdt_seller_id')
-                ? (string) $product->getCustomAttribute('tmdt_seller_id')->getValue()
-                : '';
+            $productId = (int)$product->getId();
 
-            if ($prodSellerId !== $sellerId) {
+            $connection = $this->resourceConnection->getConnection();
+            $productVarcharTable = $connection->getTableName('catalog_product_entity_varchar');
+            $attributeTable = $connection->getTableName('eav_attribute');
+
+            $sellerAttrId = (int)$connection->fetchOne(
+                "SELECT attribute_id FROM {$attributeTable} WHERE attribute_code = 'tmdt_seller_id' AND entity_type_id = 4 LIMIT 1"
+            );
+
+            $prodSellerId = '';
+            if ($sellerAttrId > 0) {
+                $sellerVal = $connection->fetchOne(
+                    "SELECT value FROM {$productVarcharTable} 
+                     WHERE entity_id = ? AND attribute_id = ? AND value IS NOT NULL AND value != '' AND value != 'NONE' 
+                     ORDER BY store_id DESC LIMIT 1",
+                    [$productId, $sellerAttrId]
+                );
+                if ($sellerVal !== false) {
+                    $prodSellerId = trim((string)$sellerVal);
+                }
+            }
+
+            if ($prodSellerId !== '' && $prodSellerId !== 'NONE' && $prodSellerId !== $sellerId) {
                 throw new LocalizedException(__('Ban khong co quyen quan ly kho cho san pham nay.'));
             }
         } catch (LocalizedException $e) {

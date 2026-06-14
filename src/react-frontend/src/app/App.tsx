@@ -28,6 +28,7 @@ import { SupplierDetailPage } from './components/SupplierDetailPage';
 import { getCategoryNameFromQuery, getSubcategoryNameFromQuery } from './data/categories';
 import { CartProvider } from './cart/CartProvider';
 import { applySeo, buildCanonicalPath, getSiteName } from './utils/seo';
+import { initializeAuthSession, touchAuthSession } from './utils/authSession';
 
 function AppContent() {
   const params = new URLSearchParams(window.location.search);
@@ -54,6 +55,29 @@ function AppContent() {
   const isSupplierDetailView = view === 'supplier-detail';
   const supplierId = params.get('supplierId') || '';
   const supplierName = params.get('supplierName') || '';
+
+  useEffect(() => {
+    initializeAuthSession();
+
+    const markActive = () => touchAuthSession();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        markActive();
+      }
+    };
+
+    window.addEventListener('focus', markActive);
+    window.addEventListener('click', markActive);
+    window.addEventListener('keydown', markActive);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', markActive);
+      window.removeEventListener('click', markActive);
+      window.removeEventListener('keydown', markActive);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, []);
 
   useEffect(() => {
     const root = document.documentElement;

@@ -13,7 +13,7 @@
         </web>
         <oauth>
             <access_token_lifetime>
-                <customer>168</customer>
+                <customer>720</customer>
             </access_token_lifetime>
         </oauth>
     </default>

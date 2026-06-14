@@ -436,12 +436,25 @@ class ProductManagement implements ProductManagementInterface
         }
 
         $categoryIdsByProductId = $this->getCategoryIdsByProductIds($connection, $productIds);
+        $allCategoryIds = [];
+        foreach ($categoryIdsByProductId as $categoryIds) {
+            $allCategoryIds = array_merge($allCategoryIds, $categoryIds);
+        }
+        $categoryNamesById = $this->getCategoryNamesByIds($connection, array_values(array_unique($allCategoryIds)));
         $activeAutoPromotions = $this->getActiveAutoPromotions($connection);
 
         $products = [];
         
         foreach ($results as $row) {
             $productId = (int) $row['id'];
+            $productCategoryIds = $categoryIdsByProductId[$productId] ?? [];
+            $productCategoryNames = [];
+            foreach ($productCategoryIds as $categoryId) {
+                $categoryName = $categoryNamesById[(int)$categoryId] ?? '';
+                if ($categoryName !== '') {
+                    $productCategoryNames[] = $categoryName;
+                }
+            }
             $basePrice = $row['price'] !== null ? (float) $row['price'] : 0.0;
             $existingSpecialPrice = $row['special_price'] !== null ? (float) $row['special_price'] : null;
             $promotion = $this->resolveBestAutoPromotion(
@@ -484,7 +497,11 @@ class ProductManagement implements ProductManagementInterface
                 'is_in_stock' => $row['is_in_stock'] !== null ? (bool) $row['is_in_stock'] : false,
                 'unit' => (string) $row['unit'],
                 'image' => $row['image'] ? '/media/catalog/product/' . ltrim((string) $row['image'], '/') : '',
-                'wholesale_tiers' => $wholesaleTiers
+                'wholesale_tiers' => $wholesaleTiers,
+                'category_ids' => array_values(array_map('intval', $productCategoryIds)),
+                'category_names' => $productCategoryNames,
+                'categoryLabel' => $productCategoryNames[0] ?? '',
+                'subcategoryLabel' => $productCategoryNames[count($productCategoryNames) - 1] ?? ''
             ];
         }
         
@@ -512,6 +529,38 @@ class ProductManagement implements ProductManagementInterface
         }
 
         return $categoryIdsByProductId;
+    }
+
+    private function getCategoryNamesByIds($connection, array $categoryIds): array
+    {
+        $categoryIds = array_values(array_filter(array_map('intval', $categoryIds)));
+        if (empty($categoryIds)) {
+            return [];
+        }
+
+        $categoryVarcharTable = $connection->getTableName('catalog_category_entity_varchar');
+        $attributeId = (int)$connection->fetchOne(
+            "SELECT attribute_id FROM eav_attribute WHERE attribute_code = 'name' AND entity_type_id = 3 LIMIT 1"
+        );
+        if ($attributeId <= 0) {
+            return [];
+        }
+
+        $rows = $connection->fetchAll(
+            "SELECT entity_id, value FROM {$categoryVarcharTable} WHERE attribute_id = ? AND store_id = 0 AND entity_id IN (" . implode(',', $categoryIds) . ")",
+            [$attributeId]
+        );
+
+        $namesById = [];
+        foreach ($rows as $row) {
+            $name = trim((string)($row['value'] ?? ''));
+            if ($name === '' || in_array($name, ['Root Catalog', 'Default Category', 'Products'], true)) {
+                continue;
+            }
+            $namesById[(int)$row['entity_id']] = $name;
+        }
+
+        return $namesById;
     }
 
     private function getActiveAutoPromotions($connection): array

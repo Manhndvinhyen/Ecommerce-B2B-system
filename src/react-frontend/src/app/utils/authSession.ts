@@ -15,11 +15,98 @@ export const AUTH_STORAGE_KEYS = [
   'freso_customer_cart_token',
 ];
 
-export const getStoredAuthToken = () =>
-  window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
+export const AUTH_SESSION_LAST_ACTIVITY_KEY = 'freso_auth_last_activity';
+export const AUTH_SESSION_EXPIRES_AT_KEY = 'freso_auth_expires_at';
+export const AUTH_SESSION_MAX_IDLE_MS = 7 * 24 * 60 * 60 * 1000;
+
+const AUTH_SESSION_META_KEYS = [
+  AUTH_SESSION_LAST_ACTIVITY_KEY,
+  AUTH_SESSION_EXPIRES_AT_KEY,
+];
+
+const canUseBrowserStorage = () => typeof window !== 'undefined' && Boolean(window.localStorage && window.sessionStorage);
+
+const nowMs = () => Date.now();
+
+export const getStoredAuthToken = () => {
+  if (!canUseBrowserStorage()) return '';
+  return window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || '';
+};
+
+const persistSessionMetadata = (timestamp = nowMs()) => {
+  if (!canUseBrowserStorage()) return;
+  const expiresAt = timestamp + AUTH_SESSION_MAX_IDLE_MS;
+  AUTH_SESSION_META_KEYS.forEach((key) => {
+    const value = key === AUTH_SESSION_LAST_ACTIVITY_KEY ? String(timestamp) : String(expiresAt);
+    window.localStorage.setItem(key, value);
+    window.sessionStorage.setItem(key, value);
+  });
+};
+
+export const syncAuthSessionToCurrentTab = () => {
+  if (!canUseBrowserStorage()) return;
+
+  AUTH_STORAGE_KEYS.forEach((key) => {
+    const value = window.localStorage.getItem(key);
+    if (value !== null) {
+      window.sessionStorage.setItem(key, value);
+    }
+  });
+
+  AUTH_SESSION_META_KEYS.forEach((key) => {
+    const value = window.localStorage.getItem(key);
+    if (value !== null) {
+      window.sessionStorage.setItem(key, value);
+    }
+  });
+};
+
+export const isStoredAuthSessionActive = () => {
+  if (!canUseBrowserStorage()) return false;
+
+  const token = getStoredAuthToken();
+  if (!token) return false;
+
+  const lastActivityRaw =
+    window.localStorage.getItem(AUTH_SESSION_LAST_ACTIVITY_KEY) ||
+    window.sessionStorage.getItem(AUTH_SESSION_LAST_ACTIVITY_KEY);
+  const lastActivity = Number(lastActivityRaw || 0);
+
+  if (!Number.isFinite(lastActivity) || lastActivity <= 0) {
+    persistSessionMetadata();
+    return true;
+  }
+
+  return nowMs() - lastActivity <= AUTH_SESSION_MAX_IDLE_MS;
+};
+
+export const touchAuthSession = () => {
+  if (!getStoredAuthToken()) return;
+  persistSessionMetadata();
+  syncAuthSessionToCurrentTab();
+};
+
+export const initializeAuthSession = () => {
+  if (!canUseBrowserStorage()) return false;
+
+  syncAuthSessionToCurrentTab();
+  if (!getStoredAuthToken()) return false;
+
+  if (!isStoredAuthSessionActive()) {
+    clearStoredAuthSession();
+    return false;
+  }
+
+  touchAuthSession();
+  return true;
+};
 
 export const clearStoredAuthSession = (options: { broadcastLogout?: boolean } = {}) => {
   AUTH_STORAGE_KEYS.forEach((key) => {
+    window.localStorage.removeItem(key);
+    window.sessionStorage.removeItem(key);
+  });
+  AUTH_SESSION_META_KEYS.forEach((key) => {
     window.localStorage.removeItem(key);
     window.sessionStorage.removeItem(key);
   });
@@ -73,6 +160,7 @@ export const persistAuthSession = (
       tabStorage.setItem(key, value);
     }
   });
+  persistSessionMetadata();
 
   console.info('[OrganicaAuth] Auth session persisted for browser-wide tabs', {
     tokenStored: Boolean(values.customerToken),

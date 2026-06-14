@@ -107,6 +107,114 @@ const getQueryParam = (params: URLSearchParams, key: string) => {
   return value ? decodeURIComponent(value) : '';
 };
 
+const normalizeLookupValue = (value?: string | number | null) => String(value ?? '').trim().toLowerCase();
+
+const productMatchesLookup = (
+  candidate: any,
+  querySku: string,
+  queryId: string,
+  queryName: string
+) => {
+  const normalizedSku = normalizeLookupValue(querySku);
+  const normalizedId = normalizeLookupValue(queryId);
+  const normalizedName = normalizeLookupValue(queryName);
+
+  return (
+    (normalizedSku && normalizeLookupValue(candidate?.sku) === normalizedSku) ||
+    (normalizedId && normalizeLookupValue(candidate?.id) === normalizedId) ||
+    (normalizedName && normalizeLookupValue(candidate?.name) === normalizedName)
+  );
+};
+
+const mapFallbackProductToDetail = (fallbackCandidate: any): MagentoProduct => {
+  const fallbackImage = 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop';
+  const localImage =
+    getBestMagentoProductImage(fallbackCandidate, fallbackImage) ||
+    pickBestImageUrl(fallbackCandidate?.image, fallbackCandidate?.thumbnail?.url) ||
+    fallbackImage;
+
+  const category = fallbackCandidate?.categoryLabel || fallbackCandidate?.category || 'Sản phẩm sỉ';
+  const supplier = getMockSupplierForProduct(fallbackCandidate?.sku, category);
+
+  return {
+    id: String(fallbackCandidate?.id || fallbackCandidate?.sku),
+    name: fallbackCandidate?.name || fallbackProduct.name,
+    sku: fallbackCandidate?.sku || fallbackProduct.sku,
+    unit: fallbackCandidate?.unit || fallbackProduct.unit,
+    origin: fallbackCandidate?.origin || fallbackProduct.origin,
+    note: fallbackCandidate?.note || fallbackCandidate?.short_description?.html || fallbackProduct.note,
+    price: (fallbackCandidate?.special_price || fallbackCandidate?.specialPrice || fallbackCandidate?.price || fallbackCandidate?.priceValue)
+      ? parsePrice(fallbackCandidate?.special_price || fallbackCandidate?.specialPrice || fallbackCandidate?.price || fallbackCandidate?.priceValue)
+      : fallbackProduct.price,
+    category,
+    image: localImage,
+    description: {
+      features: fallbackCandidate?.description?.features || 'Sản phẩm nông sản/thực phẩm sỉ chất lượng cao cung cấp trực tiếp bởi nhà vườn/nhà phân phối uy tín.',
+      benefits: fallbackCandidate?.description?.benefits || 'Cung cấp nguồn hàng sỉ ổn định cho nhà hàng, cửa hàng kinh doanh ăn uống với giá cả cạnh tranh nhất.',
+      storage: fallbackCandidate?.description?.storage || fallbackProduct.description.storage,
+      expiry: fallbackCandidate?.description?.expiry || fallbackProduct.description.expiry
+    },
+    wholesale_tiers: fallbackCandidate?.wholesale_tiers || [],
+    store_name: fallbackCandidate?.store_name || `${supplier.name} · ${supplier.region}`
+  };
+};
+
+const findLocalProductFallback = (querySku: string, queryId: string, queryName: string) => {
+  const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
+  if (!customLocalRaw) {
+    return null;
+  }
+
+  try {
+    const customLocalProducts = JSON.parse(customLocalRaw);
+    if (!Array.isArray(customLocalProducts)) {
+      return null;
+    }
+
+    return customLocalProducts.find((product: any) => productMatchesLookup(product, querySku, queryId, queryName)) ?? null;
+  } catch (error) {
+    console.error('Error parsing local custom products in fallback', error);
+    return null;
+  }
+};
+
+const fetchSellerProductFallback = async (
+  querySku: string,
+  queryId: string,
+  queryName: string,
+  signal: AbortSignal
+) => {
+  const token =
+    window.localStorage.getItem('freso_customer_token') ||
+    window.sessionStorage.getItem('freso_customer_token') ||
+    '';
+
+  if (!token) {
+    return null;
+  }
+
+  const response = await fetch(`${window.location.origin}/rest/V1/tmdt-catalog/products`, {
+    method: 'GET',
+    signal,
+    cache: 'no-store',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const products = await response.json();
+  if (!Array.isArray(products)) {
+    return null;
+  }
+
+  return products.find((product: any) => productMatchesLookup(product, querySku, queryId, queryName)) ?? null;
+};
+
 const stripHtml = (value?: string | null) => {
   if (!value) return '';
   return value.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
@@ -380,6 +488,25 @@ export function ProductDetailPage() {
       } catch (error) {
         if (controller.signal.aborted) {
           return;
+        }
+
+        const localProduct = findLocalProductFallback(querySku, queryId, queryName);
+        if (localProduct) {
+          setProduct(mapFallbackProductToDetail(localProduct));
+          return;
+        }
+
+        try {
+          const sellerProduct = await fetchSellerProductFallback(querySku, queryId, queryName, controller.signal);
+          if (sellerProduct) {
+            setProduct(mapFallbackProductToDetail(sellerProduct));
+            return;
+          }
+        } catch (fallbackError) {
+          if (controller.signal.aborted) {
+            return;
+          }
+          console.error('[ProductDetailPage] seller product fallback failed', fallbackError);
         }
 
         // Check if the product sku/name exists in the custom local products (localStorage)

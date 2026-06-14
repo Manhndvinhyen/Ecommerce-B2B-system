@@ -316,9 +316,9 @@ export function SellerDashboardPage() {
     <div className="min-h-screen bg-[#F5FAF6]">
       <SellerHeader />
 
-      <main className="bg-[#F5FAF6] py-6 px-6">
-        <div className="max-w-[1200px] mx-auto flex items-start gap-6">
-          <div className="w-[255px] flex-none border-r border-gray-100 pr-5 sticky top-6 max-h-[calc(100vh-48px)] overflow-y-auto overflow-x-hidden" style={{ scrollbarWidth: 'thin' }}>
+      <main className="bg-[#F5FAF6] px-4 py-4 pb-28 sm:px-6 lg:py-6">
+        <div className="max-w-[1200px] mx-auto flex flex-col items-stretch gap-4 lg:flex-row lg:items-start lg:gap-6">
+          <div className="hidden w-full flex-none lg:sticky lg:top-6 lg:block lg:max-h-[calc(100vh-48px)] lg:w-[255px] lg:overflow-y-auto lg:overflow-x-hidden lg:border-r lg:border-gray-100 lg:pr-5" style={{ scrollbarWidth: 'thin' }}>
             <SellerSidebar
               activeTab={activeTab}
               setActiveTab={setActiveTab}
@@ -334,7 +334,7 @@ export function SellerDashboardPage() {
             {activeTab === productLabel && canManageBranches && <SellerProductManager />}
             {activeTab === inventoryLabel && <SellerInventoryManager />}
             {activeTab === branchLabel && (
-              <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+              <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6 lg:rounded-3xl">
                 <BranchManagementPanel canManageBranches={canManageBranches} />
               </div>
             )}
@@ -353,12 +353,34 @@ export function SellerDashboardPage() {
         </div>
       </main>
 
+      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-gray-200 bg-white/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden">
+        <div className="mx-auto flex max-w-[640px] items-center gap-2 overflow-x-auto">
+          {menuItems.map((item) => {
+            const isActive = activeTab === item.label;
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setActiveTab(item.label)}
+                className={`flex min-w-[74px] flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[10px] font-black transition-colors ${
+                  isActive ? 'bg-[#00b14f] text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'
+                }`}
+              >
+                <Icon size={18} strokeWidth={isActive ? 2.6 : 2.2} />
+                <span className="line-clamp-1 max-w-full truncate">{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
       <AuthPageFooter />
       <ChatbotWidget />
 
       {/* Premium In-App Toast Notification */}
       {toast && (
-        <div className={`fixed top-6 right-6 z-[9999] flex items-center gap-4 px-5 py-4 rounded-2xl shadow-2xl border transition-all duration-300 transform scale-100 animate-in fade-in slide-in-from-top-4 select-none min-w-[320px] max-w-[450px] backdrop-blur-md ${
+        <div className={`fixed left-4 right-4 top-4 z-[9999] flex items-center gap-3 rounded-2xl border px-4 py-3 shadow-2xl transition-all duration-300 transform scale-100 animate-in fade-in slide-in-from-top-4 select-none backdrop-blur-md sm:left-auto sm:right-6 sm:top-6 sm:max-w-[450px] sm:min-w-[320px] sm:gap-4 sm:px-5 sm:py-4 ${
           toast.type === 'success'
             ? 'bg-[#E9F8EF]/95 text-[#00b14f] border-[#CDEEDB]'
             : toast.type === 'warning'

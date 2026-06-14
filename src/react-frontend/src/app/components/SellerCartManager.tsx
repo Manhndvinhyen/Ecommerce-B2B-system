@@ -324,7 +324,7 @@ export function SellerCartManager() {
             </div>
 
             <div className="flex-1 space-y-4 overflow-y-auto pr-1">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <label className="text-xs font-bold text-slate-600">
                   Gia bao / {selectedRequest.unit || 'don vi'}
                   <input
@@ -346,7 +346,7 @@ export function SellerCartManager() {
                   />
                 </label>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <label className="text-xs font-bold text-slate-600">
                   Thoi gian giao hang
                   <input

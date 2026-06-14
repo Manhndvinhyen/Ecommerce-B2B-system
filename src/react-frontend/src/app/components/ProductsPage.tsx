@@ -60,9 +60,9 @@ const defaultPromotions: PromotionItem[] = [
     description: 'Giảm 100.000đ cho đơn hàng sỉ đầu tiên của khách hàng doanh nghiệp từ 1.000.000đ.',
     image: '',
     button_text: 'Nhận voucher',
-    button_action: 'coupon:FRESO100',
+    button_action: 'coupon:ORGANICA100',
     type: 'voucher',
-    discount_code: 'FRESO100',
+    discount_code: 'ORGANICA100',
     discount_value: 100000,
     min_order_amount: 1000000
   },

@@ -438,7 +438,7 @@ export const GeneralInfo = () => {
 
       <section className="mb-6">
         <h2 className="text-[17px] font-bold text-gray-800 mb-3 tracking-tight">Thông tin chung</h2>
-        <div className="grid grid-cols-2 gap-y-3.5 gap-x-16">
+        <div className="grid grid-cols-1 gap-y-3.5 gap-x-8 sm:grid-cols-2 lg:gap-x-16">
           <div>
             <p className="text-[12.5px] text-black mb-0.5 font-light tracking-tight">Mã đăng nhập</p>
             <p className="text-[15px] font-bold text-gray-800 tracking-tight">{data.loginCode}</p>
@@ -455,7 +455,7 @@ export const GeneralInfo = () => {
             <p className="text-[12.5px] text-black mb-0.5 font-light tracking-tight">Tên trên giấy phép kinh doanh</p>
             <p className="text-[15px] font-bold text-gray-800 tracking-tight">{data.businessName}</p>
           </div>
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <p className="text-[12.5px] text-black mb-0.5 font-light tracking-tight">Địa chỉ</p>
             <p className="text-[15px] font-bold text-gray-800 tracking-tight leading-snug">{data.address}</p>
           </div>

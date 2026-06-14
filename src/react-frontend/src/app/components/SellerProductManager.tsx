@@ -17,6 +17,7 @@ import {
   ArrowLeft,
   RefreshCw
 } from 'lucide-react';
+import { categoryMenu, getCategoryId, getSubcategoryId } from '../data/categories';
 
 // B2B Category List matching the store categories
 const B2B_CATEGORIES = [
@@ -30,6 +31,70 @@ const B2B_CATEGORIES = [
 ];
 
 const SAMPLE_PRODUCT_SKUS = new Set(['CA-HOI-NORWAY', 'CAI-THAO-DALAT']);
+
+type CategoryNode = {
+  id: number;
+  name: string;
+  children: CategoryNode[];
+};
+
+const normalizeText = (value?: string | null) => String(value ?? '').trim().toLowerCase();
+
+const fallbackCategoryTree: CategoryNode[] = categoryMenu.map((category) => ({
+  id: getCategoryId(category.name) ?? 0,
+  name: category.name,
+  children: category.subcategories.map((subcategory) => ({
+    id: getSubcategoryId(category.name, subcategory) ?? 0,
+    name: subcategory,
+    children: []
+  }))
+}));
+
+const emptyCategoryNode: CategoryNode = {
+  id: 0,
+  name: '',
+  children: []
+};
+
+const toCategoryNode = (node: any): CategoryNode => ({
+  id: Number(node?.id ?? 0),
+  name: String(node?.name ?? ''),
+  children: Array.isArray(node?.children)
+    ? node.children.filter((child: any) => child?.name).map(toCategoryNode)
+    : []
+});
+
+const findCategorySelection = (
+  nodes: CategoryNode[],
+  categoryName?: string,
+  subcategoryName?: string,
+  categoryIds?: number[]
+) => {
+  const ids = new Set((categoryIds ?? []).map((id) => Number(id)).filter(Boolean));
+
+  for (const parent of nodes) {
+    const childById = parent.children.find((child) => ids.has(child.id));
+    if (childById) {
+      return { category: parent, subcategory: childById };
+    }
+
+    const childByName = parent.children.find(
+      (child) =>
+        normalizeText(child.name) === normalizeText(subcategoryName) ||
+        normalizeText(child.name) === normalizeText(categoryName)
+    );
+    if (childByName) {
+      return { category: parent, subcategory: childByName };
+    }
+
+    if (normalizeText(parent.name) === normalizeText(categoryName)) {
+      return { category: parent, subcategory: parent.children[0] ?? null };
+    }
+  }
+
+  const fallbackCategory = nodes[0] ?? fallbackCategoryTree[0] ?? emptyCategoryNode;
+  return { category: fallbackCategory, subcategory: fallbackCategory?.children?.[0] ?? null };
+};
 
 interface Variant {
   name: string;
@@ -50,6 +115,8 @@ interface Product {
   special_price?: number;
   qty: number;
   categoryLabel: string;
+  subcategoryLabel?: string;
+  category_ids?: number[];
   unit: string;
   image: string;
   variants: Variant[];
@@ -85,6 +152,9 @@ export function SellerProductManager() {
   const [price, setPrice] = useState('');
   const [specialPrice, setSpecialPrice] = useState('');
   const [categoryLabel, setCategoryLabel] = useState(B2B_CATEGORIES[0]);
+  const [subcategoryLabel, setSubcategoryLabel] = useState('');
+  const [categoryTree, setCategoryTree] = useState<CategoryNode[]>(fallbackCategoryTree);
+  const [isCategoryTreeLoading, setIsCategoryTreeLoading] = useState(false);
   const [unit, setUnit] = useState('kg');
   const [qty, setQty] = useState('100');
   const [image, setImage] = useState('');
@@ -140,6 +210,108 @@ export function SellerProductManager() {
 
     return responseText;
   };
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const fetchCategoryTree = async () => {
+      setIsCategoryTreeLoading(true);
+      try {
+        const response = await fetch(`${window.location.origin}/graphql`, {
+          method: 'POST',
+          signal: controller.signal,
+          cache: 'no-store',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            query: `
+              query SellerCategoryTree {
+                categoryList(filters: { ids: { in: ["2"] } }) {
+                  id
+                  name
+                  children {
+                    id
+                    name
+                    children {
+                      id
+                      name
+                      children {
+                        id
+                        name
+                      }
+                    }
+                  }
+                }
+              }
+            `
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Category tree request failed: ${response.status}`);
+        }
+
+        const json = await response.json();
+        if (json?.errors?.length) {
+          throw new Error(json.errors[0]?.message ?? 'Category tree GraphQL error');
+        }
+
+        const root = json?.data?.categoryList?.[0];
+        const nextTree = Array.isArray(root?.children)
+          ? root.children.filter((item: any) => item?.name).map(toCategoryNode)
+          : [];
+
+        if (nextTree.length > 0) {
+          setCategoryTree(nextTree);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          console.error('[FresoSellerProduct] category tree fallback used', error);
+          setCategoryTree(fallbackCategoryTree);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsCategoryTreeLoading(false);
+        }
+      }
+    };
+
+    fetchCategoryTree();
+
+    return () => controller.abort();
+  }, []);
+
+  const currentCategoryNode =
+    categoryTree.find((category) => normalizeText(category.name) === normalizeText(categoryLabel)) ??
+    categoryTree[0] ??
+    fallbackCategoryTree[0] ??
+    emptyCategoryNode;
+  const currentSubcategoryNodes = currentCategoryNode?.children ?? [];
+  const selectedSubcategoryNode =
+    currentSubcategoryNodes.find((subcategory) => normalizeText(subcategory.name) === normalizeText(subcategoryLabel)) ??
+    currentSubcategoryNodes[0] ??
+    null;
+
+  const handleCategoryChange = (nextCategoryName: string) => {
+    const nextCategory = categoryTree.find((category) => normalizeText(category.name) === normalizeText(nextCategoryName));
+    setCategoryLabel(nextCategoryName);
+    setSubcategoryLabel(nextCategory?.children?.[0]?.name ?? '');
+  };
+
+  useEffect(() => {
+    if (!currentCategoryNode) {
+      return;
+    }
+
+    if (currentCategoryNode.name !== categoryLabel) {
+      setCategoryLabel(currentCategoryNode.name);
+    }
+
+    if (currentSubcategoryNodes.length > 0 && !selectedSubcategoryNode) {
+      setSubcategoryLabel(currentSubcategoryNodes[0].name);
+    }
+  }, [categoryLabel, currentCategoryNode, currentSubcategoryNodes, selectedSubcategoryNode]);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -202,6 +374,8 @@ export function SellerProductManager() {
                 special_price: p.special_price ? Number(p.special_price) : undefined,
                 qty: Number(p.qty),
                 categoryLabel: p.categoryLabel || localMatch?.categoryLabel || 'Rau củ quả',
+                subcategoryLabel: p.subcategoryLabel || localMatch?.subcategoryLabel || '',
+                category_ids: Array.isArray(p.category_ids) ? p.category_ids : (localMatch?.category_ids || []),
                 unit: p.unit || localMatch?.unit || 'kg',
                 image: p.image || localMatch?.image || 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&h=500&fit=crop',
                 variants: p.variants || localMatch?.variants || [],
@@ -249,11 +423,13 @@ export function SellerProductManager() {
 
   // Open create form modal
   const handleOpenCreate = () => {
+    const defaultCategory = categoryTree[0] ?? fallbackCategoryTree[0] ?? emptyCategoryNode;
     setName('');
     setSku('');
     setPrice('');
     setSpecialPrice('');
-    setCategoryLabel(B2B_CATEGORIES[0]);
+    setCategoryLabel(defaultCategory.name);
+    setSubcategoryLabel(defaultCategory.children[0]?.name ?? '');
     setVariants([]);
     setWholesaleTiers([]);
     setTierQty('');
@@ -272,11 +448,18 @@ export function SellerProductManager() {
 
   // Open edit form modal
   const handleOpenEdit = (product: Product) => {
+    const selection = findCategorySelection(
+      categoryTree,
+      product.categoryLabel,
+      product.subcategoryLabel,
+      product.category_ids
+    );
     setName(product.name);
     setSku(product.sku);
     setPrice(String(product.price));
     setSpecialPrice(product.special_price ? String(product.special_price) : '');
-    setCategoryLabel(product.categoryLabel);
+    setCategoryLabel(selection.category.name);
+    setSubcategoryLabel(selection.subcategory?.name ?? '');
     setUnit(product.unit);
     setQty(String(product.qty));
     setImage(product.image);
@@ -467,6 +650,13 @@ export function SellerProductManager() {
     };
     const categoryId = CATEGORY_ID_MAP[categoryLabel];
     const category_ids = categoryId ? [categoryId] : [];
+    const resolvedCategoryIds = Array.from(
+      new Set(
+        [currentCategoryNode?.id, selectedSubcategoryNode?.id]
+          .map((id) => Number(id))
+          .filter((id) => Number.isFinite(id) && id > 0)
+      )
+    );
 
     const newProductData: Product & { category_ids?: number[] } = {
       id: editingSku ? (products.find((p) => p.sku === editingSku)?.id || String(Date.now())) : String(Date.now()),
@@ -476,7 +666,8 @@ export function SellerProductManager() {
       special_price: specialPrice.trim() ? parseFloat(specialPrice) : undefined,
       qty: isNaN(qtyNum) ? 0 : qtyNum,
       categoryLabel,
-      category_ids,
+      subcategoryLabel,
+      category_ids: resolvedCategoryIds.length > 0 ? resolvedCategoryIds : category_ids,
       unit,
       image: finalImage,
       variants,
@@ -484,7 +675,7 @@ export function SellerProductManager() {
       isCustom: true,
       origin: origin.trim(),
       note: note.trim(),
-      store_name: window.localStorage.getItem('freso_branch_name') || window.sessionStorage.getItem('freso_branch_name') || window.localStorage.getItem('freso_customer_name') || window.sessionStorage.getItem('freso_customer_name') || 'Cửa hàng sỉ Freso',
+      store_name: window.localStorage.getItem('freso_branch_name') || window.sessionStorage.getItem('freso_branch_name') || window.localStorage.getItem('freso_customer_name') || window.sessionStorage.getItem('freso_customer_name') || 'Cửa hàng sỉ Organica',
       description: {
         features: features.trim(),
         benefits: benefits.trim(),
@@ -513,7 +704,7 @@ export function SellerProductManager() {
       showToast(`Đã cập nhật sản phẩm "${name}" thành công!`, 'success');
     } else {
       updatedProducts = [newProductData, ...products];
-      showToast(`Đã đăng sản phẩm "${name}" thành công lên Freso!`, 'success');
+      showToast(`Đã đăng sản phẩm "${name}" thành công lên Organica!`, 'success');
     }
 
     saveLocalProducts(updatedProducts);
@@ -550,7 +741,7 @@ export function SellerProductManager() {
             <Boxes className="text-green-600" size={20} />
             Quản lý danh mục sản phẩm sỉ
           </h2>
-          <p className="text-xs text-slate-400 font-medium">Đăng tải, định giá và cấu hình các mặt hàng bán buôn lên Freso</p>
+          <p className="text-xs text-slate-400 font-medium">Đăng tải, định giá và cấu hình các mặt hàng bán buôn lên Organica</p>
         </div>
 
         <div className="flex items-center gap-2 w-full md:w-auto">
@@ -591,8 +782,8 @@ export function SellerProductManager() {
             className="border border-gray-200 bg-gray-50/50 px-3 py-2.5 rounded-2xl text-xs font-bold outline-none focus:border-green-600"
           >
             <option value="all">Tất cả ngành hàng</option>
-            {B2B_CATEGORIES.map((cat) => (
-              <option key={cat} value={cat}>{cat}</option>
+            {categoryTree.map((cat) => (
+              <option key={cat.id || cat.name} value={cat.name}>{cat.name}</option>
             ))}
           </select>
         </div>
@@ -737,7 +928,7 @@ export function SellerProductManager() {
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
                         <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase">Mã định danh SKU</label>
                         <input
@@ -766,19 +957,43 @@ export function SellerProductManager() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
                         <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase">Ngành hàng B2B</label>
                         <select
                           value={categoryLabel}
-                          onChange={(e) => setCategoryLabel(e.target.value)}
+                          onChange={(e) => handleCategoryChange(e.target.value)}
                           className="w-full border border-gray-200 px-3 py-3 rounded-2xl text-xs font-bold outline-none focus:border-emerald-500 bg-slate-50/30"
                         >
-                          {B2B_CATEGORIES.map((cat) => (
-                            <option key={cat} value={cat}>{cat}</option>
+                          {categoryTree.map((cat) => (
+                            <option key={cat.id || cat.name} value={cat.name}>{cat.name}</option>
                           ))}
                         </select>
+                        {isCategoryTreeLoading && (
+                          <p className="mt-1 text-[10px] font-bold text-slate-400">Đang đồng bộ danh mục từ Magento...</p>
+                        )}
                       </div>
+                      <div>
+                        <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase">Nhánh danh mục</label>
+                        <select
+                          value={subcategoryLabel}
+                          onChange={(e) => setSubcategoryLabel(e.target.value)}
+                          className="w-full border border-gray-200 px-3 py-3 rounded-2xl text-xs font-bold outline-none focus:border-emerald-500 bg-slate-50/30"
+                        >
+                          {currentSubcategoryNodes.length === 0 ? (
+                            <option value="">Không có nhánh con</option>
+                          ) : (
+                            currentSubcategoryNodes.map((subcategory) => (
+                              <option key={subcategory.id || subcategory.name} value={subcategory.name}>
+                                {subcategory.name}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
                         <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase">Hình ảnh sản phẩm sỉ</label>
                         {image ? (
@@ -831,7 +1046,7 @@ export function SellerProductManager() {
                     </div>
 
                     {/* New Metadata Fields (Origin and Note) */}
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
                         <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase">Xuất xứ</label>
                         <input
@@ -859,7 +1074,7 @@ export function SellerProductManager() {
                       <h4 className="text-xs font-black text-slate-600 uppercase tracking-wider">
                         Mô tả chi tiết sản phẩm sỉ
                       </h4>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
                           <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase">Đặc điểm</label>
                           <textarea
@@ -881,7 +1096,7 @@ export function SellerProductManager() {
                           />
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
                           <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase">Hướng dẫn bảo quản</label>
                           <textarea
@@ -910,7 +1125,7 @@ export function SellerProductManager() {
                 {/* Step 2: Pricing & Inventory */}
                 {formStep === 2 && (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
                         <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase flex items-center gap-1">
                           <DollarSign size={13} />

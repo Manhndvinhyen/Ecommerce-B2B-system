@@ -889,7 +889,7 @@ export function RfqDashboard({ mode }: RfqDashboardProps) {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-gray-700">Số lượng đặt mua <span className="text-red-500">*</span></label>
                   <input
@@ -944,7 +944,7 @@ export function RfqDashboard({ mode }: RfqDashboardProps) {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-gray-700">Thời gian nhận hàng mong muốn <span className="text-red-500">*</span></label>
                   <input

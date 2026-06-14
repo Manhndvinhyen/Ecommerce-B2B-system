@@ -230,11 +230,13 @@ export const ChatbotWidget: React.FC = () => {
     setMessages(prev => [...prev, { sender: 'user', text }]);
     setInput('');
     setIsLoading(true);
-    console.info('[FresoChatbot] Sending chatbot request.', {
-      message: text,
-      endpoint: CHATBOT_API,
-      timeoutMs: CHATBOT_REQUEST_TIMEOUT_MS,
-    });
+    if (import.meta.env.DEV) {
+      console.info('[FresoChatbot] Sending chatbot request.', {
+        message: text,
+        endpoint: CHATBOT_API,
+        timeoutMs: CHATBOT_REQUEST_TIMEOUT_MS,
+      });
+    }
 
     try {
       const controller = new AbortController();
@@ -253,21 +255,25 @@ export const ChatbotWidget: React.FC = () => {
       }).finally(() => window.clearTimeout(timeoutId));
 
       const raw = await response.text();
-      console.info('[FresoChatbot] Chatbot API response received.', {
-        ok: response.ok,
-        status: response.status,
-        rawPreview: raw.slice(0, 500),
-      });
+      if (import.meta.env.DEV) {
+        console.info('[FresoChatbot] Chatbot API response received.', {
+          ok: response.ok,
+          status: response.status,
+          rawPreview: raw.slice(0, 500),
+        });
+      }
       if (!response.ok) {
         throw new Error(raw.trim() || `HTTP ${response.status}`);
       }
 
       const { reply, products } = parseChatbotResponse(raw);
-      console.info('[FresoChatbot] Chatbot response parsed.', {
-        hasReply: Boolean(reply),
-        productCount: products.length,
-        replyPreview: reply.slice(0, 300),
-      });
+      if (import.meta.env.DEV) {
+        console.info('[FresoChatbot] Chatbot response parsed.', {
+          hasReply: Boolean(reply),
+          productCount: products.length,
+          replyPreview: reply.slice(0, 300),
+        });
+      }
       setMessages(prev => [
         ...prev,
         {

@@ -656,7 +656,7 @@ export function CheckoutPage() {
       title: 'Voucher Khách Hàng Mới',
       description: 'Giảm 100.000đ cho đơn hàng sỉ đầu tiên từ 1.000.000đ.',
       type: 'voucher',
-      discount_code: 'FRESO100',
+      discount_code: 'ORGANICA100',
       discount_value: 100000,
       min_order_amount: 1000000
     },
@@ -2751,7 +2751,7 @@ export function CheckoutPage() {
             </div>
             <h3 className="text-lg font-bold text-gray-900 mb-2">Sử dụng vị trí của bạn?</h3>
             <p className="text-xs text-gray-500 mb-6 leading-relaxed">
-              Freso cần vị trí của bạn để tự động tìm chi nhánh gần nhất, định vị địa chỉ giao hàng và tính toán thời tiết chính xác cho lộ trình bảo quản lạnh.
+              Organica cần vị trí của bạn để tự động tìm chi nhánh gần nhất, định vị địa chỉ giao hàng và tính toán thời tiết chính xác cho lộ trình bảo quản lạnh.
             </p>
             <div className="flex flex-col gap-2">
               <button

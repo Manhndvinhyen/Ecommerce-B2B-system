@@ -35,6 +35,11 @@ interface CachedData {
 const CACHE_KEY = 'freso_weather_cache_v2';
 const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes in milliseconds
 const DISMISS_KEY = 'freso_weather_dismissed';
+const DEFAULT_WEATHER_LOCATION = {
+  lat: 21.0278,
+  lon: 105.8342,
+  cityName: 'Hà Nội',
+};
 
 // Format city name from English to Vietnamese if needed (for IP API fallbacks)
 function formatRegionName(region: string): string {
@@ -66,7 +71,7 @@ export function WeatherWidget() {
       setIsDismissed(true);
     }
 
-    loadWeatherData(true);
+    loadWeatherData(false);
   }, []);
 
   // Fetch location and then fetch weather
@@ -100,9 +105,9 @@ export function WeatherWidget() {
         }
       }
 
-      let lat: number = 21.0278; // Default fallback to Hanoi
-      let lon: number = 105.8342;
-      let cityName = 'Hà Nội';
+      let lat: number = DEFAULT_WEATHER_LOCATION.lat;
+      let lon: number = DEFAULT_WEATHER_LOCATION.lon;
+      let cityName = DEFAULT_WEATHER_LOCATION.cityName;
       let isGps = false;
 
       if (useGps && navigator.geolocation) {
@@ -144,29 +149,8 @@ export function WeatherWidget() {
             console.warn('Reverse geocoding failed, fallback to default label', geoErr);
             cityName = 'Vị trí của bạn';
           }
-        } catch (geoErr: any) {
-          console.warn('Geolocation GPS failed or denied, trying IP location fallback', geoErr);
+        } catch {
           setGpsDenied(true);
-          try {
-            const ipData = await fetchIpLocation();
-            lat = ipData.lat;
-            lon = ipData.lon;
-            cityName = ipData.cityName;
-          } catch (ipErr) {
-            console.warn('IP location failed, using default Hanoi', ipErr);
-            // defaults are already set to Hanoi
-          }
-        }
-      } else {
-        // IP-based geolocation
-        try {
-          const ipData = await fetchIpLocation();
-          lat = ipData.lat;
-          lon = ipData.lon;
-          cityName = ipData.cityName;
-        } catch (ipErr) {
-          console.warn('IP location failed, using default Hanoi', ipErr);
-          // defaults are already set to Hanoi
         }
       }
 
@@ -221,50 +205,6 @@ export function WeatherWidget() {
       setLoading(false);
       setGpsLoading(false);
     }
-  };
-
-  const fetchIpLocation = async () => {
-    // 1. Try ipwho.is first (highly accurate, supports HTTPS, no cloudflare block)
-    try {
-      const res = await fetch('https://ipwho.is/', { cache: 'no-store' });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.latitude && data.longitude) {
-          let cityName = 'Vị trí của bạn';
-          if (data.city) {
-            cityName = formatRegionName(data.city);
-          } else if (data.region) {
-            cityName = formatRegionName(data.region);
-          }
-          return { lat: data.latitude, lon: data.longitude, cityName };
-        }
-      }
-    } catch (e) {
-      console.warn('ipwho.is failed, trying backup freeipapi', e);
-    }
-
-    // 2. Fallback to free.freeipapi.com
-    const ipRes = await fetch(`https://free.freeipapi.com/api/json?t=${Date.now()}`, { cache: 'no-store' });
-    if (!ipRes.ok) {
-      throw new Error('Lỗi kết nối định vị IP.');
-    }
-    const ipData = await ipRes.json();
-
-    if (!ipData.latitude || !ipData.longitude) {
-      throw new Error('Không thể định vị được địa chỉ IP hiện tại.');
-    }
-
-    const lat = ipData.latitude;
-    const lon = ipData.longitude;
-    let cityName = 'Vị trí của bạn';
-
-    if (ipData.regionName) {
-      cityName = formatRegionName(ipData.regionName);
-    } else if (ipData.cityName) {
-      cityName = formatRegionName(ipData.cityName);
-    }
-
-    return { lat, lon, cityName };
   };
 
   const handleDismiss = () => {
@@ -413,7 +353,7 @@ export function WeatherWidget() {
             <span>Không thể xác định vị trí thời tiết của bạn. Vui lòng cấp quyền định vị hoặc thử lại.</span>
           </div>
           <button
-            onClick={() => loadWeatherData()}
+            onClick={() => loadWeatherData(false)}
             className="flex items-center gap-1 hover:text-amber-950 transition-colors font-medium ml-4"
           >
             <RefreshCw className="size-3" /> Thử lại

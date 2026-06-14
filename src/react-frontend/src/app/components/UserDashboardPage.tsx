@@ -112,9 +112,9 @@ export function UserDashboardPage() {
     <div className="min-h-screen bg-white">
       <Header />
 
-      <main className="bg-white py-6 px-6">
-        <div className="mx-auto flex max-w-[1200px] items-start gap-6">
-          <div className="w-[255px] flex-none border-r border-gray-200 pr-5 sticky top-6 max-h-[calc(100vh-48px)] overflow-y-auto overflow-x-hidden" style={{ scrollbarWidth: 'thin' }}>
+      <main className="bg-white px-4 py-4 pb-28 sm:px-6 lg:py-6">
+        <div className="mx-auto flex max-w-[1200px] flex-col items-stretch gap-4 lg:flex-row lg:items-start lg:gap-6">
+          <div className="hidden w-full flex-none lg:sticky lg:top-6 lg:block lg:max-h-[calc(100vh-48px)] lg:w-[255px] lg:overflow-y-auto lg:overflow-x-hidden lg:border-r lg:border-gray-200 lg:pr-5" style={{ scrollbarWidth: 'thin' }}>
             <CustomerSidebar
               activeTab={activeTab}
               setActiveTab={setActiveTab}
@@ -125,7 +125,7 @@ export function UserDashboardPage() {
           <div className="flex-1 min-w-0">
             {activeTab === profileLabel && <ProfileContent />}
             {activeTab === branchLabel && (
-              <div className="p-8">
+              <div className="p-0 sm:p-4 lg:p-8">
                 <BranchManagementPanel canManageBranches={canManageBranches} />
               </div>
             )}
@@ -151,6 +151,28 @@ export function UserDashboardPage() {
           </div>
         </div>
       </main>
+
+      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-gray-200 bg-white/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden">
+        <div className="mx-auto flex max-w-[640px] items-center gap-2 overflow-x-auto">
+          {menuItems.map((item) => {
+            const isActive = activeTab === item.label;
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setActiveTab(item.label)}
+                className={`flex min-w-[74px] flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[10px] font-black transition-colors ${
+                  isActive ? 'bg-green-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'
+                }`}
+              >
+                <Icon size={18} strokeWidth={isActive ? 2.6 : 2.2} />
+                <span className="line-clamp-1 max-w-full truncate">{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
 
       <AuthPageFooter />
       <ChatbotWidget />

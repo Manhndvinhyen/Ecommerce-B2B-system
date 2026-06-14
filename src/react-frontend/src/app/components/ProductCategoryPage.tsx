@@ -68,6 +68,15 @@ type OptimizedSearchProduct = {
   categoryLabel?: string;
 };
 
+type ProductSellerDisplay = {
+  sku: string;
+  seller_id?: string;
+  store_name?: string;
+  business_name?: string;
+  unit_nickname?: string;
+  province?: string;
+};
+
 
 const dedupeByKey = <T,>(items: T[], keyFn: (item: T) => string) => {
   const seen = new Set<string>();
@@ -128,7 +137,7 @@ const formatPrice = (value?: number) => {
 
 const parseSupplierLabel = (label?: string) => {
   const parts = String(label || '')
-    .split('·')
+    .split(/·|Â·/)
     .map((part) => part.trim())
     .filter(Boolean);
 
@@ -366,6 +375,86 @@ const optimizedProductSearchRequest = async (
   }
 
   return [];
+};
+
+const fetchProductSellerDisplayMap = async (
+  skus: string[],
+  signal?: AbortSignal
+): Promise<Map<string, ProductSellerDisplay>> => {
+  const normalizedSkus = Array.from(
+    new Set(
+      skus
+        .map((sku) => String(sku || '').trim())
+        .filter(Boolean)
+    )
+  ).slice(0, 100);
+
+  if (!normalizedSkus.length) {
+    return new Map();
+  }
+
+  const params = new URLSearchParams({ skus: normalizedSkus.join(',') });
+  const url = `/rest/V1/tmdt-catalog/product-sellers?${params.toString()}`;
+  console.info('[OrganicaCatalog][SellerInfo] request started', {
+    url,
+    skuCount: normalizedSkus.length
+  });
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      signal,
+      cache: 'no-store',
+      credentials: 'omit',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      console.error('[OrganicaCatalog][SellerInfo] request failed', {
+        url,
+        status: response.status,
+        statusText: response.statusText,
+        body
+      });
+      return new Map();
+    }
+
+    const json = await response.json();
+    const items = Array.isArray(json)
+      ? json
+      : typeof json === 'string'
+        ? JSON.parse(json)
+        : [];
+    const map = new Map<string, ProductSellerDisplay>();
+
+    if (Array.isArray(items)) {
+      items.forEach((item) => {
+        const sku = String(item?.sku || '').trim().toLowerCase();
+        if (sku) {
+          map.set(sku, item as ProductSellerDisplay);
+        }
+      });
+    }
+
+    console.info('[OrganicaCatalog][SellerInfo] response received', {
+      url,
+      requestedCount: normalizedSkus.length,
+      matchedCount: map.size
+    });
+
+    return map;
+  } catch (error) {
+    if ((error as DOMException)?.name === 'AbortError') {
+      console.info('[OrganicaCatalog][SellerInfo] request aborted', { url });
+      return new Map();
+    }
+
+    console.error('[OrganicaCatalog][SellerInfo] unexpected error', { url, error });
+    return new Map();
+  }
 };
 
 const getStoredPreferredRegion = () => {
@@ -665,6 +754,13 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
               customLocalProducts = [];
             }
           }
+          const sellerDisplayMap = await fetchProductSellerDisplayMap(
+            [
+              ...items.map((item) => item.sku),
+              ...customLocalProducts.map((item) => item?.sku)
+            ],
+            controller.signal
+          );
 
           const mappedGraphQlProducts = items.map((item) => {
             const inferred = inferCategoryFromSku(item.sku);
@@ -677,6 +773,11 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
             const localPriceValue = (specialPrice && specialPrice > 0) ? specialPrice : normalPrice;
             const priceValue = localMatch ? localPriceValue : Number(item.priceValue ?? 0);
             const supplier = getMockSupplierForProduct(item.sku, productCategory);
+            const sellerDisplay = sellerDisplayMap.get(item.sku.trim().toLowerCase());
+            const storeSupplier = resolveSupplierDisplay(
+              localMatch?.store_name || sellerDisplay?.store_name || sellerDisplay?.unit_nickname || sellerDisplay?.business_name,
+              supplier
+            );
             const fallbackImage =
               fallbackImageByCategory[productCategory] ??
               fallbackImageByCategory[category.name] ??
@@ -701,8 +802,8 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
               unit: inferUnitByCategory(productCategory),
               image: localImage || resolvedItemImage || fallbackImage,
               categoryLabel: inferred?.subcategory ?? item.categoryLabel ?? productCategory,
-              supplierName: supplier.name,
-              supplierRegion: supplier.region
+              supplierName: storeSupplier.supplierName,
+              supplierRegion: sellerDisplay?.province || storeSupplier.supplierRegion
             };
           });
 
@@ -908,6 +1009,54 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
           uniqueCount: uniqueItems.length,
           skus: uniqueItems.map((item) => item.sku)
         });
+        let fallbackSearchItems: OptimizedSearchProduct[] = [];
+        if (uniqueItems.length === 0) {
+          const fallbackQuery = activeSubcategory === 'Tất cả'
+            ? category.name
+            : `${category.name} ${activeSubcategory}`;
+
+          try {
+            const fallbackItems = dedupeByKey(
+              await optimizedProductSearchRequest(fallbackQuery, controller.signal),
+              (item) => item.sku || String(item.id)
+            );
+            const categorySlug = toQuerySlug(category.name);
+            const activeSubcategorySlug = activeSubcategory === 'Tất cả' ? '' : toQuerySlug(activeSubcategory);
+
+            fallbackSearchItems = fallbackItems.filter((item) => {
+              const inferred = inferCategoryFromSku(item.sku);
+              const itemCategorySlug = toQuerySlug(inferred?.category ?? item.categoryLabel ?? '');
+              const itemSubcategorySlug = toQuerySlug(inferred?.subcategory ?? item.categoryLabel ?? '');
+              const categoryTextSlug = toQuerySlug(item.categoryLabel ?? '');
+              const categoryMatched =
+                itemCategorySlug === categorySlug ||
+                categoryTextSlug.includes(categorySlug);
+              const subcategoryMatched =
+                !activeSubcategorySlug ||
+                itemSubcategorySlug === activeSubcategorySlug ||
+                categoryTextSlug.includes(activeSubcategorySlug);
+
+              return categoryMatched && subcategoryMatched;
+            });
+
+            console.warn('[FresoCatalog][ProductCategoryPage] GraphQL category returned no products, used search fallback', {
+              category: category.name,
+              activeSubcategory,
+              requestCategoryIds,
+              fallbackQuery,
+              fallbackRawCount: fallbackItems.length,
+              fallbackMatchedCount: fallbackSearchItems.length,
+              fallbackSkus: fallbackSearchItems.map((item) => item.sku)
+            });
+          } catch (fallbackError) {
+            console.error('[FresoCatalog][ProductCategoryPage] search fallback failed after empty GraphQL category response', {
+              category: category.name,
+              activeSubcategory,
+              requestCategoryIds,
+              fallbackError
+            });
+          }
+        }
 
         // Load local custom products
         const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
@@ -936,6 +1085,14 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
 
           return true;
         });
+        const sellerDisplayMap = await fetchProductSellerDisplayMap(
+          [
+            ...uniqueItems.map((item) => item.sku),
+            ...fallbackSearchItems.map((item) => item.sku),
+            ...filteredCustomProducts.map((item) => item?.sku)
+          ],
+          controller.signal
+        );
 
         const mappedGraphQlProducts = dedupeByKey(
           uniqueItems
@@ -954,6 +1111,11 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
               const localPriceValue = (specialPrice && specialPrice > 0) ? specialPrice : normalPrice;
               const priceValue = localMatch ? localPriceValue : Number(item.price_range?.minimum_price?.final_price?.value ?? 0);
               const supplier = getMockSupplierForProduct(item.sku, productCategory);
+              const sellerDisplay = sellerDisplayMap.get(item.sku.trim().toLowerCase());
+              const storeSupplier = resolveSupplierDisplay(
+                localMatch?.store_name || sellerDisplay?.store_name || sellerDisplay?.unit_nickname || sellerDisplay?.business_name,
+                supplier
+              );
               const localImage = localMatch?.image && !String(localMatch.image).toLowerCase().includes('placeholder')
                 ? localMatch.image
                 : '';
@@ -977,13 +1139,57 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
                 unit: inferUnitByCategory(productCategory),
                 image: localImage || pickMagentoProductImage(item, fallbackImage) || fallbackImage,
                 categoryLabel: getCategoryDisplayLabel(item),
-                supplierName: supplier.name,
-                supplierRegion: supplier.region
+                supplierName: storeSupplier.supplierName,
+                supplierRegion: sellerDisplay?.province || storeSupplier.supplierRegion
               };
             })
             .filter((item): item is NonNullable<typeof item> => item !== null),
           (product) => product.sku || `${product.name}|${product.price}|${product.categoryLabel}`
         );
+        const mappedFallbackSearchProducts: ProductItem[] = fallbackSearchItems.map((item) => {
+          const inferred = inferCategoryFromSku(item.sku);
+          const productCategory = inferred?.category ?? item.categoryLabel ?? category.name;
+          const localMatch = filteredCustomProducts.find(
+            (p) => String(p.sku).trim().toLowerCase() === item.sku.trim().toLowerCase()
+          );
+          const specialPrice = localMatch ? parsePrice(localMatch.special_price ?? localMatch.specialPrice) : 0;
+          const normalPrice = localMatch ? parsePrice(localMatch.price ?? localMatch.priceValue) : 0;
+          const localPriceValue = (specialPrice && specialPrice > 0) ? specialPrice : normalPrice;
+          const priceValue = localMatch ? localPriceValue : Number(item.priceValue ?? 0);
+          const supplier = getMockSupplierForProduct(item.sku, productCategory);
+          const sellerDisplay = sellerDisplayMap.get(item.sku.trim().toLowerCase());
+          const storeSupplier = resolveSupplierDisplay(
+            localMatch?.store_name || sellerDisplay?.store_name || sellerDisplay?.unit_nickname || sellerDisplay?.business_name,
+            supplier
+          );
+          const fallbackImage =
+            fallbackImageByCategory[productCategory] ??
+            fallbackImageByCategory[category.name] ??
+            'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop';
+          const localImage = localMatch?.image && !String(localMatch.image).toLowerCase().includes('placeholder')
+            ? localMatch.image
+            : '';
+
+          let resolvedItemImage = item.image || '';
+          if (resolvedItemImage && !resolvedItemImage.startsWith('http') && !resolvedItemImage.startsWith('data:')) {
+            resolvedItemImage = getMagentoMediaImageUrl(resolvedItemImage);
+          } else {
+            resolvedItemImage = fixMagentoUrl(resolvedItemImage);
+          }
+
+          return {
+            id: item.id,
+            sku: item.sku,
+            name: localMatch?.name || item.name,
+            price: formatPrice(priceValue),
+            priceValue,
+            unit: inferUnitByCategory(productCategory),
+            image: localImage || resolvedItemImage || fallbackImage,
+            categoryLabel: inferred?.subcategory ?? item.categoryLabel ?? productCategory,
+            supplierName: storeSupplier.supplierName,
+            supplierRegion: sellerDisplay?.province || storeSupplier.supplierRegion
+          };
+        });
 
         const mappedCustomProducts: ProductItem[] = filteredCustomProducts.map((p) => {
           const specialPrice = parsePrice(p.special_price ?? p.specialPrice);
@@ -1012,6 +1218,11 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
         const localSkus = new Set(mappedCustomProducts.map((p) => p.sku));
         mappedGraphQlProducts.forEach((p) => {
           if (!localSkus.has(p.sku)) {
+            allProducts.push(p);
+          }
+        });
+        mappedFallbackSearchProducts.forEach((p) => {
+          if (!localSkus.has(p.sku) && !allProducts.some((product) => product.sku === p.sku)) {
             allProducts.push(p);
           }
         });

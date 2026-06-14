@@ -174,6 +174,9 @@ export const inferCategoryFromSku = (sku: string): InferredCategory | null => {
   if (/^RCQ_\d{3,}$/.test(normalizedUpper)) {
     return { category: 'Rau củ quả', subcategory: 'Rau phổ thông' };
   }
+  if (normalized.startsWith('rau-cu-')) {
+    return { category: 'Rau củ quả', subcategory: 'Rau phổ thông' };
+  }
   if (/^TC_\d{3,}$/.test(normalizedUpper)) {
     return { category: 'Trái cây', subcategory: 'Trái cây phổ thông' };
   }

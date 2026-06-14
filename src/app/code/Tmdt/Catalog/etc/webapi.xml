@@ -25,6 +25,12 @@
             <resource ref="self"/>
         </resources>
     </route>
+    <route url="/V1/tmdt-catalog/product-sellers" method="GET">
+        <service class="Tmdt\Catalog\Api\ProductSellerInfoInterface" method="getBySkus"/>
+        <resources>
+            <resource ref="anonymous"/>
+        </resources>
+    </route>
 
     <!-- Inventory Management Routes -->
     <route url="/V1/tmdt-catalog/inventory/adjust" method="POST">

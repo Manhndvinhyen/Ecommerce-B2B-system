@@ -121,7 +121,7 @@ const defaultFormData: LoginFormData = {
   restaurantCode: '',
   identifier: '',
   password: '',
-  rememberMe: false,
+  rememberMe: true,
 };
 
 const startCustomerSession = async (token: string, storage: Storage): Promise<string | null> => {
@@ -321,8 +321,8 @@ export function LoginPage() {
           throw new Error(data?.message || 'Thông tin đăng nhập không hợp lệ.');
         }
 
-        const primaryStorage = formData.rememberMe ? window.localStorage : window.sessionStorage;
-        const secondaryStorage = formData.rememberMe ? window.sessionStorage : window.localStorage;
+        const primaryStorage = window.localStorage;
+        const secondaryStorage = window.sessionStorage;
         const fallbackEmail = data.email || formData.identifier.trim();
         const magentoUsername = (data.email || formData.identifier).trim();
         const magentoToken = data.token;
@@ -370,6 +370,7 @@ export function LoginPage() {
           sessionRedirect,
           apiRedirect: data.redirect_url,
           finalRedirect: sessionRedirect || getPostLoginRedirect(data.redirect_url),
+          sharedAcrossBrowserTabs: true,
         });
         window.location.href = sessionRedirect || getPostLoginRedirect(data.redirect_url);
       })
@@ -428,8 +429,8 @@ export function LoginPage() {
           throw new Error(data?.message || 'Đăng nhập Google không thành công.');
         }
 
-        const primaryStorage = formData.rememberMe ? window.localStorage : window.sessionStorage;
-        const secondaryStorage = formData.rememberMe ? window.sessionStorage : window.localStorage;
+        const primaryStorage = window.localStorage;
+        const secondaryStorage = window.sessionStorage;
         const isMagentoTokenValid = await verifyMagentoCustomerToken(data.token);
         console.info('[FresoLogin] Google Magento customer token verification result.', {
           isMagentoTokenValid,
@@ -461,6 +462,7 @@ export function LoginPage() {
           sessionRedirect,
           apiRedirect: data.redirect_url,
           finalRedirect: sessionRedirect || getPostLoginRedirect(data.redirect_url),
+          sharedAcrossBrowserTabs: true,
         });
         window.location.href = sessionRedirect || getPostLoginRedirect(data.redirect_url);
       })
@@ -649,11 +651,11 @@ export function LoginPage() {
                     <label className="flex items-start gap-3 cursor-pointer group">
                       <input
                         type="checkbox"
-                        checked={formData.rememberMe}
-                        onChange={(event) => handleInputChange('rememberMe', event.target.checked)}
-                        className="mt-1 size-5 rounded border-gray-300 text-[#00b14f] focus:ring-[#00b14f] cursor-pointer"
+                        checked
+                        readOnly
+                        className="mt-1 size-5 rounded border-gray-300 text-[#00b14f] focus:ring-[#00b14f] cursor-default"
                       />
-                      <span className="text-[13px] text-gray-600 font-medium leading-relaxed">Ghi nhớ đăng nhập</span>
+                      <span className="text-[13px] text-gray-600 font-medium leading-relaxed">Giữ đăng nhập trên trình duyệt này</span>
                     </label>
                     <a href={buildForgotPasswordHref()} className="text-[13px] font-extrabold text-[#00b14f] hover:text-[#006a4e] transition-colors underline underline-offset-4 decoration-2">
                       Quên mật khẩu?

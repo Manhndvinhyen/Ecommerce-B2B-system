@@ -57,14 +57,21 @@ class LoginManagement implements LoginInterface
             throw new AuthenticationException(__('Tài khoản đã bị khóa. Vui lòng liên hệ quản trị.'));
         }
 
-        if ($role === 'seller' && $status !== 'approved') {
-            throw new AuthenticationException(__('Tai khoan kinh doanh dang cho duyet hoac da bi tu choi.'));
-        }
-
         try {
             $token = $this->customerTokenService->createCustomerAccessToken((string) $registrationRow['email'], $password);
         } catch (AuthenticationException | LocalizedException $exception) {
             throw new AuthenticationException(__('Thông tin đăng nhập không hợp lệ.'));
+        }
+
+        if ($role === 'seller' && $status !== 'approved') {
+            \Magento\Framework\App\ObjectManager::getInstance()
+                ->get(\Psr\Log\LoggerInterface::class)
+                ->info('[TMDT][Login] Seller account logged in without seller access', [
+                    'customer_id' => (int) $registrationRow['customer_id'],
+                    'role' => $role,
+                    'status' => $status,
+                    'redirect_url' => $this->getPostLoginRedirect($role, $status),
+                ]);
         }
 
         return [

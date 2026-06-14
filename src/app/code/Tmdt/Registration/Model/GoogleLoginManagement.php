@@ -74,14 +74,21 @@ class GoogleLoginManagement implements GoogleLoginInterface
 
         $status = strtolower(trim((string) ($registrationRow['status'] ?? '')));
         $role = strtolower(trim((string) ($registrationRow['role'] ?? '')));
-        if ($role === 'seller' && $status !== 'approved') {
-            throw new AuthenticationException(__('Tai khoan kinh doanh dang cho duyet hoac da bi tu choi.'));
-        }
-
         try {
             $token = $this->tokenFactory->create()->createCustomerToken((int) $registrationRow['customer_id'])->getToken();
         } catch (\Exception $exception) {
             throw new LocalizedException(__('Không thể tạo phiên đăng nhập. Vui lòng thử lại.'));
+        }
+
+        if ($role === 'seller' && $status !== 'approved') {
+            \Magento\Framework\App\ObjectManager::getInstance()
+                ->get(\Psr\Log\LoggerInterface::class)
+                ->info('[TMDT][GoogleLogin] Seller account logged in without seller access', [
+                    'customer_id' => (int) $registrationRow['customer_id'],
+                    'role' => $role,
+                    'status' => $status,
+                    'redirect_url' => $this->getPostLoginRedirect($role, $status),
+                ]);
         }
 
         return [

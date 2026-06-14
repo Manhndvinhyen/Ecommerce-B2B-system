@@ -81,15 +81,15 @@ export function Footer() {
             <ul className="space-y-3">
               <li className="flex items-start gap-2">
                 <MapPin className="size-5 text-green-500 flex-shrink-0 mt-0.5" />
-                <span className="text-sm">123 Đường ABC, Quận 1, TP. Hồ Chí Minh</span>
+                <span className="text-sm">133 Xuân Thủy, Cầu Giấy, Hà Nội</span>
               </li>
               <li className="flex items-center gap-2">
                 <Phone className="size-5 text-green-500 flex-shrink-0" />
-                <span className="text-sm">1900 1234</span>
+                <span className="text-sm">0888619668</span>
               </li>
               <li className="flex items-center gap-2">
                 <Mail className="size-5 text-green-500 flex-shrink-0" />
-                <span className="text-sm">support@organica.vn</span>
+                <span className="text-sm">manhndvinhyen@gmail.com</span>
               </li>
             </ul>
           </div>

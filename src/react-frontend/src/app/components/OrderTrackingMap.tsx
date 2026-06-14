@@ -288,6 +288,51 @@ export function TrackingTimeline({ currentIndex }: { currentIndex: number }) {
   );
 }
 
+const getAuthToken = () =>
+  typeof window !== 'undefined'
+    ? window.localStorage.getItem('freso_customer_token') || window.sessionStorage.getItem('freso_customer_token') || ''
+    : '';
+
+const autoCompleteOrder = async (orderCode: string) => {
+  const token = getAuthToken();
+  if (!token) return;
+
+  // Try seller endpoint first
+  try {
+    const res = await fetch(`${window.location.origin}/rest/V1/tmdt-orders/update-fulfillment`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ orderCode, status: 'delivered' }),
+    });
+    if (res.ok) {
+      window.dispatchEvent(new CustomEvent('freso:refresh-orders'));
+      return;
+    }
+  } catch (err) {
+    console.error('Failed to auto-complete order via seller endpoint:', err);
+  }
+
+  // Fallback to customer endpoint
+  try {
+    const res = await fetch(`${window.location.origin}/rest/V1/tmdt-orders/confirm-receipt`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ orderCode }),
+    });
+    if (res.ok) {
+      window.dispatchEvent(new CustomEvent('freso:refresh-orders'));
+    }
+  } catch (err) {
+    console.error('Failed to auto-complete order via customer endpoint:', err);
+  }
+};
+
 export function OrderTrackingMap({ order }: OrderTrackingMapProps) {
   const [leafletLoaded, setLeafletLoaded] = useState(false);
   const [dbWarehouses, setDbWarehouses] = useState<any[]>([]);
@@ -383,6 +428,7 @@ export function OrderTrackingMap({ order }: OrderTrackingMapProps) {
     return () => window.clearInterval(interval);
   }, [isTrackingActive, order.orderReference]);
 
+
   // Compute smooth position and dynamic metrics
   const dynamicMetrics = useMemo(() => {
     const { v, dTotal, t1, t2_stop, t3, t4_stop, t_total } = phases;
@@ -461,6 +507,13 @@ export function OrderTrackingMap({ order }: OrderTrackingMapProps) {
   const shipperPosition = pointOnRoute(trackingModel.routePoints, travelledKm);
   const currentIndex = getTimelineIndex(order.status, smoothProgress);
   const currentStatus = smoothProgress >= 1 ? 'Đã giao thành công' : statusDetails;
+
+  // Trigger auto-completion when progress hits 100%
+  useEffect(() => {
+    if (smoothProgress >= 1 && (order.status === 'shipping' || order.status === 'handed_over')) {
+      void autoCompleteOrder(order.orderReference);
+    }
+  }, [smoothProgress, order.status, order.orderReference]);
 
   useEffect(() => {
     loadLeaflet(() => setLeafletLoaded(true));

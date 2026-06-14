@@ -590,10 +590,10 @@ class OrderManagement implements OrderManagementInterface
         $oiTable = $connection->getTableName('tmdt_order_items');
 
         // Validate target status
-        $allowedStatuses = ['preparing', 'handed_over', 'shipping', 'delivered'];
+        $allowedStatuses = ['preparing', 'handed_over', 'shipping', 'delivered', 'cancelled'];
         if (!in_array($status, $allowedStatuses, true)) {
             throw new \Magento\Framework\Exception\LocalizedException(
-                __('Trạng thái "%1" không hợp lệ. Chỉ chấp nhận: preparing, handed_over, shipping, delivered.', $status)
+                __('Trạng thái "%1" không hợp lệ. Chỉ chấp nhận: preparing, handed_over, shipping, delivered, cancelled.', $status)
             );
         }
 
@@ -626,22 +626,30 @@ class OrderManagement implements OrderManagementInterface
         $validTransitions = [
             'preparing'   => ['paid', 'processing'],
             'handed_over' => ['preparing'],
-            'shipping'    => ['handed_over'],
-            'delivered'   => ['shipping'],
+            'shipping'    => ['handed_over', 'preparing'],
+            'delivered'   => ['shipping', 'handed_over'],
+            'cancelled'   => ['pending', 'paid', 'processing', 'preparing'],
         ];
 
         if (!in_array($currentStatus, $validTransitions[$status] ?? [], true)) {
             $statusLabels = [
+                'pending'     => 'Chờ thanh toán',
                 'paid'        => 'Đã thanh toán',
                 'processing'  => 'Đang xử lý',
                 'preparing'   => 'Đang chuẩn bị',
                 'handed_over' => 'Đã bàn giao cho ĐVVC',
                 'shipping'    => 'Đang giao hàng',
                 'delivered'   => 'Đã giao hàng',
+                'cancelled'   => 'Đã hủy',
+                'canceled'    => 'Đã hủy',
             ];
             throw new \Magento\Framework\Exception\LocalizedException(
                 __('Không thể chuyển từ trạng thái "%1" sang "%2".', $statusLabels[$currentStatus] ?? $currentStatus, $statusLabels[$status] ?? $status)
             );
+        }
+
+        if ($status === 'cancelled') {
+            return $this->orderProcessor->cancelOrder($orderCode, 'Người bán hủy đơn hàng.');
         }
 
         // Status label for log comments

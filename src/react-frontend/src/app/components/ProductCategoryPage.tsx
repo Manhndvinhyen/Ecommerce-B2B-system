@@ -297,6 +297,12 @@ const graphqlRequest = async (
   variables?: Record<string, unknown>,
   signal?: AbortSignal
 ): Promise<Response> => {
+  console.info('[FresoCatalog][GraphQL] request started', {
+    endpoint: '/graphql',
+    variables,
+    queryName: query.match(/\bquery\s+([A-Za-z0-9_]+)/)?.[1] ?? 'anonymous'
+  });
+
   return fetch('/graphql', {
     method: 'POST',
     signal,
@@ -317,7 +323,10 @@ const optimizedProductSearchRequest = async (
     query,
     limit: '100'
   });
-  const response = await fetch(`/rest/V1/tmdt-search/products?${params.toString()}`, {
+  const url = `/rest/V1/tmdt-search/products?${params.toString()}`;
+  console.info('[FresoCatalog][SearchAPI] request started', { url, query });
+
+  const response = await fetch(url, {
     method: 'GET',
     signal,
     cache: 'no-store',
@@ -328,10 +337,22 @@ const optimizedProductSearchRequest = async (
   });
 
   if (!response.ok) {
-    throw new Error(`Optimized product search failed: ${response.status}`);
+    const body = await response.text().catch(() => '');
+    console.error('[FresoCatalog][SearchAPI] request failed', {
+      url,
+      status: response.status,
+      statusText: response.statusText,
+      body
+    });
+    throw new Error(`Optimized product search failed: ${response.status} ${body}`);
   }
 
   const json = await response.json();
+  console.info('[FresoCatalog][SearchAPI] response received', {
+    url,
+    payloadType: Array.isArray(json) ? 'array' : typeof json,
+    count: Array.isArray(json) ? json.length : undefined
+  });
   if (Array.isArray(json)) {
     return json as OptimizedSearchProduct[];
   }
@@ -530,10 +551,20 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
             `);
 
         if (!response.ok) {
-          throw new Error(`Category lookup failed: ${response.status}`);
+          const body = await response.text().catch(() => '');
+          console.error('[FresoCatalog][CategoryLookup] HTTP error', {
+            status: response.status,
+            statusText: response.statusText,
+            body
+          });
+          throw new Error(`Category lookup failed: ${response.status} ${body}`);
         }
 
         const json = await response.json();
+        if (json?.errors?.length) {
+          console.error('[FresoCatalog][CategoryLookup] GraphQL errors', { errors: json.errors });
+          throw new Error(json.errors[0]?.message ?? 'Category lookup GraphQL error');
+        }
         const roots: GraphQlCategoryNode[] = json?.data?.categoryList ?? [];
 
         const lookup: Record<string, number> = {};
@@ -545,8 +576,12 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
         roots.forEach(walk);
         cachedCategoryLookup = lookup;
         setCategoryIdLookup(lookup);
+        console.info('[FresoCatalog][CategoryLookup] category ids loaded', {
+          count: Object.keys(lookup).length,
+          lookup
+        });
       } catch (error) {
-        console.error(error);
+        console.error('[FresoCatalog][CategoryLookup] failed', error);
       }
     };
 
@@ -774,12 +809,26 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
         cachedProducts && Date.now() - cachedProducts.fetchedAt < PRODUCT_CACHE_TTL_MS;
 
       if (cachedProducts && isCacheFresh) {
+        console.info('[FresoCatalog][ProductCategoryPage] using cached category products', {
+          category: category.name,
+          activeSubcategory,
+          requestCategoryIds,
+          isUsingSkuFallback,
+          count: cachedProducts.items.length
+        });
         setProducts(cachedProducts.items);
         setLoadError('');
         setIsLoading(false);
         return;
       }
 
+      console.info('[FresoCatalog][ProductCategoryPage] category products request started', {
+        category: category.name,
+        activeSubcategory,
+        requestCategoryIds,
+        isUsingSkuFallback,
+        requestId
+      });
       setIsLoading(true);
       setLoadError('');
 
@@ -826,16 +875,39 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
         );
 
         if (!response.ok) {
-          throw new Error(`GraphQL request failed: ${response.status}`);
+          const body = await response.text().catch(() => '');
+          console.error('[FresoCatalog][ProductCategoryPage] GraphQL HTTP error', {
+            category: category.name,
+            activeSubcategory,
+            requestCategoryIds,
+            status: response.status,
+            statusText: response.statusText,
+            body
+          });
+          throw new Error(`GraphQL request failed: ${response.status} ${body}`);
         }
 
         const json = await response.json();
         if (json?.errors?.length) {
+          console.error('[FresoCatalog][ProductCategoryPage] GraphQL payload errors', {
+            category: category.name,
+            activeSubcategory,
+            requestCategoryIds,
+            errors: json.errors
+          });
           throw new Error(json.errors[0]?.message ?? 'GraphQL error');
         }
 
         const items: GraphQlProductItem[] = json?.data?.products?.items ?? [];
         const uniqueItems = dedupeByKey(items, (item) => item.sku || String(item.id));
+        console.info('[FresoCatalog][ProductCategoryPage] GraphQL products received', {
+          category: category.name,
+          activeSubcategory,
+          requestCategoryIds,
+          rawCount: items.length,
+          uniqueCount: uniqueItems.length,
+          skus: uniqueItems.map((item) => item.sku)
+        });
 
         // Load local custom products
         const customLocalRaw = typeof window !== 'undefined' ? window.localStorage.getItem('freso_custom_products') : null;
@@ -955,17 +1027,37 @@ export function ProductCategoryPage({ categoryName, initialSubcategory }: Produc
           fetchedAt: Date.now()
         });
         setProducts(mappedProducts);
+        console.info('[FresoCatalog][ProductCategoryPage] category products rendered', {
+          category: category.name,
+          activeSubcategory,
+          count: mappedProducts.length
+        });
       } catch (error) {
         if (controller.signal.aborted || latestRequestRef.current !== requestId) {
+          console.info('[FresoCatalog][ProductCategoryPage] category request aborted or stale', {
+            category: category.name,
+            activeSubcategory,
+            requestId
+          });
           return;
         }
 
         setProducts([]);
         setLoadError('Không tải được dữ liệu sản phẩm từ database.');
-        console.error(error);
+        console.error('[FresoCatalog][ProductCategoryPage] category request failed', {
+          category: category.name,
+          activeSubcategory,
+          requestCategoryIds,
+          error
+        });
       } finally {
         if (latestRequestRef.current === requestId) {
           setIsLoading(false);
+          console.info('[FresoCatalog][ProductCategoryPage] category request finished', {
+            category: category.name,
+            activeSubcategory,
+            requestId
+          });
         }
       }
     };

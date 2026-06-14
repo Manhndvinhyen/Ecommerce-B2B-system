@@ -138,7 +138,15 @@ export function SellerOrderManager() {
         params.set('q', nextSearchTerm.trim());
       }
 
-      const response = await fetch(`/rest/V1/tmdt-catalog/orders?${params.toString()}`, {
+      const url = `/rest/V1/tmdt-catalog/orders?${params.toString()}`;
+      console.info('[FresoSellerOrders] request started', {
+        url,
+        status: nextStatusFilter,
+        q: nextSearchTerm.trim(),
+        hasToken: Boolean(token),
+      });
+
+      const response = await fetch(url, {
         method: 'GET',
         cache: 'no-store',
         headers: {
@@ -149,10 +157,23 @@ export function SellerOrderManager() {
 
       if (!response.ok) {
         const text = await response.text().catch(() => '');
+        console.error('[FresoSellerOrders] request failed with HTTP error', {
+          url,
+          status: response.status,
+          statusText: response.statusText,
+          body: text,
+        });
         throw new Error(text || `HTTP ${response.status}`);
       }
 
       const json = await response.json();
+      console.info('[FresoSellerOrders] response received', {
+        url,
+        status: response.status,
+        shape: Array.isArray(json) ? 'array' : typeof json,
+        itemCount: Array.isArray(json?.items) ? json.items.length : Array.isArray(json) ? json.length : 0,
+        summary: json?.summary,
+      });
       if (Array.isArray(json)) {
         if (json[0] === true && Array.isArray(json[2])) {
           setOrders(json[2]);
@@ -167,7 +188,12 @@ export function SellerOrderManager() {
         setOrders([]);
       }
       setErrorMessage('');
-    } catch {
+    } catch (error) {
+      console.error('[FresoSellerOrders] request crashed', {
+        status: nextStatusFilter,
+        q: nextSearchTerm.trim(),
+        error,
+      });
       setErrorMessage('Không tải được danh sách đơn hàng. Vui lòng thử lại sau.');
     } finally {
       setIsLoading(false);

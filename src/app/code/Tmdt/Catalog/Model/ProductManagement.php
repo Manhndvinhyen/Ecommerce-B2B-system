@@ -1262,15 +1262,29 @@ class ProductManagement implements ProductManagementInterface
      */
     public function getSellerOrders(): array
     {
-        $this->autoCompleteExpiredShippingOrders();
-        $sellerId = (int) $this->resolveCompanySellerId($this->getCurrentCustomerId());
-        $connection = $this->resourceConnection->getConnection();
-        $limit = max(1, min(50, (int) ($this->request->getParam('limit') ?: 20)));
-        $statusFilter = strtolower(trim((string) ($this->request->getParam('status') ?: 'all')));
-        $searchQuery = strtolower(trim((string) ($this->request->getParam('q') ?: '')));
+        $logger = ObjectManager::getInstance()->get(\Psr\Log\LoggerInterface::class);
+        $startedAt = microtime(true);
 
-        $oTable = $connection->getTableName('tmdt_orders');
-        $oiTable = $connection->getTableName('tmdt_order_items');
+        try {
+            $this->autoCompleteExpiredShippingOrders();
+            $currentCustomerId = $this->getCurrentCustomerId();
+            $sellerId = (int) $this->resolveCompanySellerId($currentCustomerId);
+            $connection = $this->resourceConnection->getConnection();
+            $limit = max(1, min(50, (int) ($this->request->getParam('limit') ?: 20)));
+            $statusFilter = strtolower(trim((string) ($this->request->getParam('status') ?: 'all')));
+            $searchQuery = strtolower(trim((string) ($this->request->getParam('q') ?: '')));
+
+            $logger->info('[TMDT][SellerOrders] request started', [
+                'customer_id' => $currentCustomerId,
+                'seller_id' => $sellerId,
+                'limit' => $limit,
+                'status' => $statusFilter,
+                'q' => $searchQuery,
+                'has_authorization_header' => $this->extractBearerToken() !== '',
+            ]);
+
+            $oTable = $connection->getTableName('tmdt_orders');
+            $oiTable = $connection->getTableName('tmdt_order_items');
 
         // Build base select
         $select = $connection->select()
@@ -1292,7 +1306,7 @@ class ProductManagement implements ProductManagementInterface
                 'quantity_total'  => 'SUM(oi.quantity)',
                 'item_count'      => 'COUNT(oi.id)'
             ])
-            ->where('oi.seller_id = ?', $sellerId)
+            ->where('(oi.seller_id = ? OR oi.seller_id IS NULL)', $sellerId)
             ->where('COALESCE(o.parent_code, \'\') != ?', 'parent')
             ->group('o.id')
             ->order('o.created_at DESC');
@@ -1337,7 +1351,7 @@ class ProductManagement implements ProductManagementInterface
             $itemsSelect = $connection->select()
                 ->from($oiTable, ['item_id' => 'id', 'sku', 'name', 'unit', 'quantity', 'unit_price', 'row_total', 'image'])
                 ->where('order_id = (SELECT id FROM ' . $oTable . ' WHERE order_code = ? LIMIT 1)', $orderRef)
-                ->where('seller_id = ?', $sellerId);
+                ->where('(seller_id = ? OR seller_id IS NULL)', $sellerId);
             $itemsRows = $connection->fetchAll($itemsSelect);
 
             foreach ($itemsRows as &$item) {
@@ -1400,19 +1414,34 @@ class ProductManagement implements ProductManagementInterface
             }
         }
 
-        return [
-            'success' => true,
-            'summary' => [
-                'total_orders'      => $summary['total_orders'],
-                'total_revenue'     => round((float)$summary['total_revenue'], 2),
-                'paid_orders'       => $summary['paid_orders'],
-                'pending_orders'    => $summary['pending_orders'],
-                'processing_orders' => $summary['processing_orders'],
-                'cancelled_orders'  => $summary['cancelled_orders'],
-                'expired_orders'    => $summary['expired_orders'],
-            ],
-            'items' => array_slice($filteredOrders, 0, $limit),
-        ];
+            $items = array_slice($filteredOrders, 0, $limit);
+            $logger->info('[TMDT][SellerOrders] request completed', [
+                'seller_id' => $sellerId,
+                'row_count' => count($rows),
+                'returned_count' => count($items),
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            ]);
+
+            return [
+                'success' => true,
+                'summary' => [
+                    'total_orders'      => $summary['total_orders'],
+                    'total_revenue'     => round((float)$summary['total_revenue'], 2),
+                    'paid_orders'       => $summary['paid_orders'],
+                    'pending_orders'    => $summary['pending_orders'],
+                    'processing_orders' => $summary['processing_orders'],
+                    'cancelled_orders'  => $summary['cancelled_orders'],
+                    'expired_orders'    => $summary['expired_orders'],
+                ],
+                'items' => $items,
+            ];
+        } catch (\Throwable $e) {
+            $logger->error('[TMDT][SellerOrders] request failed', [
+                'message' => $e->getMessage(),
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            ]);
+            throw $e;
+        }
     }
 
     /**

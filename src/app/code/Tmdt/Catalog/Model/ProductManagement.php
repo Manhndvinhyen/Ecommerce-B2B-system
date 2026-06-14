@@ -835,8 +835,11 @@ class ProductManagement implements ProductManagementInterface
     private function assertCanManageProductCatalog(string $customerId): void
     {
         if (!$this->customerHasOwnerPrivilege((int) $customerId)) {
+            $this->logProductAccessDecision('deny_manage_product_catalog', (int)$customerId);
             throw new LocalizedException(__('Chi chu doanh nghiep moi co quyen quan ly san pham. Co so/chi nhanh chi duoc quan ly kho hang.'));
         }
+
+        $this->logProductAccessDecision('allow_manage_product_catalog', (int)$customerId);
     }
 
     private function customerHasOwnerPrivilege(int $customerId): bool
@@ -847,6 +850,19 @@ class ProductManagement implements ProductManagementInterface
 
         try {
             $connection = $this->resourceConnection->getConnection();
+            $registrationTable = $connection->getTableName('tmdt_customer_registration');
+            $registrationRow = $connection->fetchRow(
+                $connection->select()
+                    ->from($registrationTable, ['role', 'status'])
+                    ->where('customer_id = ?', $customerId)
+                    ->limit(1)
+            );
+            $registrationRole = strtolower(trim((string)($registrationRow['role'] ?? '')));
+            $registrationStatus = strtolower(trim((string)($registrationRow['status'] ?? '')));
+            if ($registrationRole === 'seller' && in_array($registrationStatus, ['approved', 'active'], true)) {
+                return true;
+            }
+
             $entityTypeId = (int) $connection->fetchOne(
                 "SELECT entity_type_id FROM eav_entity_type WHERE entity_type_code = 'customer' LIMIT 1"
             );
@@ -881,6 +897,32 @@ class ProductManagement implements ProductManagementInterface
         }
 
         return false;
+    }
+
+    private function logProductAccessDecision(string $event, int $customerId): void
+    {
+        try {
+            $connection = $this->resourceConnection->getConnection();
+            $registrationTable = $connection->getTableName('tmdt_customer_registration');
+            $registrationRow = $connection->fetchRow(
+                $connection->select()
+                    ->from($registrationTable, ['role', 'status', 'login_code', 'unit_nickname'])
+                    ->where('customer_id = ?', $customerId)
+                    ->limit(1)
+            );
+
+            ObjectManager::getInstance()
+                ->get(\Psr\Log\LoggerInterface::class)
+                ->info('[TMDT][ProductCatalogAccess] ' . $event, [
+                    'customer_id' => $customerId,
+                    'role' => is_array($registrationRow) ? (string)($registrationRow['role'] ?? '') : '',
+                    'status' => is_array($registrationRow) ? (string)($registrationRow['status'] ?? '') : '',
+                    'login_code' => is_array($registrationRow) ? (string)($registrationRow['login_code'] ?? '') : '',
+                    'unit_nickname' => is_array($registrationRow) ? (string)($registrationRow['unit_nickname'] ?? '') : '',
+                ]);
+        } catch (\Throwable) {
+            // Logging must never block product catalog actions.
+        }
     }
 
     /**

@@ -53,20 +53,33 @@ export const persistAuthSession = (
 ) => {
   clearStoredAuthSession();
 
-  persistAuthValue(primaryStorage, 'freso_customer_token', values.customerToken);
-  persistAuthValue(primaryStorage, 'freso_login_token', values.loginToken);
-  persistAuthValue(primaryStorage, 'freso_customer_email', values.email);
-  persistAuthValue(primaryStorage, 'freso_customer_name', values.fullName);
-  persistAuthValue(primaryStorage, 'freso_branch_name', values.branchName);
-  persistAuthValue(primaryStorage, 'freso_role', values.role);
-  persistAuthValue(primaryStorage, 'freso_status', values.status);
-  primaryStorage.setItem('freso_seller_access', values.sellerAccess ? '1' : '0');
-  primaryStorage.setItem('freso_is_owner', values.isOwner ? '1' : '0');
-  primaryStorage.setItem('freso_is_super_admin', values.isSuperAdmin ? '1' : '0');
+  const sharedStorage = window.localStorage;
+  const tabStorage = window.sessionStorage;
 
-  // Keep the non-primary storage clean so "Ghi nho dang nhap" has predictable behavior.
-  secondaryStorage.removeItem('freso_customer_token');
-  secondaryStorage.removeItem('freso_login_token');
+  persistAuthValue(sharedStorage, 'freso_customer_token', values.customerToken);
+  persistAuthValue(sharedStorage, 'freso_login_token', values.loginToken);
+  persistAuthValue(sharedStorage, 'freso_customer_email', values.email);
+  persistAuthValue(sharedStorage, 'freso_customer_name', values.fullName);
+  persistAuthValue(sharedStorage, 'freso_branch_name', values.branchName);
+  persistAuthValue(sharedStorage, 'freso_role', values.role);
+  persistAuthValue(sharedStorage, 'freso_status', values.status);
+  sharedStorage.setItem('freso_seller_access', values.sellerAccess ? '1' : '0');
+  sharedStorage.setItem('freso_is_owner', values.isOwner ? '1' : '0');
+  sharedStorage.setItem('freso_is_super_admin', values.isSuperAdmin ? '1' : '0');
+
+  AUTH_STORAGE_KEYS.forEach((key) => {
+    const value = sharedStorage.getItem(key);
+    if (value !== null) {
+      tabStorage.setItem(key, value);
+    }
+  });
+
+  console.info('[OrganicaAuth] Auth session persisted for browser-wide tabs', {
+    tokenStored: Boolean(values.customerToken),
+    storage: 'localStorage',
+    legacyPrimaryStorage: primaryStorage === window.localStorage ? 'localStorage' : 'sessionStorage',
+    legacySecondaryStorage: secondaryStorage === window.localStorage ? 'localStorage' : 'sessionStorage',
+  });
 };
 
 export const revokeCurrentToken = async (token = getStoredAuthToken()) => {

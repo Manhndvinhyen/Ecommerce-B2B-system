@@ -7,6 +7,7 @@
     <preference for="Tmdt\Catalog\Api\RecurringInterface" type="Tmdt\Catalog\Model\Recurring" />
     <preference for="Tmdt\Catalog\Api\RfqManagementInterface" type="Tmdt\Catalog\Model\RfqManagement" />
     <preference for="Tmdt\Catalog\Api\PromotionManagementInterface" type="Tmdt\Catalog\Model\PromotionManagement" />
+    <preference for="Tmdt\Catalog\Api\ProductSellerInfoInterface" type="Tmdt\Catalog\Model\ProductSellerInfo" />
     <preference for="Tmdt\Catalog\Api\RfqManagementInterface" type="Tmdt\Catalog\Model\RfqManagement" />
 
     <type name="Magento\Framework\Console\CommandList">

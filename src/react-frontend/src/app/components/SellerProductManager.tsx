@@ -19,17 +19,6 @@ import {
 } from 'lucide-react';
 import { categoryMenu, getCategoryId, getSubcategoryId } from '../data/categories';
 
-// B2B Category List matching the store categories
-const B2B_CATEGORIES = [
-  'Rau củ quả',
-  'Trái cây',
-  'Thực phẩm tươi sống',
-  'Thuỷ hải sản',
-  'Thực phẩm đông lạnh',
-  'Thực phẩm khô',
-  'Tiện ích bếp'
-];
-
 const SAMPLE_PRODUCT_SKUS = new Set(['CA-HOI-NORWAY', 'CAI-THAO-DALAT']);
 
 type CategoryNode = {
@@ -38,7 +27,20 @@ type CategoryNode = {
   children: CategoryNode[];
 };
 
+type CategoryOption = {
+  id: number;
+  name: string;
+  label: string;
+  path: string[];
+};
+
 const normalizeText = (value?: string | null) => String(value ?? '').trim().toLowerCase();
+const normalizeSearchText = (value?: string | null) =>
+  normalizeText(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'd');
 
 const fallbackCategoryTree: CategoryNode[] = categoryMenu.map((category) => ({
   id: getCategoryId(category.name) ?? 0,
@@ -50,12 +52,6 @@ const fallbackCategoryTree: CategoryNode[] = categoryMenu.map((category) => ({
   }))
 }));
 
-const emptyCategoryNode: CategoryNode = {
-  id: 0,
-  name: '',
-  children: []
-};
-
 const toCategoryNode = (node: any): CategoryNode => ({
   id: Number(node?.id ?? 0),
   name: String(node?.name ?? ''),
@@ -64,36 +60,34 @@ const toCategoryNode = (node: any): CategoryNode => ({
     : []
 });
 
-const findCategorySelection = (
-  nodes: CategoryNode[],
+const flattenCategoryOptions = (nodes: CategoryNode[], ancestors: string[] = []): CategoryOption[] =>
+  nodes.flatMap((node) => {
+    const path = [...ancestors, node.name].filter(Boolean);
+    const current = node.id > 0
+      ? [{ id: node.id, name: node.name, label: path.join(' / '), path }]
+      : [];
+
+    return [...current, ...flattenCategoryOptions(node.children ?? [], path)];
+  });
+
+const findCategoryIdsFromLegacyLabels = (
+  options: CategoryOption[],
   categoryName?: string,
-  subcategoryName?: string,
-  categoryIds?: number[]
+  subcategoryName?: string
 ) => {
-  const ids = new Set((categoryIds ?? []).map((id) => Number(id)).filter(Boolean));
-
-  for (const parent of nodes) {
-    const childById = parent.children.find((child) => ids.has(child.id));
-    if (childById) {
-      return { category: parent, subcategory: childById };
-    }
-
-    const childByName = parent.children.find(
-      (child) =>
-        normalizeText(child.name) === normalizeText(subcategoryName) ||
-        normalizeText(child.name) === normalizeText(categoryName)
-    );
-    if (childByName) {
-      return { category: parent, subcategory: childByName };
-    }
-
-    if (normalizeText(parent.name) === normalizeText(categoryName)) {
-      return { category: parent, subcategory: parent.children[0] ?? null };
-    }
+  const names = [subcategoryName, categoryName].map(normalizeText).filter(Boolean);
+  if (names.length === 0) {
+    return [];
   }
 
-  const fallbackCategory = nodes[0] ?? fallbackCategoryTree[0] ?? emptyCategoryNode;
-  return { category: fallbackCategory, subcategory: fallbackCategory?.children?.[0] ?? null };
+  const exactMatches = options.filter((option) => names.includes(normalizeText(option.name)));
+  if (exactMatches.length > 0) {
+    return exactMatches.map((option) => option.id);
+  }
+
+  return options
+    .filter((option) => names.some((name) => normalizeText(option.label).includes(name)))
+    .map((option) => option.id);
 };
 
 interface Variant {
@@ -151,10 +145,12 @@ export function SellerProductManager() {
   const [sku, setSku] = useState('');
   const [price, setPrice] = useState('');
   const [specialPrice, setSpecialPrice] = useState('');
-  const [categoryLabel, setCategoryLabel] = useState(B2B_CATEGORIES[0]);
+  const [categoryLabel, setCategoryLabel] = useState('');
   const [subcategoryLabel, setSubcategoryLabel] = useState('');
   const [categoryTree, setCategoryTree] = useState<CategoryNode[]>(fallbackCategoryTree);
   const [isCategoryTreeLoading, setIsCategoryTreeLoading] = useState(false);
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
+  const [categorySearchQuery, setCategorySearchQuery] = useState('');
   const [unit, setUnit] = useState('kg');
   const [qty, setQty] = useState('100');
   const [image, setImage] = useState('');
@@ -239,6 +235,10 @@ export function SellerProductManager() {
                       children {
                         id
                         name
+                        children {
+                          id
+                          name
+                        }
                       }
                     }
                   }
@@ -282,36 +282,57 @@ export function SellerProductManager() {
     return () => controller.abort();
   }, []);
 
-  const currentCategoryNode =
-    categoryTree.find((category) => normalizeText(category.name) === normalizeText(categoryLabel)) ??
-    categoryTree[0] ??
-    fallbackCategoryTree[0] ??
-    emptyCategoryNode;
-  const currentSubcategoryNodes = currentCategoryNode?.children ?? [];
-  const selectedSubcategoryNode =
-    currentSubcategoryNodes.find((subcategory) => normalizeText(subcategory.name) === normalizeText(subcategoryLabel)) ??
-    currentSubcategoryNodes[0] ??
-    null;
+  const categoryOptions = flattenCategoryOptions(categoryTree);
+  const selectedCategoryOptions = selectedCategoryIds
+    .map((id) => categoryOptions.find((option) => option.id === id))
+    .filter((option): option is CategoryOption => Boolean(option));
+  const selectedCategoryIdSet = new Set(selectedCategoryIds);
+  const categorySearchTerm = normalizeSearchText(categorySearchQuery);
+  const categorySearchResults = categoryOptions
+    .filter((option) => !selectedCategoryIdSet.has(option.id))
+    .filter((option) => {
+      if (!categorySearchTerm) {
+        return true;
+      }
 
-  const handleCategoryChange = (nextCategoryName: string) => {
-    const nextCategory = categoryTree.find((category) => normalizeText(category.name) === normalizeText(nextCategoryName));
-    setCategoryLabel(nextCategoryName);
-    setSubcategoryLabel(nextCategory?.children?.[0]?.name ?? '');
+      return normalizeSearchText(option.label).includes(categorySearchTerm);
+    })
+    .slice(0, 12);
+
+  const syncSelectedCategoryLabels = (ids: number[]) => {
+    const selectedOptions = ids
+      .map((id) => categoryOptions.find((option) => option.id === id))
+      .filter((option): option is CategoryOption => Boolean(option));
+    const primaryOption = selectedOptions[0];
+    const lastOption = selectedOptions[selectedOptions.length - 1];
+
+    setCategoryLabel(primaryOption?.path[0] ?? primaryOption?.name ?? '');
+    setSubcategoryLabel(lastOption?.name ?? '');
+  };
+
+  const applySelectedCategoryIds = (ids: number[]) => {
+    const uniqueIds = Array.from(
+      new Set(ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0))
+    );
+
+    setSelectedCategoryIds(uniqueIds);
+    syncSelectedCategoryLabels(uniqueIds);
+  };
+
+  const addCategoryTag = (option: CategoryOption) => {
+    applySelectedCategoryIds([...selectedCategoryIds, option.id]);
+    setCategorySearchQuery('');
+  };
+
+  const removeCategoryTag = (categoryId: number) => {
+    applySelectedCategoryIds(selectedCategoryIds.filter((id) => id !== categoryId));
   };
 
   useEffect(() => {
-    if (!currentCategoryNode) {
-      return;
+    if (selectedCategoryIds.length > 0) {
+      syncSelectedCategoryLabels(selectedCategoryIds);
     }
-
-    if (currentCategoryNode.name !== categoryLabel) {
-      setCategoryLabel(currentCategoryNode.name);
-    }
-
-    if (currentSubcategoryNodes.length > 0 && !selectedSubcategoryNode) {
-      setSubcategoryLabel(currentSubcategoryNodes[0].name);
-    }
-  }, [categoryLabel, currentCategoryNode, currentSubcategoryNodes, selectedSubcategoryNode]);
+  }, [categoryTree]);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -423,13 +444,14 @@ export function SellerProductManager() {
 
   // Open create form modal
   const handleOpenCreate = () => {
-    const defaultCategory = categoryTree[0] ?? fallbackCategoryTree[0] ?? emptyCategoryNode;
     setName('');
     setSku('');
     setPrice('');
     setSpecialPrice('');
-    setCategoryLabel(defaultCategory.name);
-    setSubcategoryLabel(defaultCategory.children[0]?.name ?? '');
+    setCategoryLabel('');
+    setSubcategoryLabel('');
+    setSelectedCategoryIds([]);
+    setCategorySearchQuery('');
     setVariants([]);
     setWholesaleTiers([]);
     setTierQty('');
@@ -448,18 +470,18 @@ export function SellerProductManager() {
 
   // Open edit form modal
   const handleOpenEdit = (product: Product) => {
-    const selection = findCategorySelection(
-      categoryTree,
-      product.categoryLabel,
-      product.subcategoryLabel,
-      product.category_ids
-    );
+    const productCategoryIds = Array.isArray(product.category_ids)
+      ? product.category_ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+      : [];
+    const nextCategoryIds = productCategoryIds.length > 0
+      ? productCategoryIds
+      : findCategoryIdsFromLegacyLabels(categoryOptions, product.categoryLabel, product.subcategoryLabel);
     setName(product.name);
     setSku(product.sku);
     setPrice(String(product.price));
     setSpecialPrice(product.special_price ? String(product.special_price) : '');
-    setCategoryLabel(selection.category.name);
-    setSubcategoryLabel(selection.subcategory?.name ?? '');
+    applySelectedCategoryIds(nextCategoryIds);
+    setCategorySearchQuery('');
     setUnit(product.unit);
     setQty(String(product.qty));
     setImage(product.image);
@@ -608,6 +630,10 @@ export function SellerProductManager() {
         showToast('Vui lòng điền đầy đủ Tên và SKU sản phẩm.', 'error');
         return;
       }
+      if (selectedCategoryIds.length === 0) {
+        showToast('Vui lòng chọn ít nhất một danh mục sản phẩm.', 'error');
+        return;
+      }
       setStepTransitionTime(Date.now());
       setFormStep(2);
       return;
@@ -615,6 +641,10 @@ export function SellerProductManager() {
 
     if (!name.trim() || !sku.trim() || !price.trim()) {
       showToast('Vui lòng điền đầy đủ Tên, SKU và Giá bán.', 'error');
+      return;
+    }
+    if (selectedCategoryIds.length === 0) {
+      showToast('Vui lòng chọn ít nhất một danh mục sản phẩm.', 'error');
       return;
     }
 
@@ -639,24 +669,20 @@ export function SellerProductManager() {
 
     const finalImage = image.trim() || fallbackImages[categoryLabel] || 'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=500&h=500&fit=crop';
 
-    const CATEGORY_ID_MAP: Record<string, number> = {
-      'Rau củ quả': 6,
-      'Trái cây': 10,
-      'Thực phẩm tươi sống': 13,
-      'Thuỷ hải sản': 17,
-      'Thực phẩm đông lạnh': 21,
-      'Thực phẩm khô': 25,
-      'Tiện ích bếp': 29
-    };
-    const categoryId = CATEGORY_ID_MAP[categoryLabel];
-    const category_ids = categoryId ? [categoryId] : [];
     const resolvedCategoryIds = Array.from(
       new Set(
-        [currentCategoryNode?.id, selectedSubcategoryNode?.id]
+        selectedCategoryIds
           .map((id) => Number(id))
           .filter((id) => Number.isFinite(id) && id > 0)
       )
     );
+    const resolvedCategoryOptions = resolvedCategoryIds
+      .map((id) => categoryOptions.find((option) => option.id === id))
+      .filter((option): option is CategoryOption => Boolean(option));
+    const primaryCategory = resolvedCategoryOptions[0];
+    const lastCategory = resolvedCategoryOptions[resolvedCategoryOptions.length - 1];
+    const resolvedCategoryLabel = primaryCategory?.path[0] ?? categoryLabel;
+    const resolvedSubcategoryLabel = lastCategory?.name ?? subcategoryLabel;
 
     const newProductData: Product & { category_ids?: number[] } = {
       id: editingSku ? (products.find((p) => p.sku === editingSku)?.id || String(Date.now())) : String(Date.now()),
@@ -665,9 +691,9 @@ export function SellerProductManager() {
       price: priceNum,
       special_price: specialPrice.trim() ? parseFloat(specialPrice) : undefined,
       qty: isNaN(qtyNum) ? 0 : qtyNum,
-      categoryLabel,
-      subcategoryLabel,
-      category_ids: resolvedCategoryIds.length > 0 ? resolvedCategoryIds : category_ids,
+      categoryLabel: resolvedCategoryLabel,
+      subcategoryLabel: resolvedSubcategoryLabel,
+      category_ids: resolvedCategoryIds,
       unit,
       image: finalImage,
       variants,
@@ -957,39 +983,59 @@ export function SellerProductManager() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <div>
-                        <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase">Ngành hàng B2B</label>
-                        <select
-                          value={categoryLabel}
-                          onChange={(e) => handleCategoryChange(e.target.value)}
-                          className="w-full border border-gray-200 px-3 py-3 rounded-2xl text-xs font-bold outline-none focus:border-emerald-500 bg-slate-50/30"
-                        >
-                          {categoryTree.map((cat) => (
-                            <option key={cat.id || cat.name} value={cat.name}>{cat.name}</option>
-                          ))}
-                        </select>
-                        {isCategoryTreeLoading && (
-                          <p className="mt-1 text-[10px] font-bold text-slate-400">Đang đồng bộ danh mục từ Magento...</p>
-                        )}
+                    <div>
+                      <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase">Danh mục sản phẩm</label>
+                      <div className="relative">
+                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                        <input
+                          type="text"
+                          placeholder="Tìm theo tên danh mục trong Magento..."
+                          value={categorySearchQuery}
+                          onChange={(e) => setCategorySearchQuery(e.target.value)}
+                          className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:border-emerald-500 bg-slate-50/30 focus:bg-white transition-all"
+                        />
                       </div>
-                      <div>
-                        <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase">Nhánh danh mục</label>
-                        <select
-                          value={subcategoryLabel}
-                          onChange={(e) => setSubcategoryLabel(e.target.value)}
-                          className="w-full border border-gray-200 px-3 py-3 rounded-2xl text-xs font-bold outline-none focus:border-emerald-500 bg-slate-50/30"
-                        >
-                          {currentSubcategoryNodes.length === 0 ? (
-                            <option value="">Không có nhánh con</option>
-                          ) : (
-                            currentSubcategoryNodes.map((subcategory) => (
-                              <option key={subcategory.id || subcategory.name} value={subcategory.name}>
-                                {subcategory.name}
-                              </option>
-                            ))
-                          )}
-                        </select>
+                      {isCategoryTreeLoading && (
+                        <p className="mt-1.5 text-[10px] font-bold text-slate-400">Đang đồng bộ danh mục từ Magento...</p>
+                      )}
+                      {selectedCategoryOptions.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {selectedCategoryOptions.map((option) => (
+                            <span
+                              key={option.id}
+                              className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-[11px] font-black text-emerald-700"
+                            >
+                              <span className="truncate">{option.label}</span>
+                              <button
+                                type="button"
+                                onClick={() => removeCategoryTag(option.id)}
+                                className="rounded-full p-0.5 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-800"
+                                aria-label={`Bỏ danh mục ${option.name}`}
+                              >
+                                <X size={12} />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="mt-2 max-h-36 overflow-y-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
+                        {categorySearchResults.length === 0 ? (
+                          <div className="px-4 py-3 text-[11px] font-bold text-slate-400">
+                            Không tìm thấy danh mục phù hợp.
+                          </div>
+                        ) : (
+                          categorySearchResults.map((option) => (
+                            <button
+                              key={option.id}
+                              type="button"
+                              onClick={() => addCategoryTag(option)}
+                              className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-xs font-bold text-slate-600 hover:bg-emerald-50 hover:text-emerald-700"
+                            >
+                              <span className="min-w-0 truncate">{option.label}</span>
+                              <Plus size={13} className="shrink-0" />
+                            </button>
+                          ))
+                        )}
                       </div>
                     </div>
 

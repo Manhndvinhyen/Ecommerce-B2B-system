@@ -64,6 +64,43 @@ const toCategoryNode = (node: any): CategoryNode => ({
     : []
 });
 
+const mergeCategoryTrees = (primaryTree: CategoryNode[], fallbackTree: CategoryNode[]): CategoryNode[] => {
+  const mergeNode = (primary: CategoryNode, fallback: CategoryNode): CategoryNode => {
+    const children = [...primary.children];
+
+    fallback.children.forEach((fallbackChild) => {
+      const existingIndex = children.findIndex((child) =>
+        (child.id > 0 && child.id === fallbackChild.id) ||
+        normalizeText(child.name) === normalizeText(fallbackChild.name)
+      );
+
+      if (existingIndex >= 0) {
+        children[existingIndex] = mergeNode(children[existingIndex], fallbackChild);
+      } else {
+        children.push(fallbackChild);
+      }
+    });
+
+    return { ...primary, children };
+  };
+
+  const mergedTree = [...primaryTree];
+  fallbackTree.forEach((fallbackNode) => {
+    const existingIndex = mergedTree.findIndex((node) =>
+      (node.id > 0 && node.id === fallbackNode.id) ||
+      normalizeText(node.name) === normalizeText(fallbackNode.name)
+    );
+
+    if (existingIndex >= 0) {
+      mergedTree[existingIndex] = mergeNode(mergedTree[existingIndex], fallbackNode);
+    } else {
+      mergedTree.push(fallbackNode);
+    }
+  });
+
+  return mergedTree;
+};
+
 const flattenCategoryOptions = (nodes: CategoryNode[], ancestors: string[] = []): CategoryOption[] =>
   nodes.flatMap((node) => {
     const path = [...ancestors, node.name].filter(Boolean);
@@ -277,7 +314,7 @@ export function SellerProductManager() {
           : [];
 
         if (nextTree.length > 0) {
-          setCategoryTree(nextTree);
+          setCategoryTree(mergeCategoryTrees(nextTree, fallbackCategoryTree));
         }
       } catch (error) {
         if (!controller.signal.aborted) {

@@ -484,7 +484,7 @@ export function SellerProductManager() {
       isCustom: true,
       origin: origin.trim(),
       note: note.trim(),
-      store_name: window.localStorage.getItem('freso_branch_name') || window.sessionStorage.getItem('freso_branch_name') || window.localStorage.getItem('freso_customer_name') || window.sessionStorage.getItem('freso_customer_name') || 'Cửa hàng sỉ Freso',
+      store_name: window.localStorage.getItem('freso_branch_name') || window.sessionStorage.getItem('freso_branch_name') || window.localStorage.getItem('freso_customer_name') || window.sessionStorage.getItem('freso_customer_name') || 'Cửa hàng sỉ Organica',
       description: {
         features: features.trim(),
         benefits: benefits.trim(),
@@ -513,7 +513,7 @@ export function SellerProductManager() {
       showToast(`Đã cập nhật sản phẩm "${name}" thành công!`, 'success');
     } else {
       updatedProducts = [newProductData, ...products];
-      showToast(`Đã đăng sản phẩm "${name}" thành công lên Freso!`, 'success');
+      showToast(`Đã đăng sản phẩm "${name}" thành công lên Organica!`, 'success');
     }
 
     saveLocalProducts(updatedProducts);
@@ -550,7 +550,7 @@ export function SellerProductManager() {
             <Boxes className="text-green-600" size={20} />
             Quản lý danh mục sản phẩm sỉ
           </h2>
-          <p className="text-xs text-slate-400 font-medium">Đăng tải, định giá và cấu hình các mặt hàng bán buôn lên Freso</p>
+          <p className="text-xs text-slate-400 font-medium">Đăng tải, định giá và cấu hình các mặt hàng bán buôn lên Organica</p>
         </div>
 
         <div className="flex items-center gap-2 w-full md:w-auto">
@@ -737,7 +737,7 @@ export function SellerProductManager() {
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
                         <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase">Mã định danh SKU</label>
                         <input
@@ -766,7 +766,7 @@ export function SellerProductManager() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
                         <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase">Ngành hàng B2B</label>
                         <select
@@ -831,7 +831,7 @@ export function SellerProductManager() {
                     </div>
 
                     {/* New Metadata Fields (Origin and Note) */}
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
                         <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase">Xuất xứ</label>
                         <input
@@ -859,7 +859,7 @@ export function SellerProductManager() {
                       <h4 className="text-xs font-black text-slate-600 uppercase tracking-wider">
                         Mô tả chi tiết sản phẩm sỉ
                       </h4>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
                           <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase">Đặc điểm</label>
                           <textarea
@@ -881,7 +881,7 @@ export function SellerProductManager() {
                           />
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
                           <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase">Hướng dẫn bảo quản</label>
                           <textarea
@@ -910,7 +910,7 @@ export function SellerProductManager() {
                 {/* Step 2: Pricing & Inventory */}
                 {formStep === 2 && (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
                         <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase flex items-center gap-1">
                           <DollarSign size={13} />

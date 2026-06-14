@@ -90,7 +90,7 @@ export function SellerCTA() {
             <div className="bg-white/90 backdrop-blur-sm rounded-3xl p-8 shadow-2xl border border-green-100">
               <h2 className="text-3xl font-bold text-gray-900 mb-4">Bạn là nhà cung cấp?</h2>
               <p className="text-xl text-gray-700 mb-6">
-                Mở rộng kinh doanh cùng <span className="text-green-600 font-bold">FRESO</span> ngay!
+                Mở rộng kinh doanh cùng <span className="text-green-600 font-bold">Organica</span> ngay!
               </p>
 
               {/* Benefits List */}

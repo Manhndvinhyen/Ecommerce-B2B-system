@@ -51,9 +51,9 @@ export function CustomerSidebar(props: CustomerSidebarProps = {}) {
 
   return (
     <div style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }} className="w-full">
-      <div className="w-full max-w-[270px] bg-white border border-slate-100 rounded-3xl p-5 shadow-lg shadow-slate-100/40 relative">
+      <div className="relative w-full rounded-2xl border border-slate-100 bg-white p-3 shadow-lg shadow-slate-100/40 sm:p-4 lg:max-w-[270px] lg:rounded-3xl lg:p-5">
         {/* Identity Card Badge */}
-        <div className="mb-6 p-4 bg-gradient-to-br from-green-500/10 via-emerald-500/5 to-transparent rounded-2xl border border-green-500/10 flex items-center gap-3 relative overflow-hidden">
+        <div className="mb-3 flex items-center gap-3 overflow-hidden rounded-2xl border border-green-500/10 bg-gradient-to-br from-green-500/10 via-emerald-500/5 to-transparent p-3 sm:p-4 lg:mb-6">
           <div className="w-10 h-10 bg-gradient-to-br from-green-600 to-emerald-600 rounded-xl flex items-center justify-center text-white shrink-0 shadow-md shadow-green-600/10">
             <CircleUserRound size={18} />
           </div>
@@ -70,14 +70,14 @@ export function CustomerSidebar(props: CustomerSidebarProps = {}) {
         </div>
 
         {/* Dynamic Breadcrumbs */}
-        <nav className="flex items-center gap-1.5 mb-5 px-1 whitespace-nowrap bg-slate-50/50 p-2.5 rounded-xl border border-slate-50">
+        <nav className="mb-3 hidden items-center gap-1.5 whitespace-nowrap rounded-xl border border-slate-50 bg-slate-50/50 p-2.5 px-1 lg:mb-5 lg:flex">
           <span className="text-[10px] text-slate-400 font-black uppercase tracking-wider">Customer Space</span>
           <ChevronRight size={12} className="text-slate-300" />
           <span className="text-[10px] font-black text-green-600 truncate uppercase tracking-wider">{activeTab}</span>
         </nav>
 
         {/* Menu Navigation Items */}
-        <div className="space-y-1">
+        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 lg:mx-0 lg:block lg:space-y-1 lg:overflow-visible lg:px-0 lg:pb-0">
           {menuItems.map((item) => {
             const isActive = activeTab === item.label;
             const Icon = item.icon;
@@ -85,7 +85,7 @@ export function CustomerSidebar(props: CustomerSidebarProps = {}) {
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.label)}
-                className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl transition-all duration-300 group border relative ${
+                className={`group relative flex min-w-[132px] items-center gap-2 rounded-2xl border px-3 py-2.5 transition-all duration-300 sm:min-w-[150px] lg:w-full lg:min-w-0 lg:gap-3 lg:px-3.5 lg:py-3 ${
                   isActive
                     ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white border-transparent shadow-lg shadow-green-600/10 scale-[1.01]'
                     : 'bg-transparent text-slate-600 border-transparent hover:bg-slate-50/70 hover:scale-[1.01]'
@@ -94,7 +94,7 @@ export function CustomerSidebar(props: CustomerSidebarProps = {}) {
                 <div className={`shrink-0 transition-transform duration-300 group-hover:scale-105 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'}`}>
                   <Icon size={18} strokeWidth={isActive ? 2.5 : 2.2} />
                 </div>
-                <span className={`text-[12px] tracking-tight font-black flex-1 text-left truncate transition-colors duration-300 ${
+                <span className={`flex-1 truncate text-left text-[11px] font-black tracking-tight transition-colors duration-300 sm:text-[12px] ${
                   isActive ? 'text-white' : 'text-slate-600 group-hover:text-slate-900'
                 }`}>
                   {item.label}
@@ -110,10 +110,10 @@ export function CustomerSidebar(props: CustomerSidebarProps = {}) {
         </div>
 
         {/* Quick Account Actions / Logout */}
-        <div className="mt-6 pt-5 border-t border-slate-100">
+        <div className="mt-3 border-t border-slate-100 pt-3 lg:mt-6 lg:pt-5">
           <button
             onClick={handleLogout}
-            className="w-full py-3 border border-slate-100 rounded-2xl text-slate-400 hover:text-rose-600 hover:bg-rose-50/50 hover:border-rose-100 text-[11px] font-black uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2"
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-100 py-2.5 text-[11px] font-black uppercase tracking-wider text-slate-400 transition-all duration-300 hover:border-rose-100 hover:bg-rose-50/50 hover:text-rose-600 lg:py-3"
           >
             <LogOut size={13} strokeWidth={2} />
             <span>Đăng xuất tài khoản</span>

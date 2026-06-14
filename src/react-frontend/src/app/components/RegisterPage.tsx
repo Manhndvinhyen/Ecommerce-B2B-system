@@ -557,7 +557,7 @@ export function RegisterPage() {
                 ? 'Nâng cấp lên tài khoản Người bán'
                 : currentStep === 1
                   ? 'Đăng ký tài khoản mua hàng cho doanh nghiệp'
-                  : 'Tạo tài khoản đăng nhập Freso'}
+                  : 'Tạo tài khoản đăng nhập Organica'}
             </h1>
             <p className="text-[#006a4e]/70 text-[15px] lg:text-[16px] mb-12 font-medium leading-relaxed italic">
               {isLoggedIn && isSeller
@@ -718,7 +718,7 @@ export function RegisterPage() {
                         </div>
                         {validationErrors.registrationType && <p className="text-red-500 text-[12px] ml-1 font-bold italic">{validationErrors.registrationType}</p>}
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                           <div className="relative">
                             <select
                               value={formData.province}
@@ -949,7 +949,7 @@ export function RegisterPage() {
                         />
                         <span className="text-[13px] text-gray-600 font-medium leading-relaxed">
                           Tôi đã đọc và đồng ý với <span className="text-[#00b14f] font-bold underline">Điều khoản sử dụng</span> và{' '}
-                          <span className="text-[#00b14f] font-bold underline">Chính sách bảo mật</span> của Freso.
+                          <span className="text-[#00b14f] font-bold underline">Chính sách bảo mật</span> của Organica.
                         </span>
                       </label>
                       {validationErrors.agreeToTerms && <p className="text-red-500 text-[12px] ml-1 mt-1 font-bold italic">{validationErrors.agreeToTerms}</p>}

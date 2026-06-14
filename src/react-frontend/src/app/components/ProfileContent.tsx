@@ -441,7 +441,7 @@ export const ProfileContent = ({ showBusinessInfo = true }: ProfileContentProps)
       {/* Thông tin chung */}
       <section className="mb-6">
         <h2 className="text-[17px] font-bold text-gray-800 mb-3 tracking-tight">Thông tin chung</h2>
-        <div className="grid grid-cols-2 gap-y-3.5 gap-x-16">
+        <div className="grid grid-cols-1 gap-y-3.5 gap-x-8 sm:grid-cols-2 lg:gap-x-16">
           <div>
             <p className="text-[12.5px] text-black mb-0.5 font-light tracking-tight">Số điện thoại</p>
             {editing ? (
@@ -454,7 +454,7 @@ export const ProfileContent = ({ showBusinessInfo = true }: ProfileContentProps)
               <p className="text-[14.5px] font-bold text-gray-800 tracking-tight">{profile.phone}</p>
             )}
           </div>
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <p className="text-[12.5px] text-black mb-0.5 font-light tracking-tight">Email</p>
             {editing ? (
               <input
@@ -480,7 +480,7 @@ export const ProfileContent = ({ showBusinessInfo = true }: ProfileContentProps)
       {showBusinessInfo && (
         <section>
           <h2 className="text-[17px] font-bold text-gray-800 mb-3 tracking-tight">Thông tin tài khoản</h2>
-          <div className="grid grid-cols-2 gap-y-3.5 gap-x-16">
+          <div className="grid grid-cols-1 gap-y-3.5 gap-x-8 sm:grid-cols-2 lg:gap-x-16">
             <div>
               <p className="text-[12.5px] text-black mb-1.5 font-light tracking-tight">Chi nhánh trực thuộc</p>
               <div className="flex items-center gap-2">
@@ -501,8 +501,8 @@ export const ProfileContent = ({ showBusinessInfo = true }: ProfileContentProps)
 
       {/* Password Modal */}
       {showPasswordModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-lg w-full max-w-md p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white p-5 sm:p-6">
             <h3 className="text-lg font-semibold mb-4">Đổi mật khẩu</h3>
             <div className="flex flex-col gap-3">
               <input

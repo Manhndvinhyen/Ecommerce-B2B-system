@@ -51,19 +51,19 @@ export function AuthPageFooter() {
               <div className="p-1.5 bg-green-50 rounded-lg text-[#00b14f] shrink-0">
                 <MapPin size={16} />
               </div>
-              <span className="text-[14px] text-gray-500 leading-tight font-medium">123 Đường ABC, Quận 1, TP. Hồ Chí Minh</span>
+              <span className="text-[14px] text-gray-500 leading-tight font-medium">133 Xuân Thủy, Cầu Giấy, Hà Nội</span>
             </li>
             <li className="flex items-center gap-3">
               <div className="p-1.5 bg-green-50 rounded-lg text-[#00b14f] shrink-0">
                 <Phone size={16} />
               </div>
-              <span className="text-[14px] text-gray-500 font-bold">1900 1234</span>
+              <span className="text-[14px] text-gray-500 font-bold">0888619668</span>
             </li>
             <li className="flex items-center gap-3">
               <div className="p-1.5 bg-green-50 rounded-lg text-[#00b14f] shrink-0">
                 <Mail size={16} />
               </div>
-              <span className="text-[14px] text-gray-500 font-medium">support@organica.vn</span>
+              <span className="text-[14px] text-gray-500 font-medium">manhndvinhyen@gmail.com</span>
             </li>
           </ul>
         </div>

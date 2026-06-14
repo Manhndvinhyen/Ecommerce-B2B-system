@@ -11,6 +11,7 @@ import {
   ChevronDown,
   CheckSquare,
   PackageCheck,
+  XCircle,
 } from 'lucide-react';
 import { toCurrencyTextFromNumber } from '../cart/CartProvider';
 import { OrderTrackingMap } from './OrderTrackingMap';
@@ -74,10 +75,7 @@ const getStatusMeta = (status: string) => {
   if (normalized === 'preparing') {
     return { label: 'Đang chuẩn bị hàng', className: 'bg-indigo-50 text-indigo-700 border-indigo-100', dot: 'bg-indigo-500' };
   }
-  if (normalized === 'handed_over') {
-    return { label: 'Đã bàn giao cho ĐVVC', className: 'bg-cyan-50 text-cyan-700 border-cyan-100', dot: 'bg-cyan-500' };
-  }
-  if (normalized === 'shipping') {
+  if (normalized === 'handed_over' || normalized === 'shipping') {
     return { label: 'Đang giao hàng', className: 'bg-orange-50 text-orange-700 border-orange-100', dot: 'bg-orange-500' };
   }
   if (normalized === 'delivered') {
@@ -242,7 +240,11 @@ export function SellerOrderManager() {
     const token = getAuthToken();
     if (!token) return;
 
-    if (!window.confirm(`Bạn có chắc chắn muốn chuyển trạng thái đơn hàng ${orderCode} sang "${actionLabel}"?`)) {
+    const confirmMessage = targetStatus === 'cancelled'
+      ? `Bạn có chắc chắn muốn hủy đơn hàng ${orderCode}?`
+      : `Bạn có chắc chắn muốn chuyển trạng thái đơn hàng ${orderCode} sang "${actionLabel}"?`;
+
+    if (!window.confirm(confirmMessage)) {
       return;
     }
 
@@ -257,7 +259,10 @@ export function SellerOrderManager() {
       });
 
       if (res.ok) {
-        alert(`Đơn hàng ${orderCode} đã chuyển sang trạng thái "${actionLabel}" thành công!`);
+        const successMessage = targetStatus === 'cancelled'
+          ? `Đơn hàng ${orderCode} đã được hủy thành công!`
+          : `Đơn hàng ${orderCode} đã chuyển sang trạng thái "${actionLabel}" thành công!`;
+        alert(successMessage);
         void fetchOrders(true);
       } else {
         const data = await res.json();
@@ -274,7 +279,6 @@ export function SellerOrderManager() {
     { key: 'processing', label: 'Đang xử lý' },
     { key: 'paid', label: 'Đã thanh toán' },
     { key: 'preparing', label: 'Chuẩn bị hàng' },
-    { key: 'handed_over', label: 'Đã bàn giao' },
     { key: 'shipping', label: 'Đang giao' },
     { key: 'delivered', label: 'Đã giao' },
     { key: 'cancelled', label: 'Đã hủy' },
@@ -494,16 +498,6 @@ export function SellerOrderManager() {
                           Đã trả: {formatDateTime(order.paid_at)}
                         </span>
                       )}
-                      {order.status === 'processing' && order.payment_method === 'direct_payment' && (
-                        <button
-                          type="button"
-                          onClick={() => void handleConfirmPayment(order.order_reference)}
-                          className="mt-3 px-4 py-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white rounded-full text-xs font-black shadow-md shadow-emerald-500/10 hover:shadow-emerald-500/25 transition-all cursor-pointer flex items-center gap-1.5"
-                        >
-                          <CheckSquare className="size-3.5" />
-                          Xác nhận đã thu tiền
-                        </button>
-                      )}
                       {(order.status === 'paid' || order.status === 'processing') && (
                         <button
                           type="button"
@@ -517,45 +511,22 @@ export function SellerOrderManager() {
                       {order.status === 'preparing' && (
                         <button
                           type="button"
-                          onClick={() => void handleUpdateFulfillment(order.order_reference, 'handed_over', 'Bàn giao hàng')}
-                          className="mt-3 px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-full text-xs font-black shadow-md transition-all cursor-pointer flex items-center gap-1.5 animate-in fade-in duration-300"
-                        >
-                          <PackageCheck className="size-3.5" />
-                          Bàn giao hàng
-                        </button>
-                      )}
-                      {order.status === 'handed_over' && (
-                        <button
-                          type="button"
-                          onClick={() => void handleUpdateFulfillment(order.order_reference, 'shipping', 'Đơn vị vận chuyển nhận hàng')}
-                          className="mt-3 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-full text-xs font-black shadow-md transition-all cursor-pointer flex items-center gap-1.5 animate-in fade-in duration-300"
+                          onClick={() => void handleUpdateFulfillment(order.order_reference, 'shipping', 'Giao hàng')}
+                          className="mt-3 px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-full text-xs font-black shadow-md transition-all cursor-pointer flex items-center gap-1.5 animate-in fade-in duration-300"
                         >
                           <Truck className="size-3.5" />
-                          Đơn vị vận chuyển nhận hàng
+                          Giao hàng
                         </button>
                       )}
-                      {order.status === 'shipping' && (
-                        <>
-                          {order.payment_method === 'direct_payment' ? (
-                            <button
-                              type="button"
-                              onClick={() => void handleConfirmPayment(order.order_reference)}
-                              className="mt-3 px-4 py-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white rounded-full text-xs font-black shadow-md shadow-emerald-500/10 hover:shadow-emerald-500/25 transition-all cursor-pointer flex items-center gap-1.5"
-                            >
-                              <CheckSquare className="size-3.5" />
-                              Xác nhận đã thu tiền & hoàn thành
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => void handleUpdateFulfillment(order.order_reference, 'delivered', 'Xác nhận đã giao')}
-                              className="mt-3 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-full text-xs font-black shadow-md transition-all cursor-pointer flex items-center gap-1.5"
-                            >
-                              <CheckSquare className="size-3.5" />
-                              Xác nhận đã giao
-                            </button>
-                          )}
-                        </>
+                      {['pending', 'paid', 'processing', 'preparing'].includes(order.status) && (
+                        <button
+                          type="button"
+                          onClick={() => void handleUpdateFulfillment(order.order_reference, 'cancelled', 'Hủy đơn hàng')}
+                          className="mt-3 px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-full text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 border border-rose-200"
+                        >
+                          <XCircle className="size-3.5" />
+                          Hủy đơn hàng
+                        </button>
                       )}
                     </div>
                   </div>

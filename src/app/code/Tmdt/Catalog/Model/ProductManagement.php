@@ -1301,6 +1301,8 @@ class ProductManagement implements ProductManagementInterface
         if ($statusFilter !== 'all' && $statusFilter !== '') {
             if ($statusFilter === 'cancelled') {
                 $select->where('o.status IN (?)', ['cancelled', 'canceled']);
+            } elseif ($statusFilter === 'shipping') {
+                $select->where('o.status IN (?)', ['shipping', 'handed_over']);
             } else {
                 $select->where('o.status = ?', $statusFilter);
             }
@@ -1679,7 +1681,7 @@ class ProductManagement implements ProductManagementInterface
             'paid' => 'Đã thanh toán',
             'processing' => 'Đang xử lý',
             'preparing' => 'Đang chuẩn bị hàng',
-            'handed_over' => 'Đã bàn giao cho ĐVVC',
+            'handed_over' => 'Đang giao hàng',
             'shipping' => 'Đang giao hàng',
             'delivered' => 'Đã giao hàng',
             'cancelled', 'canceled' => 'Đã hủy',

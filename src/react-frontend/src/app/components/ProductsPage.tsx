@@ -4,9 +4,11 @@ import { ImageWithFallback } from './figma/ImageWithFallback';
 import { categoryMenu as categories, getCategoryPageLink } from '../data/categories';
 
 const categoryEmojiMap: Record<string, string> = {
+  'Rau củ': '🥬',
   'Rau củ quả': '🥬',
   'Trái cây': '🍎',
   'Thực phẩm tươi sống': '🍖',
+  'Thủy hải sản': '🦐',
   'Thuỷ hải sản': '🦐',
   'Thực phẩm đông lạnh': '❄️',
   'Thực phẩm khô': '🥜',

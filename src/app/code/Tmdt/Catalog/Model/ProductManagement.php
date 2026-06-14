@@ -123,7 +123,7 @@ class ProductManagement implements ProductManagementInterface
             }
 
             if (!empty($categoryIds)) {
-                $product->setCategoryIds($categoryIds);
+                $product->setCategoryIds($this->expandCategoryIdsWithAncestors($categoryIds));
             }
 
             // Handle Base64 image upload if set
@@ -230,11 +230,11 @@ class ProductManagement implements ProductManagementInterface
             }
 
             if (isset($data['category_ids']) && is_array($data['category_ids'])) {
-                $product->setCategoryIds($data['category_ids']);
+                $product->setCategoryIds($this->expandCategoryIdsWithAncestors($data['category_ids']));
             } elseif (isset($data['categoryLabel'])) {
                 $resolvedId = $this->resolveCategoryIdByName($data['categoryLabel']);
                 if ($resolvedId !== null) {
-                    $product->setCategoryIds([$resolvedId]);
+                    $product->setCategoryIds($this->expandCategoryIdsWithAncestors([$resolvedId]));
                 }
             }
 
@@ -449,10 +449,14 @@ class ProductManagement implements ProductManagementInterface
             $productId = (int) $row['id'];
             $productCategoryIds = $categoryIdsByProductId[$productId] ?? [];
             $productCategoryNames = [];
+            $displayCategoryNames = [];
             foreach ($productCategoryIds as $categoryId) {
                 $categoryName = $categoryNamesById[(int)$categoryId] ?? '';
                 if ($categoryName !== '') {
                     $productCategoryNames[] = $categoryName;
+                    if (!in_array((int)$categoryId, [1, 2, 3], true)) {
+                        $displayCategoryNames[] = $categoryName;
+                    }
                 }
             }
             $basePrice = $row['price'] !== null ? (float) $row['price'] : 0.0;
@@ -500,8 +504,8 @@ class ProductManagement implements ProductManagementInterface
                 'wholesale_tiers' => $wholesaleTiers,
                 'category_ids' => array_values(array_map('intval', $productCategoryIds)),
                 'category_names' => $productCategoryNames,
-                'categoryLabel' => $productCategoryNames[0] ?? '',
-                'subcategoryLabel' => $productCategoryNames[count($productCategoryNames) - 1] ?? ''
+                'categoryLabel' => $displayCategoryNames[0] ?? ($productCategoryNames[0] ?? ''),
+                'subcategoryLabel' => $displayCategoryNames[count($displayCategoryNames) - 1] ?? ($productCategoryNames[count($productCategoryNames) - 1] ?? '')
             ];
         }
         
@@ -516,7 +520,7 @@ class ProductManagement implements ProductManagementInterface
 
         $categoryProductTable = $connection->getTableName('catalog_category_product');
         $rows = $connection->fetchAll(
-            "SELECT product_id, category_id FROM {$categoryProductTable} WHERE product_id IN (" . implode(',', array_map('intval', $productIds)) . ")"
+            "SELECT product_id, category_id FROM {$categoryProductTable} WHERE product_id IN (" . implode(',', array_map('intval', $productIds)) . ") ORDER BY category_id ASC"
         );
 
         $categoryIdsByProductId = [];
@@ -999,16 +1003,74 @@ class ProductManagement implements ProductManagementInterface
     /**
      * Resolve category ID by name.
      */
+    private function expandCategoryIdsWithAncestors(array $categoryIds): array
+    {
+        $categoryIds = array_values(array_unique(array_filter(array_map('intval', $categoryIds))));
+        if (empty($categoryIds)) {
+            return [];
+        }
+
+        try {
+            $connection = $this->resourceConnection->getConnection();
+            $categoryEntityTable = $connection->getTableName('catalog_category_entity');
+            $select = $connection->select()
+                ->from($categoryEntityTable, ['entity_id', 'path'])
+                ->where('entity_id IN (?)', $categoryIds);
+
+            $rows = $connection->fetchAll($select);
+            $expandedIds = [];
+
+            foreach ($rows as $row) {
+                $pathIds = array_map('intval', explode('/', (string)($row['path'] ?? '')));
+                foreach ($pathIds as $pathId) {
+                    if ($pathId > 2) {
+                        $expandedIds[] = $pathId;
+                    }
+                }
+            }
+
+            if (!empty($expandedIds)) {
+                return array_values(array_unique($expandedIds));
+            }
+        } catch (\Exception $e) {
+            // Keep the submitted categories if category path lookup is unavailable.
+        }
+
+        return $categoryIds;
+    }
+
     private function resolveCategoryIdByName(string $categoryName): ?int
     {
         $categoryMap = [
-            'Rau cá»§ quáº£' => 6,
+            'Thá»±c pháº©m' => 3,
+            'Rau cá»§' => 4,
+            'Rau cá»§ quáº£' => 4,
+            'Cá»§ quáº£' => 5,
+            'Rau gia vá»‹' => 8,
+            'Rau phá»• thÃ´ng' => 9,
             'TrÃ¡i cÃ¢y' => 10,
+            'TrÃ¡i cÃ¢y nháº­p kháº©u' => 11,
+            'TrÃ¡i cÃ¢y phá»• thÃ´ng' => 12,
             'Thá»±c pháº©m tÆ°Æ¡i sá»‘ng' => 13,
+            'Thá»‹t heo' => 14,
+            'Thá»‹t gÃ ' => 15,
+            'Thá»§y háº£i sáº£n' => 17,
             'Thuá»· háº£i sáº£n' => 17,
+            'CÃ¡' => 18,
+            'TÃ´m' => 19,
+            'Má»±c' => 20,
             'Thá»±c pháº©m Ä‘Ã´ng láº¡nh' => 21,
+            'GiÃ²-cháº£-nem' => 22,
+            'XÃºc xÃ­ch - láº¡p xÆ°á»Ÿng' => 23,
+            'Thit bo-be' => 24,
             'Thá»±c pháº©m khÃ´' => 25,
-            'Tiá»‡n Ã­ch báº¿p' => 29
+            'Gáº¡o' => 26,
+            'BÃºn-miáº¿n-phá»Ÿ-nui' => 27,
+            'Háº¡t khÃ´' => 28,
+            'Tiá»‡n Ã­ch báº¿p' => 29,
+            'Äá»“ dÃ¹ng báº¿p' => 30,
+            'Cháº¥t táº©y rá»­a' => 31,
+            'Dá»¥ng cá»¥ vá»‡ sinh' => 32
         ];
 
         if (isset($categoryMap[$categoryName])) {
@@ -1017,13 +1079,38 @@ class ProductManagement implements ProductManagementInterface
 
         // Accentless normalization mapping
         $normalizedMap = [
-            'rau cu qua' => 6,
+            'thuc pham' => 3,
+            'rau cu' => 4,
+            'rau cu qua' => 4,
+            'cu qua' => 5,
+            'rau gia vi' => 8,
+            'rau pho thong' => 9,
             'trai cay' => 10,
+            'trai cay nhap khau' => 11,
+            'trai cay pho thong' => 12,
             'thuc pham tuoi song' => 13,
+            'thit heo' => 14,
+            'thit ga' => 15,
             'thuy hai san' => 17,
+            'ca' => 18,
+            'tom' => 19,
+            'muc' => 20,
             'thuc pham dong lanh' => 21,
+            'gio-cha-nem' => 22,
+            'gio cha nem' => 22,
+            'xuc xich - lap xuong' => 23,
+            'xuc xich lap xuong' => 23,
+            'thit bo-be' => 24,
+            'thit bo be' => 24,
             'thuc pham kho' => 25,
-            'tien ich bep' => 29
+            'gao' => 26,
+            'bun-mien-pho-nui' => 27,
+            'bun mien pho nui' => 27,
+            'hat kho' => 28,
+            'tien ich bep' => 29,
+            'do dung bep' => 30,
+            'chat tay rua' => 31,
+            'dung cu ve sinh' => 32
         ];
 
         $normalizedName = strtolower($this->removeVietnameseAccents($categoryName));

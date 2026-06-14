@@ -42,15 +42,19 @@ const normalizeSearchText = (value?: string | null) =>
     .replace(/đ/g, 'd')
     .replace(/Đ/g, 'd');
 
-const fallbackCategoryTree: CategoryNode[] = categoryMenu.map((category) => ({
-  id: getCategoryId(category.name) ?? 0,
-  name: category.name,
-  children: category.subcategories.map((subcategory) => ({
-    id: getSubcategoryId(category.name, subcategory) ?? 0,
-    name: subcategory,
-    children: []
+const fallbackCategoryTree: CategoryNode[] = [{
+  id: getCategoryId('Thực phẩm') ?? 3,
+  name: 'Thực phẩm',
+  children: categoryMenu.map((category) => ({
+    id: getCategoryId(category.name) ?? 0,
+    name: category.name,
+    children: category.subcategories.map((subcategory) => ({
+      id: getSubcategoryId(category.name, subcategory) ?? 0,
+      name: subcategory,
+      children: []
+    }))
   }))
-}));
+}];
 
 const toCategoryNode = (node: any): CategoryNode => ({
   id: Number(node?.id ?? 0),
@@ -88,6 +92,16 @@ const findCategoryIdsFromLegacyLabels = (
   return options
     .filter((option) => names.some((name) => normalizeText(option.label).includes(name)))
     .map((option) => option.id);
+};
+
+const getSellableCategoryLabel = (option?: CategoryOption) => {
+  if (!option) {
+    return '';
+  }
+
+  return option.path[0] === 'Thực phẩm'
+    ? option.path[1] ?? option.name
+    : option.path[0] ?? option.name;
 };
 
 interface Variant {
@@ -306,7 +320,7 @@ export function SellerProductManager() {
     const primaryOption = selectedOptions[0];
     const lastOption = selectedOptions[selectedOptions.length - 1];
 
-    setCategoryLabel(primaryOption?.path[0] ?? primaryOption?.name ?? '');
+    setCategoryLabel(getSellableCategoryLabel(primaryOption));
     setSubcategoryLabel(lastOption?.name ?? '');
   };
 
@@ -394,7 +408,7 @@ export function SellerProductManager() {
                 price: Number(p.price),
                 special_price: p.special_price ? Number(p.special_price) : undefined,
                 qty: Number(p.qty),
-                categoryLabel: p.categoryLabel || localMatch?.categoryLabel || 'Rau củ quả',
+                categoryLabel: p.categoryLabel || localMatch?.categoryLabel || 'Rau củ',
                 subcategoryLabel: p.subcategoryLabel || localMatch?.subcategoryLabel || '',
                 category_ids: Array.isArray(p.category_ids) ? p.category_ids : (localMatch?.category_ids || []),
                 unit: p.unit || localMatch?.unit || 'kg',
@@ -658,9 +672,11 @@ export function SellerProductManager() {
 
     // Default image if blank
     const fallbackImages: Record<string, string> = {
+      'Rau củ': 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&h=500&fit=crop',
       'Rau củ quả': 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&h=500&fit=crop',
       'Trái cây': 'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=500&h=500&fit=crop',
       'Thực phẩm tươi sống': 'https://images.unsplash.com/photo-1602470520998-f4a52199a3d6?w=500&h=500&fit=crop',
+      'Thủy hải sản': 'https://images.unsplash.com/photo-1615141982883-c7ad0e69fd62?w=500&h=500&fit=crop',
       'Thuỷ hải sản': 'https://images.unsplash.com/photo-1615141982883-c7ad0e69fd62?w=500&h=500&fit=crop',
       'Thực phẩm đông lạnh': 'https://images.unsplash.com/photo-1481070414801-51fd732d7184?w=500&h=500&fit=crop',
       'Thực phẩm khô': 'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=500&h=500&fit=crop',
@@ -681,7 +697,7 @@ export function SellerProductManager() {
       .filter((option): option is CategoryOption => Boolean(option));
     const primaryCategory = resolvedCategoryOptions[0];
     const lastCategory = resolvedCategoryOptions[resolvedCategoryOptions.length - 1];
-    const resolvedCategoryLabel = primaryCategory?.path[0] ?? categoryLabel;
+    const resolvedCategoryLabel = getSellableCategoryLabel(primaryCategory) || categoryLabel;
     const resolvedSubcategoryLabel = lastCategory?.name ?? subcategoryLabel;
 
     const newProductData: Product & { category_ids?: number[] } = {

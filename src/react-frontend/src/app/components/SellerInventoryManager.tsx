@@ -158,7 +158,7 @@ export function SellerInventoryManager() {
                   ...p,
                   qty: Number(p.qty),
                   unit: p.unit || localMatch?.unit || 'kg',
-                  categoryLabel: p.categoryLabel || localMatch?.categoryLabel || 'Rau củ quả',
+                  categoryLabel: p.categoryLabel || localMatch?.categoryLabel || 'Rau củ',
                   image: p.image || localMatch?.image || 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&h=500&fit=crop'
                 };
               }),

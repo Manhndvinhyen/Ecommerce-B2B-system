@@ -143,9 +143,11 @@ const isAuthSessionError = (message: string) => {
 };
 
 const fallbackImageByCategory: Record<string, string> = {
+  'Rau củ': 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&h=500&fit=crop',
   'Rau củ quả': 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&h=500&fit=crop',
   'Trái cây': 'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=500&h=500&fit=crop',
   'Thực phẩm tươi sống': 'https://images.unsplash.com/photo-1602470520998-f4a52199a3d6?w=500&h=500&fit=crop',
+  'Thủy hải sản': 'https://images.unsplash.com/photo-1615141982883-c7ad0e69fd62?w=500&h=500&fit=crop',
   'Thuỷ hải sản': 'https://images.unsplash.com/photo-1615141982883-c7ad0e69fd62?w=500&h=500&fit=crop',
   'Thực phẩm đông lạnh': 'https://images.unsplash.com/photo-1481070414801-51fd732d7184?w=500&h=500&fit=crop',
   'Thực phẩm khô': 'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=500&h=500&fit=crop',
@@ -548,7 +550,7 @@ export function CartProvider({ children }: PropsWithChildren) {
       const category =
         product.categories?.find((cat) => cat?.name)?.name ??
         matchingProduct?.categoryLabel ??
-        (inferCategoryFromSku(product.sku ?? '')?.category || 'Rau củ quả');
+        (inferCategoryFromSku(product.sku ?? '')?.category || 'Rau củ');
       const unit = matchingProduct?.unit || 'kg';
       const supplier = getSupplierForCartProduct({
         sku: product.sku ?? matchingProduct?.sku ?? '',
@@ -637,7 +639,7 @@ export function CartProvider({ children }: PropsWithChildren) {
       const match = customLocalProducts.find(
         (p) => (p.sku ?? '').trim().toLowerCase() === localSku
       );
-      const category = match?.categoryLabel || item.category || (inferCategoryFromSku(item.sku ?? '')?.category || 'Rau củ quả');
+      const category = match?.categoryLabel || item.category || (inferCategoryFromSku(item.sku ?? '')?.category || 'Rau củ');
       const enrichedItem = {
         ...item,
         image: match?.image || item.image,
@@ -954,7 +956,7 @@ export function CartProvider({ children }: PropsWithChildren) {
           cartItemId: '',
           sku: product.sku,
           name: product.name,
-          category: product.category || (inferCategoryFromSku(product.sku ?? '')?.category || 'Rau củ quả'),
+          category: product.category || (inferCategoryFromSku(product.sku ?? '')?.category || 'Rau củ'),
           unit: product.unit,
           unitPrice: product.unitPrice,
           image: product.image,

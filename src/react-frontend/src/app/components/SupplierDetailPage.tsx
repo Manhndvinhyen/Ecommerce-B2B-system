@@ -57,9 +57,11 @@ type SupplierDetailPageProps = {
 
 // Image fallback maps
 const fallbackImageByCategory: Record<string, string> = {
+  'Rau củ': 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&h=500&fit=crop',
   'Rau củ quả': 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&h=500&fit=crop',
   'Trái cây': 'https://images.unsplash.com/photo-1619546813926-a78fa6372cd2?w=500&h=500&fit=crop',
   'Thực phẩm tươi sống': 'https://images.unsplash.com/photo-1544025162-d76694265947?w=500&h=500&fit=crop',
+  'Thủy hải sản': 'https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=500&h=500&fit=crop',
   'Thuỷ hải sản': 'https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=500&h=500&fit=crop',
   'Thực phẩm đông lạnh': 'https://images.unsplash.com/photo-1518085275467-33d3b764c673?w=500&h=500&fit=crop',
   'Thực phẩm khô': 'https://images.unsplash.com/photo-1511113824147-9759d640248f?w=500&h=500&fit=crop',
@@ -69,7 +71,7 @@ const fallbackImageByCategory: Record<string, string> = {
 const resolveMainCategory = (categoryName: string, sku: string): string => {
   if (!categoryName) {
     const inferred = inferCategoryFromSku(sku);
-    return inferred?.category || 'Rau củ quả';
+    return inferred?.category || 'Rau củ';
   }
   
   const cleanName = categoryName.trim().toLowerCase();
@@ -93,7 +95,7 @@ const resolveMainCategory = (categoryName: string, sku: string): string => {
   
   // 3. Fallback to SKU inference
   const inferred = inferCategoryFromSku(sku);
-  return inferred?.category || 'Rau củ quả';
+  return inferred?.category || 'Rau củ';
 };
 
 const inferUnitByCategory = (category: string) => {

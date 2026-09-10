@@ -57,17 +57,16 @@ External APIs:
 ### Trang chủ
 ![Homepage](./docs/screenshots/01_homepage.png)
 
-### Chi tiết sản phẩm
-![Product Detail](<img width="1162" height="874" alt="aa" src="https://github.com/user-attachments/assets/fb128512-e9a7-4907-8265-3b65bd295d64" />)
+### Chi tiết sản phẩm — Bảng chiết khấu sỉ theo số lượng
+![Product Detail](./docs/screenshots/02_product_detail.png)
 
+### Checkout — Tính phí vận chuyển GHN & GHTK theo kho + thời tiết
+![Checkout & Shipping](./docs/screenshots/03_checkout_summary.png)
 
-### Thanh toán & Tóm tắt đơn hàng
-![Checkout](./docs/screenshots/03_checkout_summary.png)
+### Đàm phán giá — RFQ (Yêu Cầu Báo Giá)
+![RFQ](./docs/screenshots/04_rfq.png)
 
-### Tính phí vận chuyển + Thời tiết thực
-![Shipping & Weather](./docs/screenshots/04_shipping_weather.png)
-
-### Quản lý kho hàng (Seller Dashboard)
+### Quản lý kho hàng sỉ (Seller Dashboard)
 ![Seller Inventory](./docs/screenshots/05_seller_inventory.png)
 
 ---

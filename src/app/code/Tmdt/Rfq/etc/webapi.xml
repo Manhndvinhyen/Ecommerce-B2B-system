@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Webapi:etc/webapi.xsd">
+    <route url="/V1/tmdt-rfq/create" method="POST">
+        <service class="Tmdt\Rfq\Api\RfqManagementInterface" method="createRfq"/>
+        <resources><resource ref="self"/></resources>
+    </route>
+    <route url="/V1/tmdt-rfq/buyer-list" method="GET">
+        <service class="Tmdt\Rfq\Api\RfqManagementInterface" method="getBuyerRfqs"/>
+        <resources><resource ref="self"/></resources>
+    </route>
+    <route url="/V1/tmdt-rfq/open-list" method="GET">
+        <service class="Tmdt\Rfq\Api\RfqManagementInterface" method="getOpenRfqs"/>
+        <resources><resource ref="self"/></resources>
+    </route>
+    <route url="/V1/tmdt-rfq/quote/submit" method="POST">
+        <service class="Tmdt\Rfq\Api\RfqManagementInterface" method="submitQuote"/>
+        <resources><resource ref="self"/></resources>
+    </route>
+    <route url="/V1/tmdt-rfq/quotes/:rfqId" method="GET">
+        <service class="Tmdt\Rfq\Api\RfqManagementInterface" method="getQuotesForRfq"/>
+        <resources><resource ref="self"/></resources>
+    </route>
+    <route url="/V1/tmdt-rfq/seller-quotes" method="GET">
+        <service class="Tmdt\Rfq\Api\RfqManagementInterface" method="getSellerQuotes"/>
+        <resources><resource ref="self"/></resources>
+    </route>
+    <route url="/V1/tmdt-rfq/quote/accept" method="POST">
+        <service class="Tmdt\Rfq\Api\RfqManagementInterface" method="acceptQuote"/>
+        <resources><resource ref="self"/></resources>
+    </route>
+    <route url="/V1/tmdt-rfq/message/add" method="POST">
+        <service class="Tmdt\Rfq\Api\RfqManagementInterface" method="addRfqMessage"/>
+        <resources><resource ref="self"/></resources>
+    </route>
+    <route url="/V1/tmdt-rfq/messages/:rfqId" method="GET">
+        <service class="Tmdt\Rfq\Api\RfqManagementInterface" method="getRfqMessages"/>
+        <resources><resource ref="self"/></resources>
+    </route>
+</routes>

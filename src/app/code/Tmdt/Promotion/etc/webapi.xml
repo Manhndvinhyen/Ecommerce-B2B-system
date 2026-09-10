@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Webapi:etc/webapi.xsd">
+    <route url="/V1/tmdt-catalog/promotions" method="GET">
+        <service class="Tmdt\Promotion\Api\PromotionManagementInterface" method="getPromotions"/>
+        <resources><resource ref="anonymous"/></resources>
+    </route>
+    <route url="/V1/tmdt-catalog/suppliers" method="GET">
+        <service class="Tmdt\Promotion\Api\PromotionManagementInterface" method="getSuppliers"/>
+        <resources><resource ref="anonymous"/></resources>
+    </route>
+</routes>

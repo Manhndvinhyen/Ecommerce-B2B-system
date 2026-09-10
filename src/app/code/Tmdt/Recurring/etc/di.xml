@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <preference for="Tmdt\Recurring\Api\RecurringInterface" type="Tmdt\Recurring\Model\Recurring" />
+
+    <type name="Magento\Framework\Console\CommandList">
+        <arguments>
+            <argument name="commands" xsi:type="array">
+                <item name="tmdt_recurring_process" xsi:type="object">Tmdt\Recurring\Console\Command\ProcessRecurringOrders</item>
+            </argument>
+        </arguments>
+    </type>
+</config>

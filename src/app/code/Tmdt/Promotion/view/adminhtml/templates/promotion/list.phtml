@@ -1,0 +1,165 @@
+<?php
+/** @var \Tmdt\Catalog\Block\Adminhtml\Promotion $block */
+$saveUrl = $block->getSaveUrl();
+$autoPromotions = $block->getRows('auto_discount');
+$vouchers = $block->getRows('voucher');
+$categories = $block->getCategoryOptions();
+$products = $block->getProductOptions();
+
+$renderCategoryOptions = static function ($block, array $categories, $selected = ''): void {
+    foreach ($categories as $category) {
+        $id = (string)$category['id'];
+        $label = str_repeat('-- ', max(0, (int)$category['level'] - 2)) . (string)$category['name'];
+        $isSelected = $block->isSelectedListValue($selected, $id) ? ' selected' : '';
+        echo '<option value="' . (int)$category['id'] . '"' . $isSelected . '>' . $block->escapeHtml($label) . '</option>';
+    }
+};
+?>
+
+<style>
+    .tmdt-admin-promo { font-family: Arial, sans-serif; }
+    .tmdt-promo-card { background: #fff; border: 1px solid #d6d6d6; border-radius: 6px; margin: 0 0 22px; padding: 18px; }
+    .tmdt-promo-title { align-items: center; border-bottom: 1px solid #e7e7e7; display: flex; gap: 12px; justify-content: space-between; margin: 0 0 16px; padding-bottom: 10px; }
+    .tmdt-promo-title h2 { font-size: 18px; margin: 0; }
+    .tmdt-promo-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+    .tmdt-promo-field label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 5px; }
+    .tmdt-promo-field input,
+    .tmdt-promo-field select,
+    .tmdt-promo-field textarea { border: 1px solid #c8c8c8; border-radius: 4px; box-sizing: border-box; min-height: 32px; padding: 6px 8px; width: 100%; }
+    .tmdt-promo-field select[multiple] { min-height: 112px; }
+    .tmdt-promo-row { border: 1px solid #e3e3e3; border-radius: 6px; margin-top: 12px; padding: 14px; }
+    .tmdt-promo-row-head { align-items: center; display: flex; justify-content: space-between; margin-bottom: 12px; }
+    .tmdt-promo-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 14px; }
+    .tmdt-muted { color: #707070; font-size: 12px; }
+    .tmdt-status-active { color: #217a35; font-weight: 700; }
+    .tmdt-status-off { color: #b42318; font-weight: 700; }
+</style>
+
+<div class="tmdt-admin-promo">
+    <div class="tmdt-promo-card">
+        <div class="tmdt-promo-title">
+            <h2>Tao khuyen mai tu dong</h2>
+            <span class="tmdt-muted">Ap dung len san pham hoac danh muc, khach hang khong can nhap ma.</span>
+        </div>
+        <form action="<?= $block->escapeUrl($saveUrl) ?>" method="post">
+            <?= $block->getBlockHtml('formkey') ?>
+            <input type="hidden" name="type" value="auto_discount">
+            <div class="tmdt-promo-grid">
+                <div class="tmdt-promo-field"><label>Ten chuong trinh *</label><input name="title" required></div>
+                <div class="tmdt-promo-field"><label>Loai giam gia *</label><select name="discount_type"><option value="percent">Phan tram</option><option value="fixed">So tien co dinh</option></select></div>
+                <div class="tmdt-promo-field"><label>Gia tri giam *</label><input type="number" step="0.01" min="0" name="discount_value" required></div>
+                <div class="tmdt-promo-field"><label>Pham vi *</label><select name="apply_scope"><option value="all">Tat ca san pham</option><option value="category">Theo danh muc</option><option value="product">Theo san pham/SKU</option></select></div>
+                <div class="tmdt-promo-field"><label>Danh muc</label><select name="category_ids[]" multiple><?php $renderCategoryOptions($block, $categories); ?></select></div>
+                <div class="tmdt-promo-field">
+                    <label>San pham</label>
+                    <select name="product_skus[]" multiple>
+                        <?php foreach ($products as $product): ?>
+                            <option value="<?= $block->escapeHtmlAttr((string)$product['sku']) ?>"><?= $block->escapeHtml((string)$product['sku'] . ' - ' . (string)$product['name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="tmdt-promo-field"><label>Bat dau *</label><input type="datetime-local" name="start_at" required></div>
+                <div class="tmdt-promo-field"><label>Ket thuc *</label><input type="datetime-local" name="end_at" required></div>
+                <div class="tmdt-promo-field"><label>Trang thai</label><select name="is_active"><option value="1">Hoat dong</option><option value="0">Ngung hoat dong</option></select></div>
+            </div>
+            <div class="tmdt-promo-field" style="margin-top:12px;"><label>Mo ta</label><textarea name="description" rows="2"></textarea></div>
+            <div class="tmdt-promo-actions"><button type="submit" class="action-primary">Luu khuyen mai</button></div>
+        </form>
+    </div>
+
+    <div class="tmdt-promo-card">
+        <div class="tmdt-promo-title"><h2>Danh sach khuyen mai tu dong (<?= count($autoPromotions) ?>)</h2></div>
+        <?php if (empty($autoPromotions)): ?>
+            <p class="tmdt-muted">Chua co chuong trinh khuyen mai tu dong.</p>
+        <?php endif; ?>
+        <?php foreach ($autoPromotions as $row): ?>
+            <form class="tmdt-promo-row" action="<?= $block->escapeUrl($saveUrl) ?>" method="post">
+                <?= $block->getBlockHtml('formkey') ?>
+                <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
+                <input type="hidden" name="type" value="auto_discount">
+                <div class="tmdt-promo-row-head">
+                    <strong>#<?= (int)$row['id'] ?> - <?= $block->escapeHtml((string)$row['title']) ?></strong>
+                    <span class="<?= (int)$row['is_active'] === 1 ? 'tmdt-status-active' : 'tmdt-status-off' ?>"><?= (int)$row['is_active'] === 1 ? 'Dang bat' : 'Da ngung' ?></span>
+                </div>
+                <div class="tmdt-promo-grid">
+                    <div class="tmdt-promo-field"><label>Ten chuong trinh *</label><input name="title" value="<?= $block->escapeHtmlAttr((string)$row['title']) ?>" required></div>
+                    <div class="tmdt-promo-field"><label>Loai giam gia *</label><select name="discount_type"><option value="percent" <?= ($row['discount_type'] ?? '') === 'percent' ? 'selected' : '' ?>>Phan tram</option><option value="fixed" <?= ($row['discount_type'] ?? '') === 'fixed' ? 'selected' : '' ?>>So tien</option></select></div>
+                    <div class="tmdt-promo-field"><label>Gia tri giam *</label><input type="number" step="0.01" name="discount_value" value="<?= $block->escapeHtmlAttr((string)$row['discount_value']) ?>" required></div>
+                    <div class="tmdt-promo-field"><label>Pham vi *</label><select name="apply_scope"><option value="all" <?= ($row['apply_scope'] ?? '') === 'all' ? 'selected' : '' ?>>Tat ca</option><option value="category" <?= ($row['apply_scope'] ?? '') === 'category' ? 'selected' : '' ?>>Danh muc</option><option value="product" <?= ($row['apply_scope'] ?? '') === 'product' ? 'selected' : '' ?>>San pham</option></select></div>
+                    <div class="tmdt-promo-field"><label>Danh muc</label><select name="category_ids[]" multiple><?php $renderCategoryOptions($block, $categories, $row['category_ids'] ?? ''); ?></select></div>
+                    <div class="tmdt-promo-field"><label>SKU san pham</label><textarea name="product_skus" rows="5" placeholder="SKU cach nhau bang dau phay"><?= $block->escapeHtml((string)($row['product_skus'] ?? '')) ?></textarea></div>
+                    <div class="tmdt-promo-field"><label>Bat dau *</label><input type="datetime-local" name="start_at" value="<?= $block->escapeHtmlAttr($block->formatDateTimeInput($row['start_at'] ?? null)) ?>" required></div>
+                    <div class="tmdt-promo-field"><label>Ket thuc *</label><input type="datetime-local" name="end_at" value="<?= $block->escapeHtmlAttr($block->formatDateTimeInput($row['end_at'] ?? null)) ?>" required></div>
+                    <div class="tmdt-promo-field"><label>Trang thai</label><select name="is_active"><option value="1" <?= (int)$row['is_active'] === 1 ? 'selected' : '' ?>>Hoat dong</option><option value="0" <?= (int)$row['is_active'] === 0 ? 'selected' : '' ?>>Ngung hoat dong</option></select></div>
+                </div>
+                <div class="tmdt-promo-field" style="margin-top:12px;"><label>Mo ta</label><textarea name="description" rows="2"><?= $block->escapeHtml((string)$row['description']) ?></textarea></div>
+                <div class="tmdt-promo-actions">
+                    <button type="submit" class="action-secondary">Luu thay doi</button>
+                    <a href="<?= $block->escapeUrl($block->getDeleteUrl((int)$row['id'])) ?>" class="action-delete" onclick="return confirm('Xoa chuong trinh nay?')">Xoa</a>
+                </div>
+            </form>
+        <?php endforeach; ?>
+    </div>
+
+    <div class="tmdt-promo-card">
+        <div class="tmdt-promo-title">
+            <h2>Tao voucher</h2>
+            <span class="tmdt-muted">Khach hang nhap ma tai checkout. Moi don hang chi ap dung mot voucher.</span>
+        </div>
+        <form action="<?= $block->escapeUrl($saveUrl) ?>" method="post">
+            <?= $block->getBlockHtml('formkey') ?>
+            <input type="hidden" name="type" value="voucher">
+            <input type="hidden" name="apply_scope" value="all">
+            <div class="tmdt-promo-grid">
+                <div class="tmdt-promo-field"><label>Ma voucher *</label><input name="discount_code" required></div>
+                <div class="tmdt-promo-field"><label>Ten voucher *</label><input name="title" required></div>
+                <div class="tmdt-promo-field"><label>Loai giam gia *</label><select name="discount_type"><option value="fixed">So tien</option><option value="percent">Phan tram</option></select></div>
+                <div class="tmdt-promo-field"><label>Gia tri giam *</label><input type="number" step="0.01" min="0" name="discount_value" required></div>
+                <div class="tmdt-promo-field"><label>Don hang toi thieu</label><input type="number" step="0.01" min="0" name="min_order_amount"></div>
+                <div class="tmdt-promo-field"><label>Muc giam toi da</label><input type="number" step="0.01" min="0" name="max_discount_amount"></div>
+                <div class="tmdt-promo-field"><label>So luot su dung</label><input type="number" min="0" name="usage_limit"></div>
+                <div class="tmdt-promo-field"><label>Bat dau *</label><input type="datetime-local" name="start_at" required></div>
+                <div class="tmdt-promo-field"><label>Ket thuc *</label><input type="datetime-local" name="end_at" required></div>
+                <div class="tmdt-promo-field"><label>Trang thai</label><select name="is_active"><option value="1">Hoat dong</option><option value="0">Ngung hoat dong</option></select></div>
+            </div>
+            <div class="tmdt-promo-field" style="margin-top:12px;"><label>Mo ta</label><textarea name="description" rows="2"></textarea></div>
+            <div class="tmdt-promo-actions"><button type="submit" class="action-primary">Luu voucher</button></div>
+        </form>
+    </div>
+
+    <div class="tmdt-promo-card">
+        <div class="tmdt-promo-title"><h2>Danh sach voucher (<?= count($vouchers) ?>)</h2></div>
+        <?php if (empty($vouchers)): ?>
+            <p class="tmdt-muted">Chua co voucher nao.</p>
+        <?php endif; ?>
+        <?php foreach ($vouchers as $row): ?>
+            <form class="tmdt-promo-row" action="<?= $block->escapeUrl($saveUrl) ?>" method="post">
+                <?= $block->getBlockHtml('formkey') ?>
+                <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
+                <input type="hidden" name="type" value="voucher">
+                <input type="hidden" name="apply_scope" value="all">
+                <div class="tmdt-promo-row-head">
+                    <strong>#<?= (int)$row['id'] ?> - <?= $block->escapeHtml((string)$row['discount_code']) ?></strong>
+                    <span class="<?= (int)$row['is_active'] === 1 ? 'tmdt-status-active' : 'tmdt-status-off' ?>"><?= (int)$row['is_active'] === 1 ? 'Co the su dung neu con han' : 'Khong cho don moi' ?></span>
+                </div>
+                <div class="tmdt-promo-grid">
+                    <div class="tmdt-promo-field"><label>Ma voucher *</label><input name="discount_code" value="<?= $block->escapeHtmlAttr((string)$row['discount_code']) ?>" required></div>
+                    <div class="tmdt-promo-field"><label>Ten voucher *</label><input name="title" value="<?= $block->escapeHtmlAttr((string)$row['title']) ?>" required></div>
+                    <div class="tmdt-promo-field"><label>Loai giam gia *</label><select name="discount_type"><option value="fixed" <?= ($row['discount_type'] ?? '') === 'fixed' ? 'selected' : '' ?>>So tien</option><option value="percent" <?= ($row['discount_type'] ?? '') === 'percent' ? 'selected' : '' ?>>Phan tram</option></select></div>
+                    <div class="tmdt-promo-field"><label>Gia tri giam *</label><input type="number" step="0.01" name="discount_value" value="<?= $block->escapeHtmlAttr((string)$row['discount_value']) ?>" required></div>
+                    <div class="tmdt-promo-field"><label>Don hang toi thieu</label><input type="number" step="0.01" name="min_order_amount" value="<?= $block->escapeHtmlAttr((string)($row['min_order_amount'] ?? '')) ?>"></div>
+                    <div class="tmdt-promo-field"><label>Muc giam toi da</label><input type="number" step="0.01" name="max_discount_amount" value="<?= $block->escapeHtmlAttr((string)($row['max_discount_amount'] ?? '')) ?>"></div>
+                    <div class="tmdt-promo-field"><label>So luot su dung</label><input type="number" min="0" name="usage_limit" value="<?= $block->escapeHtmlAttr((string)($row['usage_limit'] ?? '')) ?>"><div class="tmdt-muted">Da dung: <?= (int)($row['used_count'] ?? 0) ?></div></div>
+                    <div class="tmdt-promo-field"><label>Bat dau *</label><input type="datetime-local" name="start_at" value="<?= $block->escapeHtmlAttr($block->formatDateTimeInput($row['start_at'] ?? null)) ?>" required></div>
+                    <div class="tmdt-promo-field"><label>Ket thuc *</label><input type="datetime-local" name="end_at" value="<?= $block->escapeHtmlAttr($block->formatDateTimeInput($row['end_at'] ?? null)) ?>" required></div>
+                    <div class="tmdt-promo-field"><label>Trang thai</label><select name="is_active"><option value="1" <?= (int)$row['is_active'] === 1 ? 'selected' : '' ?>>Hoat dong</option><option value="0" <?= (int)$row['is_active'] === 0 ? 'selected' : '' ?>>Ngung hoat dong</option></select></div>
+                </div>
+                <div class="tmdt-promo-field" style="margin-top:12px;"><label>Mo ta</label><textarea name="description" rows="2"><?= $block->escapeHtml((string)$row['description']) ?></textarea></div>
+                <div class="tmdt-promo-actions">
+                    <button type="submit" class="action-secondary">Luu thay doi</button>
+                    <a href="<?= $block->escapeUrl($block->getDeleteUrl((int)$row['id'])) ?>" class="action-delete" onclick="return confirm('Xoa voucher nay?')">Xoa</a>
+                </div>
+            </form>
+        <?php endforeach; ?>
+    </div>
+</div>

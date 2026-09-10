@@ -58,8 +58,8 @@ External APIs:
 ![Homepage](./docs/screenshots/01_homepage.png)
 
 ### Chi tiết sản phẩm
-![Product Detail](<img width="512" height="385" alt="image" src="https://github.com/user-attachments/assets/67f897e5-4734-4c7f-a663-2f0452278ddb" />
-)
+![Product Detail](<img width="1162" height="874" alt="aa" src="https://github.com/user-attachments/assets/fb128512-e9a7-4907-8265-3b65bd295d64" />)
+
 
 ### Thanh toán & Tóm tắt đơn hàng
 ![Checkout](./docs/screenshots/03_checkout_summary.png)
